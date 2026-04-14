@@ -1,0 +1,34 @@
+cbc_pe/
+│
+├── src/
+│   ├── config.py
+│   ├── parameters.py
+│   ├── sampling.py
+│   ├── waveform.py
+│   ├── detectors.py
+│   ├── noise.py
+│   ├── injection.py
+│   ├── processing.py
+│   ├── labels.py
+│   ├── dataset.py
+│   ├── conformal/
+│   │   ├── binning.py
+│   │   ├── calibration.py
+│   │   └── evaluation.py
+│   └── utils.py
+│
+├── tests/
+│   ├── test_parameters.py
+│   ├── test_sampling.py
+│   ├── test_injection.py
+│   ├── test_processing.py
+│   └── test_conformal.py
+│
+├── notebooks/
+│   ├── 01_sanity_checks.ipynb
+│   ├── 02_dataset_generation.ipynb
+│   └── 03_conformal_baseline.ipynb
+│
+└── scripts/
+    ├── generate_dataset.py
+    └── run_baseline.py

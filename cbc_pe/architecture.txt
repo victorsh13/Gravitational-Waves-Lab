@@ -1,0 +1,52 @@
+Una propuesta razonable:
+
+CBCParameters
+representa un evento físico
+masas, spins, distancia, inclinación, sky position, etc.
+métodos derivados: chirp_mass, total_mass, chi_eff
+
+ParameterSampler
+genera poblaciones de eventos
+aquí controlas si los priors son físicos, isotrópicos, uniformes, etc.
+
+WaveformGenerator
+construye hp, hc
+encapsula approximant, delta_t, f_lower, etc.
+
+DetectorNetwork
+contiene H1, L1, V1
+proyecta la señal en cada detector
+
+NoiseModel
+construye PSDs
+genera ruido gaussiano
+más adelante podría admitir ruido real o PSD empírica
+
+InjectionEngine
+inserta señal en ruido
+controla tiempo de inyección y validaciones
+
+SignalProcessor
+whitening, filtros, normalización
+aquí habrá que decidir con cuidado qué se conserva y qué no
+
+DatasetBuilder
+orquesta todo y genera arrays o datasets serializados
+
+LabelTransformer
+transforma de parámetros físicos a labels del modelo
+por ejemplo Mchirp, Mtot, χeff
+
+MondrianBinner
+define bins/categorías
+
+ConformalCalibrator
+usa residuales para producir intervalos
+
+Evaluator
+RMSE, cobertura global, cobertura por bin, anchura de intervalos
+
+ExperimentConfig
+centraliza hiperparámetros y configuraciones
+
+Eso ya te da una base seria.
