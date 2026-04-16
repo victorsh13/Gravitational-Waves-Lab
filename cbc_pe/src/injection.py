@@ -29,7 +29,27 @@ class SignalInjector:
         signal: TimeSeries,
         injection_time: float | None = None,
     ) -> InjectionResult:
-        
+        """
+        Inject a signal into a strain.
+
+        Parameters
+        ----------
+        strain : TimeSeries
+            The strain to inject the signal into.
+        signal : TimeSeries
+            The signal to inject.
+        injection_time : float | None = None
+            The time at which to inject the signal into the strain. If None,
+            a random time between 0.25 and 0.75 of the maximum possible injection
+            time is chosen.
+
+        Returns
+        -------
+        InjectionResult
+            An object containing the injected strain, the injection time, and the
+            injection index.
+        """
+
         if len(strain) < len(signal):
             raise ValueError("The strain must be longer than or equal to the signal.")
 
@@ -40,6 +60,7 @@ class SignalInjector:
         max_injection_time = max_start_index * signal.delta_t
 
         if injection_time is None:
+            # Choose a random injection time between 25% and 75% of the maximum possible injection time
             min_index = int(0.25 * max_start_index)
             max_index = int(0.75 * max_start_index)
 
@@ -49,6 +70,7 @@ class SignalInjector:
             injection_index = self.rng.integers(min_index, max_index, endpoint=True)
             injection_time = injection_index * signal.delta_t
         else:
+            # Check if the given injection time is within the allowed range
             if not (0.0 <= injection_time <= max_injection_time):
                 raise ValueError(
                     f"injection_time must be between 0 and {max_injection_time:.6f} s, "

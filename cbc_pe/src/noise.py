@@ -10,9 +10,9 @@ class NoiseModel:
         # Initialize detectors PSDs
         # WARNING: the legacy code uses low_frequency_cutoff=15, but here we use the config low_frequency_cutoff=30
         self.psds ={
-            "V1": analytical.AdvVirgo(config.flength, config.delta_f, config.low_frequency_cutoff),
             "H1": analytical.aLIGOZeroDetHighPower(config.flength, config.delta_f, config.low_frequency_cutoff),
-            "L1": analytical.aLIGOZeroDetHighPower(config.flength, config.delta_f, config.low_frequency_cutoff)
+            "L1": analytical.aLIGOZeroDetHighPower(config.flength, config.delta_f, config.low_frequency_cutoff),
+            "V1": analytical.AdvVirgo(config.flength, config.delta_f, config.low_frequency_cutoff),
         }
 
         

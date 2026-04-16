@@ -12,12 +12,18 @@ class CBCParameters:
     spin_1z: float # in [-1, 1]
     spin_2z: float # in [-1, 1]
 
-    def __post_init__(self): # Is used after initialization, useful for validation, reordering, normalization, consistency...
-        if self.mass_1 < self.mass_2: # Sort masses
+    def __post_init__(self):
+        """
+        Post initialization method. Used for validation, reordering, normalization, consistency...
+
+        Reorders masses and spins if necessary.
+        Validates all parameters.
+        """
+        if self.mass_1 < self.mass_2:  # Sort masses
             self.mass_1, self.mass_2 = self.mass_2, self.mass_1
             self.spin_1z, self.spin_2z = self.spin_2z, self.spin_1z
 
-        ## Validation ##
+        ## Validation##
         if self.mass_1 <= 0 or self.mass_2 <= 0:
             raise ValueError("Masses must be positive.")
         if self.distance <= 0:
