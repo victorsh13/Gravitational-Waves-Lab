@@ -1,7 +1,11 @@
+This is the new folder estructure. In the src all the files for generating gw signals are stored. Additionally, a module for conformal
+binning (mondrian) with the necessary classes is included, used to calculate the intervals for the parameter regression, using a NN.
+
 cbc_pe/
 │
 ├── src/
 │   ├── config.py
+│   ├── dataset.py
 │   ├── parameters.py
 │   ├── sampling.py
 │   ├── waveform.py
@@ -11,11 +15,13 @@ cbc_pe/
 │   ├── processing.py
 │   ├── labels.py
 │   ├── dataset.py
-│   ├── conformal/
-│   │   ├── binning.py
-│   │   ├── calibration.py
-│   │   └── evaluation.py
-│   └── utils.py
+│   └── conformal/
+│       ├── apply.py
+│       ├── binning.py
+│       ├── calibration.py
+│       ├── metrics.py
+│       └── pipeline.py
+│   
 │
 ├── tests/
 │   ├── test_parameters.py
@@ -26,9 +32,8 @@ cbc_pe/
 │
 ├── notebooks/
 │   ├── 01_sanity_checks.ipynb
-│   ├── 02_dataset_generation.ipynb
-│   └── 03_conformal_baseline.ipynb
+│   └── 02_conformal_analysis.ipynb
 │
 └── scripts/
-    ├── generate_dataset.py
-    └── run_baseline.py
+    ├── generate_dataset.py # Not yet implemented
+    └── run_baseline.py # Not yet implemented

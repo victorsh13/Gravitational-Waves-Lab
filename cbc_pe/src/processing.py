@@ -62,7 +62,7 @@ class SignalProcessor:
             # The PSD is estimated using Welch's method, 
             processing_strain = processing_strain.whiten(
                 segment_duration=processing_strain.get_duration(), # Duracion para estimar el PSD
-                max_filter_duration=processing_strain.get_duration() / 3, # Larger filter better resolution in frequency but more corrupted edges, if shorter less damage in edges but worse resolution/stability in the filter.
+                max_filter_duration=processing_strain.get_duration() / 4, # Larger filter better resolution in frequency but more corrupted edges, if shorter less damage in edges but worse resolution/stability in the filter.
                 trunc_method='hann', # No se muy bien que es esto y que poner
                 remove_corrupted=True,
                 low_frequency_cutoff=self.highpass_frequency,
@@ -71,7 +71,7 @@ class SignalProcessor:
               
         if self.apply_lowpass:
             # Apply a low-pass filter to remove frequencies higher than lowpass_frequency
-            processing_strain = processing_strain.lowpass_fir(self.lowpass_frequency, order=512, beta=0.5, remove_corrupted=True) # Remove frequencies higher than lowpass_frequency
+            processing_strain = processing_strain.lowpass_fir(self.lowpass_frequency, order=512, beta=0.5, remove_corrupted=True) # Remove frequencies higher than lowpass_frequency, legacy uses order=8 and beta=5.0, I suggest order=512 and beta=0.5 instead. But we uses the legacy choice to comparative purposes
         if self.apply_highpass:
             # Apply a high-pass filter to remove frequencies lower than highpass_frequency
             processing_strain = processing_strain.highpass_fir(self.highpass_frequency, order=512, beta=0.5, remove_corrupted=True) # Remove frequencies lower than highpass_frequency

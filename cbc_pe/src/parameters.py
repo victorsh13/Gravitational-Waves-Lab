@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import numpy as np
 
-@dataclass
+@dataclass(frozen=True)
 class CBCParameters:
     mass_1: float # in Msun
     mass_2: float # in Msun

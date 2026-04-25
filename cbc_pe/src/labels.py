@@ -28,3 +28,19 @@ class LabelTransformer:
             labels = (labels - self.mean) / self.std
 
         return labels
+    
+    def inverse_transform(self, labels: np.ndarray, standardize: bool = False) -> np.ndarray:
+        if standardize:
+            if self.mean is None or self.std is None:
+                raise ValueError("mean and std are required for standardization.")
+            labels = labels * self.std + self.mean
+
+        physical_labels = np.array([
+            labels[0],
+            labels[1],
+            labels[2],
+            ],
+            dtype=float,
+            )
+
+        return physical_labels
