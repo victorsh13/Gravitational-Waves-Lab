@@ -2,12 +2,6 @@ from pathlib import Path
 import numpy as np
 from dataclasses import dataclass
 
-from .dataset import DatasetBatch
-
-
-
-
-
 
 @dataclass(frozen=True)
 class LoadedDataset:
@@ -19,7 +13,7 @@ class LoadedDataset:
 
 
 def save_dataset_npz(
-    batch: DatasetBatch,
+    batch,
     output_dir: Path,
     file_name: str,
     detector_names: list[str] | None = None,
