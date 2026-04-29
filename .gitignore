@@ -2,4 +2,29 @@
 __pycache__/
 pycbc-env/
 
->>
+>># Data
+cbc_pe/data/
+*.npz
+
+# Models / checkpoints
+cbc_pe/models/
+*.pt
+*.pth
+*.ckpt
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Environments
+pycbc-env/
+.venv/
+
+#To keep the data folder but not the data files, use
+cbc_pe/data/*
+!cbc_pe/data/.gitkeep
+!cbc_pe/data/raw/.gitkeep
+!cbc_pe/data/processed/.gitkeep
