@@ -1,8 +1,4 @@
-<< 'EOF'
-__pycache__/
-pycbc-env/
-
->># Data
+# Data
 cbc_pe/data/
 *.npz
 

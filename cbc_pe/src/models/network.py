@@ -3,48 +3,6 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 
 
-
-import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader, Dataset
-
-
-class ArrayRegressionDataset(Dataset):
-    def __init__(self, X, y):
-        self.X = torch.tensor(X, dtype=torch.float32)
-        self.y = torch.tensor(y, dtype=torch.float32)
-
-    def __len__(self):
-        return len(self.X)
-
-    def __getitem__(self, idx):
-        return self.X[idx], self.y[idx]
-
-
-class TinyCNN(nn.Module):
-    def __init__(self, n_detectors=3, n_outputs=3):
-        super().__init__()
-
-        self.conv = nn.Conv1d(
-            in_channels=n_detectors,
-            out_channels=16,
-            kernel_size=16,
-            stride=2,
-            padding=8,
-        )
-
-        self.activation = nn.ReLU()
-        self.pool = nn.AdaptiveAvgPool1d(1)
-        self.head = nn.Linear(16, n_outputs)
-
-    def forward(self, x):
-        x = self.conv(x)
-        x = self.activation(x)
-        x = self.pool(x)
-        x = x.squeeze(-1)
-        x = self.head(x)
-        return x
-
 class ConvBlock(nn.Module):
     
     def __init__(
@@ -78,12 +36,14 @@ class ConvBlock(nn.Module):
         return x
 
 
+
+
 class SimpleCNN(nn.Module):
     
     def __init__(
             self, 
-            in_channels=3, 
-            out_channels=3,
+            n_detectors=3,
+            n_outputs=3,
             embedding_dim=64,
             ):
         
@@ -91,7 +51,7 @@ class SimpleCNN(nn.Module):
 
         # 1D-Conv Block
         self.block1 = ConvBlock( 
-            in_channels=in_channels,
+            in_channels=n_detectors,
             out_channels=16,
             kernel_size=16,
             stride=2,
@@ -114,7 +74,7 @@ class SimpleCNN(nn.Module):
         )
 
         # Linear layer
-        self.head = nn.Linear(embedding_dim, out_channels)
+        self.head = nn.Linear(embedding_dim, n_outputs)
 
 
     # ENCODER
