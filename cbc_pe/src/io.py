@@ -1,8 +1,21 @@
 from pathlib import Path
 import numpy as np
+from dataclasses import dataclass
 
 from .dataset import DatasetBatch
 
+
+
+
+
+
+@dataclass(frozen=True)
+class LoadedDataset:
+    X: np.ndarray
+    y: np.ndarray
+    injection_times: list[float | None]
+    network_snrs: list[float | None]
+    metadata: dict
 
 
 def save_dataset_npz(
@@ -50,10 +63,7 @@ def save_dataset_npz(
 
 
 
-def load_dataset_npz(
-    path: str | Path,
-    return_metadata: bool = False,
-):
+def load_dataset_npz(path: str | Path) -> LoadedDataset:
     path = Path(path)
 
     if not path.exists():
@@ -62,6 +72,7 @@ def load_dataset_npz(
     data = np.load(path)
 
     required_keys = ["X", "y", "injection_times", "network_snrs"]
+
     for key in required_keys:
         if key not in data.files:
             raise KeyError(
@@ -71,6 +82,7 @@ def load_dataset_npz(
 
     X = data["X"].astype(np.float32)
     y = data["y"].astype(np.float32)
+
     injection_times = data["injection_times"].tolist()
     network_snrs = data["network_snrs"].tolist()
 
@@ -97,20 +109,15 @@ def load_dataset_npz(
             f"{len(network_snrs)} vs {len(X)}"
         )
 
-    batch = DatasetBatch(
-        X=X,
-        y=y,
-        parameters=[],
-        injection_times=injection_times,
-        network_snrs=network_snrs,
-    )
-
-    if not return_metadata:
-        return batch
-
     metadata = {}
 
     if "detector_names" in data.files:
         metadata["detector_names"] = data["detector_names"].astype(str).tolist()
 
-    return batch, metadata
+    return LoadedDataset(
+        X=X,
+        y=y,
+        injection_times=injection_times,
+        network_snrs=network_snrs,
+        metadata=metadata,
+    )
