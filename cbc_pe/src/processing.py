@@ -52,7 +52,7 @@ class SignalProcessor:
         TimeSeries
             The processed strain.
         """
-        processing_strain = strain.copy()
+        processing_strain = TimeSeries(strain.copy())
         original_length = len(processing_strain)
         original_start_time = processing_strain.start_time
 
@@ -71,7 +71,7 @@ class SignalProcessor:
               
         if self.apply_lowpass:
             # Apply a low-pass filter to remove frequencies higher than lowpass_frequency
-            processing_strain = processing_strain.lowpass_fir(self.lowpass_frequency, order=512, beta=0.5, remove_corrupted=True) # Remove frequencies higher than lowpass_frequency, legacy uses order=8 and beta=5.0, I suggest order=512 and beta=0.5 instead. But we uses the legacy choice to comparative purposes
+            processing_strain = processing_strain.lowpass_fir(self.lowpass_frequency, order=512, beta=0.5, remove_corrupted=True) # Remove frequencies higher than lowpass_frequency, legacy uses order=8 and beta=5.0, I suggest order=512 and beta=0.5 instead. But we uses the legacy choice to comparative purposes.
         if self.apply_highpass:
             # Apply a high-pass filter to remove frequencies lower than highpass_frequency
             processing_strain = processing_strain.highpass_fir(self.highpass_frequency, order=512, beta=0.5, remove_corrupted=True) # Remove frequencies lower than highpass_frequency

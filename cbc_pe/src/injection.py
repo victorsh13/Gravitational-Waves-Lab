@@ -9,9 +9,27 @@ from pycbc.types.timeseries import TimeSeries
 
 @dataclass(frozen=True)
 class InjectionResult:
-    strain: object
+    """
+    A class to store the result of the injection process.
+
+    Attributes
+    ----------
+    strain : TimeSeries
+        The injected strain.
+    injection_time : float
+        The injection time in the event reference frame. (i.e. considering the strain start time as 0).
+    injection_index : int
+        The index of the injection time within the strain in the event reference frame.
+    detector_start_time : float
+        The detector start time in the event reference frame (i.e. the geocentric time of the injection).
+    detector_start_index : int
+        The detector start index in the event reference frame (i.e. the geocentric index of the injection).
+    """
+    strain: TimeSeries
     injection_time: float
     injection_index: int
+    detector_start_time: float
+    detector_start_index: int
 
 
 class SignalInjector:
@@ -27,7 +45,7 @@ class SignalInjector:
         self,
         strain: TimeSeries,
         signal: TimeSeries,
-        injection_time: float | None = None,
+        injection_time: float,
     ) -> InjectionResult:
         """
         Inject a signal into a strain.
@@ -35,60 +53,36 @@ class SignalInjector:
         Parameters
         ----------
         strain : TimeSeries
-            The strain to inject the signal into.
+            The strain to inject the signal into (i.e. the noise signal).
         signal : TimeSeries
-            The signal to inject.
+            The signal to inject (i.e. the gw signal).
         injection_time : float | None = None
-            The time at which to inject the signal into the strain. If None,
-            a random time between 0.25 and 0.75 of the maximum possible injection
-            time is chosen.
+            The time at which to inject the signal into the strain. 
 
         Returns
         -------
         InjectionResult
             An object containing the injected strain, the injection time, and the
             injection index.
-        """
 
-        if len(strain) < len(signal):
-            raise ValueError("The strain must be longer than or equal to the signal.")
+        """
 
         if strain.delta_t != signal.delta_t:
             raise ValueError("Strain and signal must have the same delta_t.")
 
-        max_start_index = len(strain) - len(signal)
-        max_injection_time = max_start_index * signal.delta_t
+        t_start_in_strain = float(signal.start_time + injection_time)
 
-        if injection_time is None:
-            # Choose a random injection time between 25% and 75% of the maximum possible injection time
-            min_index = int(0.25 * max_start_index)
-            max_index = int(0.75 * max_start_index)
+        # Compute the start and end index of the signal within the strain applying the time delays
+        idx_start_signal = round((t_start_in_strain - float(strain.start_time)) / signal.delta_t)
+        idx_end_signal = idx_start_signal + len(signal)
 
-            if max_index < min_index:
-                raise ValueError("Not enough room in the strain to choose a safe injection window.")
-
-            injection_index = self.rng.integers(min_index, max_index, endpoint=True)
-            injection_time = injection_index * signal.delta_t
-        else:
-            # Check if the given injection time is within the allowed range
-            if not (0.0 <= injection_time <= max_injection_time):
-                raise ValueError(
-                    f"injection_time must be between 0 and {max_injection_time:.6f} s, "
-                    f"got {injection_time:.6f} s."
-                )
-
-            injection_index = round(injection_time / signal.delta_t)
-
-
-        if injection_index < 0 or injection_index + len(signal) > len(strain):
-            raise ValueError(
-                f"The injected signal does not fit within the strain. Injection index: {injection_index}, signal length: {len(signal)}, strain length: {len(strain)}."
-            )
+        if idx_start_signal < 0 or idx_end_signal > len(strain):
+            raise ValueError("The signal is not within the strain, the injection time for this sample is too early or too late.")
 
         signal_array = np.array(signal)
 
         injected_strain = strain.copy()
-        injected_strain[injection_index:injection_index + len(signal)] += signal_array
+        injected_strain[idx_start_signal:idx_end_signal] += signal_array
 
         ts_strain = TimeSeries(
             initial_array=injected_strain,
@@ -98,7 +92,9 @@ class SignalInjector:
 
         return InjectionResult(
             strain=ts_strain,
-            injection_time=injection_time,
-            injection_index=injection_index,
+            injection_time=injection_time ,
+            injection_index=round((injection_time - float(strain.start_time)) / signal.delta_t),
+            detector_start_time=t_start_in_strain,
+            detector_start_index=idx_start_signal,
         )
 

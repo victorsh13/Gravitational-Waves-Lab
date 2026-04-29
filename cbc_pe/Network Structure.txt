@@ -1,0 +1,31 @@
+Network Structure
+
+network.py
+
+La arquitectura:
+
+baseline CNN o lo que elijas
+forward
+quizá método para extraer embeddings
+losses.py
+
+Si usas algo especial.
+Si al principio es MSE puro, esto puede esperar.
+
+train.py
+
+Funciones de entrenamiento:
+
+train one epoch
+validate one epoch
+fit loop
+evaluate.py
+
+Métricas del predictor:
+
+MAE, RMSE, bias, etc.
+quizá predicción sobre dataset completo
+embeddings.py
+
+Funciones para extraer embeddings de una capa interna una vez entrenada la red.
+Esto te vendrá muy bien luego para difficulty.

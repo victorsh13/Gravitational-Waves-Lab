@@ -3,6 +3,30 @@ import numpy as np
 
 @dataclass(frozen=True)
 class CBCParameters:
+    """
+    Parameters of a binary compact object.
+
+    Attributes
+    ----------
+    mass_1 : float
+        Mass of the first component in solar masses.
+    mass_2 : float
+        Mass of the second component in solar masses.
+    distance : float
+        Distance to the source in megaparsecs.
+    inclination : float
+        Inclination of the line of sight in radians.
+    ra : float
+        Right ascension of the source in radians.
+    dec : float
+        Declination of the source in radians.
+    spin_1z : float
+        Spin of the first component along the z-axis in units of the total mass.
+    spin_2z : float
+        Spin of the second component along the z-axis in units of the total mass.
+    polarization_angle : float
+        Polarization angle of the source in radians.
+    """
     mass_1: float # in Msun
     mass_2: float # in Msun
     distance: float # in Mpc
@@ -11,6 +35,7 @@ class CBCParameters:
     dec: float # in [-pi/2, pi/2], similar to latitude
     spin_1z: float # in [-1, 1]
     spin_2z: float # in [-1, 1]
+    polarization_angle: float = 0.0 # in [0, 2*pi], the polarization angle of the source.
 
     def __post_init__(self):
         """
@@ -20,8 +45,16 @@ class CBCParameters:
         Validates all parameters.
         """
         if self.mass_1 < self.mass_2:  # Sort masses
-            self.mass_1, self.mass_2 = self.mass_2, self.mass_1
-            self.spin_1z, self.spin_2z = self.spin_2z, self.spin_1z
+            # We need to use the __setattr__ method to change the value when frozen=True.
+            m1_old = self.mass_1
+            m2_old = self.mass_2
+            s1_old = self.spin_1z
+            s2_old = self.spin_2z
+
+            object.__setattr__(self, "mass_1", m2_old)
+            object.__setattr__(self, "mass_2", m1_old)
+            object.__setattr__(self, "spin_1z", s2_old)
+            object.__setattr__(self, "spin_2z", s1_old)
 
         ## Validation##
         if self.mass_1 <= 0 or self.mass_2 <= 0:
@@ -38,6 +71,8 @@ class CBCParameters:
             raise ValueError("spin_1z must be in [-1, 1].")
         if not (-1.0 <= self.spin_2z <= 1.0):
             raise ValueError("spin_2z must be in [-1, 1].")
+        if not (0.0 <= self.polarization_angle <= 2 * np.pi):
+            raise ValueError("Polarization angle must be in [0, 2*pi].")
 
     @property
     def total_mass(self) -> float:
