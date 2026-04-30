@@ -65,11 +65,25 @@ class SimpleCNN(nn.Module):
             stride=2,
         )
 
+        self.block3 = ConvBlock(
+            in_channels=32,
+            out_channels=64,
+            kernel_size=16,
+            stride=2,
+        )
+
+        self.block4 = ConvBlock(
+            in_channels=64,
+            out_channels=128,
+            kernel_size=16,
+            stride=2,
+        )
+
         # Global Poolingg
         self.pool = nn.AdaptiveAvgPool1d(1)
 
         self.embedding_layer = nn.Sequential(
-            nn.Linear(32, embedding_dim),
+            nn.Linear(128, embedding_dim),
             nn.ReLU(),
         )
 
@@ -78,17 +92,21 @@ class SimpleCNN(nn.Module):
 
 
     # ENCODER
-    def encode(self, x):
-        x = self.block1(x)
-        x = self.block2(x)
-        x = self.pool(x)
-        x = x.squeeze(-1)
+    def encode(self, x):    # (channels, time) = (3, 16384)
+        x = self.block1(x)  # (16, 8192)
+        x = self.block2(x)  # (32, 4096)
+        x = self.block3(x)  # (64, 2048)
+        x = self.block4(x)  # (128, 1024)
+
+        x = self.pool(x)    # (128, 1)
+        x = x.squeeze(-1)   # (128,)
+
         return x
 
     # EMBEDDING
     def embed(self, x):
-        features = self.encode(x)
-        embedding = self.embedding_layer(features)
+        features = self.encode(x)  # (128,)
+        embedding = self.embedding_layer(features)  # (128, 64)
         return embedding
 
     # HEAD
