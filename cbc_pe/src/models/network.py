@@ -11,9 +11,11 @@ class ConvBlock(nn.Module):
         out_channels, 
         kernel_size=16, 
         stride=2, 
+        dropout=0.05,
+        num_groups=8,
     ):
         
-        super(ConvBlock, self).__init__() # Initialize parent class nn.Module, otherwise PyTorch will have issues registering the parameters.
+        super().__init__() # Initialize parent class nn.Module, otherwise PyTorch will have issues registering the parameters.
 
         padding = kernel_size // 2
 
@@ -25,14 +27,22 @@ class ConvBlock(nn.Module):
             padding=padding,
         )
 
-        self.batch_norm = nn.BatchNorm1d(out_channels)
-        self.activation = nn.ReLU()
+        #self.batch_norm = nn.BatchNorm1d(out_channels)
+
+        self.group_norm = nn.GroupNorm(
+            num_groups=num_groups,
+            num_channels=out_channels,
+        )
+
+        self.activation = nn.LeakyReLU(negative_slope=0.01)
+        self.dropout = nn.Dropout(p=dropout)
 
 
     def forward(self, x):
         x = self.conv(x)
-        x = self.batch_norm(x)
+        x = self.group_norm(x)
         x = self.activation(x)
+        x = self.dropout(x)
         return x
 
 class BasicBlock(nn.Module):
@@ -76,6 +86,8 @@ class SimpleCNN(nn.Module):
             n_detectors=3,
             n_outputs=3,
             embedding_dim=64,
+            dropout_conv=0.05,
+            dropout_dense=0.1,
             ):
         
         super().__init__()
@@ -86,6 +98,7 @@ class SimpleCNN(nn.Module):
             out_channels=16,
             kernel_size=16,
             stride=2,
+            dropout=dropout_conv,
         )
         
         # 1D-Conv Block
@@ -94,6 +107,7 @@ class SimpleCNN(nn.Module):
             out_channels=32,
             kernel_size=16,
             stride=2,
+            dropout=dropout_conv,
         )
 
         self.block3 = ConvBlock(
@@ -101,6 +115,7 @@ class SimpleCNN(nn.Module):
             out_channels=64,
             kernel_size=16,
             stride=2,
+            dropout=dropout_conv,
         )
 
         self.block4 = ConvBlock(
@@ -108,6 +123,7 @@ class SimpleCNN(nn.Module):
             out_channels=128,
             kernel_size=16,
             stride=2,
+            dropout=dropout_conv,
         )
 
         # Global Poolingg
@@ -115,11 +131,14 @@ class SimpleCNN(nn.Module):
 
         self.embedding_layer = nn.Sequential(
             nn.Linear(128, embedding_dim),
-            nn.ReLU(),
+            nn.LeakyReLU(negative_slope=0.1),
+            nn.Dropout(p=dropout_dense),
+            nn.Linear(embedding_dim, 32),
+            nn.LeakyReLU(negative_slope=0.1),
         )
 
         # Linear layer
-        self.head = nn.Linear(embedding_dim, n_outputs)
+        self.head = nn.Linear(32, n_outputs)
 
 
     # ENCODER
@@ -137,13 +156,13 @@ class SimpleCNN(nn.Module):
     # EMBEDDING
     def embed(self, x):
         features = self.encode(x)  # (128,)
-        embedding = self.embedding_layer(features)  # (128, 64)
+        embedding = self.embedding_layer(features)  # (64, 32)
         return embedding
 
     # HEAD
     def forward(self, x, return_embedding=False):
         embedding = self.embed(x)
-        y_pred = self.head(embedding)
+        y_pred = self.head(embedding) #(3,)
 
         if return_embedding:
             return y_pred, embedding

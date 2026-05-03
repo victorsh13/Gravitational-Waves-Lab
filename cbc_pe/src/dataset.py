@@ -185,10 +185,14 @@ class DatasetBuilder:
         num_samples: int,
         standardize_labels: bool = False,
         injection_time: float | None = None,
-        ) -> DatasetBatch:
+        max_attempts: int | None = None,
+    ) -> DatasetBatch:
 
         if num_samples <= 0:
             raise ValueError("num_samples must be a positive integer.")
+
+        if max_attempts is None:
+            max_attempts = 10 * num_samples
 
         X_list = []
         y_list = []
@@ -196,21 +200,58 @@ class DatasetBuilder:
         injection_times = []
         network_snrs = []
 
-        for i in range(num_samples):
-            sample = self.build_sample(standardize_labels=standardize_labels, injection_time=injection_time)
+        n_attempts = 0
+        n_failed = 0
+
+        while len(X_list) < num_samples and n_attempts < max_attempts:
+            n_attempts += 1
+
+            try:
+                sample = self.build_sample(
+                    standardize_labels=standardize_labels,
+                    injection_time=injection_time,
+                )
+
+            except ValueError as e:
+                n_failed += 1
+
+                # Para no llenar la salida con 1000 errores
+                if n_failed <= 10:
+                    print(f"Skipping failed sample attempt {n_attempts}: {e}")
+                elif n_failed == 11:
+                    print("Further failed sample messages will be suppressed...")
+
+                continue
+
             X_list.append(sample.X)
             y_list.append(sample.y)
             parameters_list.append(sample.parameters)
             injection_times.append(sample.injection_time)
             network_snrs.append(sample.network_snr)
-            
-            if (i+1) % 10 == 0:
-                print(f"Built samples {i+1} of {num_samples} --> {(i+1)/num_samples:.1%} completed.".format(i=i, num_samples=num_samples))
-            if (i+1) == num_samples:
-                print(f"--> DATASET GENERATED with {(i+1)} of {num_samples} samples.\n".format(i=i, num_samples=num_samples))
+
+            n_done = len(X_list)
+
+            if n_done % 10 == 0:
+                print(
+                    f"Built sample {n_done} of {num_samples} "
+                    f"--> {n_done / num_samples:.1%} completed "
+                    f"(attempts={n_attempts}, failed={n_failed})"
+                )
+
+        if len(X_list) < num_samples:
+            raise RuntimeError(
+                f"Could only build {len(X_list)} valid samples out of {num_samples} "
+                f"after {n_attempts} attempts. Failed samples: {n_failed}. "
+                f"Your simulation config is probably rejecting too many samples."
+            )
 
         X = np.stack(X_list, axis=0)
         y = np.stack(y_list, axis=0)
+
+        print(
+            f"--> DATASET GENERATED with {len(X_list)} valid samples "
+            f"after {n_attempts} attempts. Failed samples: {n_failed}."
+        )
 
         return DatasetBatch(
             X=X,

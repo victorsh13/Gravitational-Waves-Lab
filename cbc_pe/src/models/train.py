@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 
 def train_one_epoch(model, loader, loss_fn, optimizer, device):
@@ -49,3 +50,47 @@ def validate_one_epoch(model, loader, loss_fn, device):
 
     mean_loss = total_loss / n_samples
     return mean_loss
+
+# To obtain the mse errors per label
+@torch.no_grad()
+def evaluate_per_label_mse(model, loader, device):
+    model.eval()
+
+    all_pred = []
+    all_y = []
+
+    for X_batch, y_batch in loader:
+        X_batch = X_batch.to(device)
+        pred = model(X_batch)
+
+        all_pred.append(pred.cpu().numpy())
+        all_y.append(y_batch.numpy())
+
+    pred = np.concatenate(all_pred, axis=0)
+    y_true = np.concatenate(all_y, axis=0)
+
+    mse_per_label = np.mean((pred - y_true) ** 2, axis=0)
+    mae_per_label = np.mean(np.abs(pred - y_true), axis=0)
+
+    return mse_per_label, mae_per_label
+
+# To compare the predictions of the model with the true values
+@torch.no_grad()
+def predict_on_loader(model, loader, device):
+    model.eval()
+
+    preds = []
+    targets = []
+
+    for X_batch, y_batch in loader:
+        X_batch = X_batch.to(device)
+
+        pred = model(X_batch)
+
+        preds.append(pred.cpu().numpy())
+        targets.append(y_batch.numpy())
+
+    preds = np.concatenate(preds, axis=0)
+    targets = np.concatenate(targets, axis=0)
+
+    return preds, targets

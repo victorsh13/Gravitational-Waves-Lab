@@ -41,6 +41,13 @@ def compute_detector_optimal_snr(
         raise ValueError("waveform must not contain NaN or Inf values.")
     if not np.all(np.isfinite(psd.numpy())):
         raise ValueError("psd must not contain NaN or Inf values.")
+    
+    if waveform.duration > config.duration:
+        raise ValueError(
+            f"Waveform duration ({waveform.duration:.3f} s) is longer than "
+            f"the configured segment duration ({config.duration:.3f} s). "
+            f"Increase config.duration, increase f_lower, or restrict the mass prior."
+        )
 
     waveform_fs = waveform.to_frequencyseries(config.delta_f) # Convert to frequency series
 
