@@ -1,6 +1,4 @@
-import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, Dataset
 
 
 class ConvBlock(nn.Module):
@@ -35,7 +33,7 @@ class ConvBlock(nn.Module):
         )
 
         self.activation = nn.LeakyReLU(negative_slope=0.01)
-        self.dropout = nn.Dropout(p=dropout)
+        self.dropout = nn.Dropout1d(p=dropout)
 
 
     def forward(self, x):
@@ -132,7 +130,7 @@ class SimpleCNN(nn.Module):
         self.embedding_layer = nn.Sequential(
             nn.Linear(128, embedding_dim),
             nn.LeakyReLU(negative_slope=0.1),
-            nn.Dropout(p=dropout_dense),
+            nn.Dropout1d(p=dropout_dense),
             nn.Linear(embedding_dim, 32),
             nn.LeakyReLU(negative_slope=0.1),
         )

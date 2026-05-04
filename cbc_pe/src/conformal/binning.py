@@ -143,7 +143,7 @@ class BinGrouper:
         pass
         
             
-    def group_by_bin(self, residuals: np.ndarray, bin_indices: np.ndarray) -> np.ndarray:
+    def group_by_bin(self, residuals: np.ndarray, bin_indices: np.ndarray, n_bins: int) -> np.ndarray:
         """
         Assign residuals to bins.
 
@@ -161,7 +161,7 @@ class BinGrouper:
         """
         residuals = np.asarray(residuals)
         bin_indices = np.asarray(bin_indices)
-        n_bins = np.max(bin_indices) + 1
+        n_bins = n_bins
         
         if not np.all(np.isfinite(residuals)):
             raise ValueError("residuals must contain only finite values.")

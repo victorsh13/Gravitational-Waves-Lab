@@ -152,45 +152,56 @@ class DifficultyEstimator:
 
 
 
-    def _compute_neighbor_based_difficulty(self, target_embedding, exclude_self: bool, distance_weighted: bool):
+    def _compute_neighbor_based_difficulty(
+        self,
+        target_embedding,
+        exclude_self: bool,
+        distance_weighted: bool,
+    ):
         """
-        Internal helper that computes neighbor-based difficulty scores. Now is computed as the simple mean of the absolute residuals,
-        but in the original work, a weighted mean based on the distances was used.
-
-        Parameters
-        ----------
-        target_embedding : ndarray of shape (n_samples, embedding_dim)
-            Embeddings for which difficulty scores are computed.
-        exclude_self : bool
-            Whether to exclude the first nearest neighbor. This should only be
-            used when target_embedding is exactly the calibration embedding set.
+        Compute neighbor-based difficulty scores.
 
         Returns
         -------
         difficulty_scores : ndarray of shape (n_samples, n_labels)
-            Mean absolute residual of the selected neighbors for each sample/label.
+            Weighted or unweighted mean absolute residual of nearest calibration
+            neighbors, computed separately for each label.
         """
         n_neighbors_query = self.n_neighbors + 1 if exclude_self else self.n_neighbors
 
-        distances, indices = self.nn_model_.kneighbors(             #Dim: (n_samples, k)
-                                                target_embedding,
-                                                n_neighbors=n_neighbors_query,
+        distances, indices = self.nn_model_.kneighbors(
+            target_embedding,
+            n_neighbors=n_neighbors_query,
         )
 
+        # For calibration samples, the closest neighbor is usually the point itself.
+        # Remove it from both indices and distances.
         if exclude_self:
+            distances = distances[:, 1:]
             indices = indices[:, 1:]
 
-        residuals = np.sum(self.calibration_abs_residuals_[indices], axis=1) # (n_samples, k, n_labels) -> Dim: (n_samples, n_labels), summing over the nn dimension (k).
+        # Shape: (n_samples, n_neighbors, n_labels)
+        neighbor_abs_residuals = self.calibration_abs_residuals_[indices]
 
         if not distance_weighted:
-            difficulty_scores = np.mean(residuals, axis=1)
+            difficulty_scores = np.mean(neighbor_abs_residuals, axis=1)
         else:
             eps = 1e-8
-            weights = 1 / (distances + eps) # Dim: (n_samples, k)
-            weights =  weights.reshape(-1, self.n_neighbors, 1) # Dim: (n_samples, k, 1) 
-            difficulty_scores = np.sum(weights * residuals, axis=1) / np.sum(weights, axis=1)[:, np.newaxis] #Dim (n_samples, n_labels) # Sum over the nn dimension. 
 
-        return difficulty_scores 
+            # Shape: (n_samples, n_neighbors)
+            weights = 1.0 / (distances + eps)
+
+            # Normalize weights per sample
+            weights = weights / np.sum(weights, axis=1, keepdims=True)
+
+            # Broadcast weights over labels:
+            # (n_samples, n_neighbors, 1) * (n_samples, n_neighbors, n_labels)
+            difficulty_scores = np.sum(
+                weights[:, :, None] * neighbor_abs_residuals,
+                axis=1,
+            )
+
+        return difficulty_scores
 
 
 

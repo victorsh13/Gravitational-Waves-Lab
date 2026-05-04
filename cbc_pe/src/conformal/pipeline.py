@@ -146,6 +146,7 @@ def run_mondrian_regression(
     grouped_residuals_cal = grouper.group_by_bin(
                                     residuals=residuals_cal, 
                                     bin_indices=bin_indices_cal,
+                                    n_bins=n_bins
     )
 
 
@@ -171,10 +172,11 @@ def run_mondrian_regression(
     # Compute the metrics for the test set
     evaluator = CoverageEvaluator(confidence_level=confidence_level)
     metrics = evaluator.evaluate_intervals(
-                        y=y_test,  
-                        lower_bound=lower, 
-                        upper_bound=upper, 
-                        bin_indices=bin_indices_test
+        y=y_test,
+        lower_bound=lower,
+        upper_bound=upper,
+        bin_indices=bin_indices_test,
+        n_bins=n_bins,
     )
     
    

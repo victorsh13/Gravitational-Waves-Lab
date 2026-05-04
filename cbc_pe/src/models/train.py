@@ -1,5 +1,8 @@
 import numpy as np
 import torch
+import torch.nn as nn
+import time
+import copy
 
 def train_one_epoch(model, loader, loss_fn, optimizer, device):
     model.train() # Red a modo entrenamiento
@@ -51,46 +54,105 @@ def validate_one_epoch(model, loader, loss_fn, device):
     mean_loss = total_loss / n_samples
     return mean_loss
 
-# To obtain the mse errors per label
-@torch.no_grad()
-def evaluate_per_label_mse(model, loader, device):
-    model.eval()
 
-    all_pred = []
-    all_y = []
 
-    for X_batch, y_batch in loader:
-        X_batch = X_batch.to(device)
-        pred = model(X_batch)
+def train_model(
+    model,
+    train_loader,
+    val_loader,
+    device,
+    y_mean,
+    y_std,
+    model_config: dict,
+    seed: int | None = None,
+    batch_size: int | None = None,
+    max_epochs: int = 100,
+    patience: int = 15,
+    learning_rate: float = 3e-4,
+    weight_decay: float = 1e-4,
+):
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=learning_rate,
+        weight_decay=weight_decay,
+    )
 
-        all_pred.append(pred.cpu().numpy())
-        all_y.append(y_batch.numpy())
+    loss_fn = nn.MSELoss()
 
-    pred = np.concatenate(all_pred, axis=0)
-    y_true = np.concatenate(all_y, axis=0)
+    history = {
+        "train_loss": [],
+        "val_loss": [],
+    }
 
-    mse_per_label = np.mean((pred - y_true) ** 2, axis=0)
-    mae_per_label = np.mean(np.abs(pred - y_true), axis=0)
+    best_val_loss = float("inf")
+    best_checkpoint = {}
+    epochs_without_improvement = 0
 
-    return mse_per_label, mae_per_label
+    start_time = time.time()
 
-# To compare the predictions of the model with the true values
-@torch.no_grad()
-def predict_on_loader(model, loader, device):
-    model.eval()
+    for epoch in range(max_epochs):
+        train_loss = train_one_epoch(
+            model=model,
+            loader=train_loader,
+            loss_fn=loss_fn,
+            optimizer=optimizer,
+            device=device,
+        )
 
-    preds = []
-    targets = []
+        val_loss = validate_one_epoch(
+            model=model,
+            loader=val_loader,
+            loss_fn=loss_fn,
+            device=device,
+        )
 
-    for X_batch, y_batch in loader:
-        X_batch = X_batch.to(device)
+        history["train_loss"].append(float(train_loss))
+        history["val_loss"].append(float(val_loss))
 
-        pred = model(X_batch)
+        improved = val_loss < best_val_loss
 
-        preds.append(pred.cpu().numpy())
-        targets.append(y_batch.numpy())
+        if improved:
+            best_val_loss = val_loss
+            epochs_without_improvement = 0
 
-    preds = np.concatenate(preds, axis=0)
-    targets = np.concatenate(targets, axis=0)
+            best_checkpoint = {
+                "epoch": epoch + 1,
+                "model_state_dict": copy.deepcopy(model.state_dict()),
+                "optimizer_state_dict": copy.deepcopy(optimizer.state_dict()),
+                "train_loss": float(train_loss),
+                "best_val_loss": float(best_val_loss),
+                "history": copy.deepcopy(history),
+                "y_mean": torch.as_tensor(y_mean, dtype=torch.float32),
+                "y_std": torch.as_tensor(y_std, dtype=torch.float32),
+                "model_config": copy.deepcopy(model_config),
+                "training_config": {
+                    "seed": seed,
+                    "batch_size": batch_size,
+                    "max_epochs": max_epochs,
+                    "patience": patience,
+                    "learning_rate": learning_rate,
+                    "weight_decay": weight_decay,
+                },
+            }
 
-    return preds, targets
+        else:
+            epochs_without_improvement += 1
+
+        print(
+            f"Epoch {epoch+1:03d} | "
+            f"train_loss = {train_loss:.6f} | "
+            f"val_loss = {val_loss:.6f} | "
+            f"best_val = {best_val_loss:.6f}"
+        )
+
+        if epochs_without_improvement >= patience:
+            print(f"Early stopping at epoch {epoch+1}")
+            break
+
+    elapsed = time.time() - start_time
+
+    best_checkpoint["elapsed_seconds"] = elapsed
+    best_checkpoint["history"] = history
+
+    return best_checkpoint, history
+

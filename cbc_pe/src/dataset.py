@@ -183,6 +183,7 @@ class DatasetBuilder:
     def build_dataset(
         self,
         num_samples: int,
+        #params: CBCParameters | None = None,
         standardize_labels: bool = False,
         injection_time: float | None = None,
         max_attempts: int | None = None,
