@@ -1,32 +1,52 @@
+import warnings
+
 import numpy as np
 
+
 class QuantileBinner:
+    """
+    Quantile-based binner for Mondrian conformal regression.
+
+    This class computes bin edges from calibration binning scores and then
+    assigns calibration/test samples to bins.
+
+    Binning is performed independently for each label.
+    """
+
     def __init__(
         self,
         n_bins: int,
         rng: np.random.Generator | None = None,
         apply_jitter: bool = False,
         jitter_variation: float = 1e-10,
+        warn_on_degenerate_edges: bool = True,
     ) -> None:
         """
-        Initialize a QuantileBinner object.
-
         Parameters
         ----------
         n_bins : int
-            The number of bins to partition the binning_scores into. Must be greater than 1. Default is 6.
+            Number of bins. Must be greater than 1.
+
         rng : np.random.Generator | None
-            The random number generator to use. If None, use the default random number generator.
+            Random number generator used for jitter. If None, a default generator
+            is created.
+
         apply_jitter : bool
-            If True, apply a small variation on the binning_scores. This can help to break ties at the bin edges, avoiding degenerated quantiles.
+            If True, add tiny uniform noise to binning scores while computing
+            the bin edges. This helps break ties at quantile edges.
+
         jitter_variation : float
-            The amount of variation to apply to the bin edges. Must be greater than 0.
+            Half-width of the uniform jitter interval:
+            U(-jitter_variation, +jitter_variation).
+
+        warn_on_degenerate_edges : bool
+            If True, warn when repeated quantile edges are detected.
         """
         if n_bins < 2:
-            raise ValueError("The number of bins (n_bins) must be greater than 1.")
-        
+            raise ValueError("n_bins must be greater than 1.")
+
         if jitter_variation <= 0:
-            raise ValueError("The jitter variation must be greater than 0.")
+            raise ValueError("jitter_variation must be greater than 0.")
 
         if rng is None:
             rng = np.random.default_rng()
@@ -34,156 +54,260 @@ class QuantileBinner:
         self.n_bins = n_bins
         self.rng = rng
         self.apply_jitter = apply_jitter
-        self.jitter_variation = jitter_variation  # Small uniform perturbation applied to binning_scores during fit to break ties at quantile edges.
-        self.bin_edges_per_label_ = None
+        self.jitter_variation = jitter_variation
+        self.warn_on_degenerate_edges = warn_on_degenerate_edges
 
+        self.bin_edges_per_label_: np.ndarray | None = None
 
-    def set_bin_edges(self, binning_scores):
+    def set_bin_edges(self, binning_scores: np.ndarray) -> "QuantileBinner":
         """
-        Compute the edges of the bins for a given set of binning_scores.
+        Compute quantile bin edges from calibration binning scores.
 
         Parameters
         ----------
-        binning_scores : numpy.ndarray
-            The scores used for binning.
+        binning_scores : np.ndarray, shape (n_samples, n_labels)
+            Scores used to define Mondrian bins.
+
+            Examples:
+            - prediction taxonomy: CNN predictions
+            - difficulty taxonomy: difficulty scores
 
         Returns
         -------
-        edges : numpy.ndarray
-            The edges of the bins for each label. With shape (n_bins + 1, n_labels).
+        self
+            The fitted binner.
         """
-        binning_scores = np.asarray(binning_scores)
+        binning_scores = self._validate_binning_scores(
+            binning_scores,
+            context="set_bin_edges",
+        )
 
-        if binning_scores.ndim != 2:
-            raise ValueError("The binning_scores must be a 2D array.")
-        
-        if not np.all(np.isfinite(binning_scores)):
-            raise ValueError("binning_scores must contain only finite binning_scores.")
-        
-        if binning_scores.shape[0] < self.n_bins:
-            raise ValueError("The number of samples (n_samples) is smaller than the number of bins (n_bins). This would lead to empty bins. Consider decreasing the number of bins.")
-           
-        fit_binning_scores = np.copy(binning_scores)
+        n_samples, _ = binning_scores.shape
 
-        if self.apply_jitter: 
-            for i in range(fit_binning_scores.shape[1]):
-                fit_binning_scores[:,i] = fit_binning_scores[:,i] + self.rng.uniform(-self.jitter_variation, self.jitter_variation, size=len(fit_binning_scores[:,i]))
-        
+        if n_samples < self.n_bins:
+            raise ValueError(
+                "The number of samples is smaller than n_bins. "
+                "This can lead to empty bins. Decrease n_bins."
+            )
+
+        scores_for_edges = np.array(binning_scores, copy=True, dtype=float)
+
+        if self.apply_jitter:
+            jitter = self.rng.uniform(
+                low=-self.jitter_variation,
+                high=self.jitter_variation,
+                size=scores_for_edges.shape,
+            )
+            scores_for_edges = scores_for_edges + jitter
+
         quantiles = np.linspace(0.0, 1.0, self.n_bins + 1)
-        self.bin_edges_per_label_ = np.quantile(fit_binning_scores, quantiles, axis=0) # Array of shape (n_bins + 1, n_labels)
-        
+
+        # Shape: (n_bins + 1, n_labels)
+        self.bin_edges_per_label_ = np.quantile(
+            scores_for_edges,
+            quantiles,
+            axis=0,
+        )
+
+        if self.warn_on_degenerate_edges:
+            self._warn_if_degenerate_edges()
 
         return self
-    
-    def get_bin_indices(self, binning_scores):
+
+    def get_bin_indices(self, binning_scores: np.ndarray) -> np.ndarray:
         """
-        Compute the bin index for a given set of binning_scores.
+        Assign samples to the already-computed bin edges.
 
         Parameters
         ----------
-        binning_scores : numpy.ndarray
-            The binning_scores of the model.
+        binning_scores : np.ndarray, shape (n_samples, n_labels)
+            Scores to assign to bins.
 
         Returns
         -------
-        bin_index : numpy.ndarray
-            The bin index for each prediction. With shape (n_samples, n_labels).
+        bin_indices : np.ndarray, shape (n_samples, n_labels)
+            Integer bin indices in [0, n_bins).
         """
-        binning_scores = np.asarray(binning_scores)
-
-        if not np.all(np.isfinite(binning_scores)):
-            raise ValueError("binning_scores must contain only finite values.")
-        if binning_scores.ndim != 2:
-            raise ValueError("The binning_scores must be a 2D array.")
         if self.bin_edges_per_label_ is None:
-            raise ValueError("The bin edges must be computed first. Call fit() method first.")
+            raise ValueError("Bin edges have not been computed. Call set_bin_edges() first.")
+
+        binning_scores = self._validate_binning_scores(
+            binning_scores,
+            context="get_bin_indices",
+        )
+
         if binning_scores.shape[1] != self.bin_edges_per_label_.shape[1]:
-            raise ValueError("binning_scores have a different number of labels than the fitted bin edges.")
-        
-        
-        bin_indices = np.empty_like(binning_scores, dtype=int)
-    
-        for i in range(binning_scores.shape[1]):
-            internal_edges = self.bin_edges_per_label_[1:-1, i]
-            bin_indices[:, i] = np.digitize(binning_scores[:,i], internal_edges, right=False) # This returns the bin index as 0, 1... n_bins-1
-            
-            # This could be used laterto asign the binning_scores to the right bin
-            #preds_in_right_bins = [binning_scores[:,i][indices == j] for j in range(1, len(self.bin_edges_per_label_[i]))]
-            #bin_index_array.append(preds_in_right_bins)
+            raise ValueError(
+                "binning_scores have a different number of labels than "
+                "the computed bin edges."
+            )
+
+        n_samples, n_labels = binning_scores.shape
+        bin_indices = np.empty((n_samples, n_labels), dtype=int)
+
+        for label_idx in range(n_labels):
+            # Remove the first and last edges because they are the global min/max.
+            # np.digitize uses only internal thresholds to assign bins.
+            internal_edges = self.bin_edges_per_label_[1:-1, label_idx]
+
+            bin_indices[:, label_idx] = np.digitize(
+                binning_scores[:, label_idx],
+                internal_edges,
+                right=False,
+            )
 
         return bin_indices
 
-    def bin_edges_and_indices(self, binning_scores):
+    def bin_edges_and_indices(self, binning_scores: np.ndarray) -> np.ndarray:
         """
-        Compute the bin edges from the binning_scores and then compute the bin index for the same values.
+        Compute bin edges from the provided scores and return bin indices
+        for those same scores.
+
+        This is used for the calibration set.
 
         Parameters
         ----------
-        binning_scores : numpy.ndarray
-            The binning_scores of the model.
+        binning_scores : np.ndarray, shape (n_samples, n_labels)
+            Calibration binning scores.
 
         Returns
         -------
-        bin_indices : numpy.ndarray
-            The bin index for each prediction. With shape (n_samples, n_labels).
-
+        bin_indices : np.ndarray, shape (n_samples, n_labels)
+            Bin indices for the calibration samples.
         """
-        self.set_bin_edges(binning_scores) # Compute the bin edges from the binning_scores
+        self.set_bin_edges(binning_scores)
+        return self.get_bin_indices(binning_scores)
 
-        return self.get_bin_indices(binning_scores) # Compute the bin index for the same binning_scores
-            
+    @staticmethod
+    def _validate_binning_scores(
+        binning_scores: np.ndarray,
+        context: str,
+    ) -> np.ndarray:
+        """
+        Validate binning scores and convert them to float arrays.
+        """
+        binning_scores = np.asarray(binning_scores, dtype=float)
 
+        if binning_scores.ndim != 2:
+            raise ValueError(f"binning_scores must be a 2D array during {context}.")
 
-## CLASS FOR ASSIGNING binning_scores TO BINS
+        if binning_scores.shape[1] == 0:
+            raise ValueError("binning_scores must have at least one label.")
+
+        if not np.all(np.isfinite(binning_scores)):
+            raise ValueError("binning_scores must contain only finite values.")
+
+        return binning_scores
+
+    def _warn_if_degenerate_edges(self) -> None:
+        """
+        Warn if repeated quantile edges are present.
+
+        Repeated edges can happen when many binning scores are identical or nearly
+        identical. This can lead to empty bins or very uneven bins.
+        """
+        if self.bin_edges_per_label_ is None:
+            return
+
+        n_labels = self.bin_edges_per_label_.shape[1]
+
+        for label_idx in range(n_labels):
+            unique_edges = np.unique(self.bin_edges_per_label_[:, label_idx])
+
+            if unique_edges.size < self.n_bins + 1:
+                warnings.warn(
+                    "Degenerate quantile edges detected for "
+                    f"label {label_idx}: only {unique_edges.size} unique edges "
+                    f"for {self.n_bins + 1} requested edges. "
+                    "This can create empty bins. Consider enabling jitter, "
+                    "reducing n_bins, or using a different taxonomy.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+
 
 class BinGrouper:
+    """
+    Group calibration residuals by label and Mondrian bin.
+    """
 
-    def __init__(
-            self):
-        pass
-        
-            
-    def group_by_bin(self, residuals: np.ndarray, bin_indices: np.ndarray, n_bins: int) -> np.ndarray:
+    def group_by_bin(
+        self,
+        residuals: np.ndarray,
+        bin_indices: np.ndarray,
+        n_bins: int,
+    ) -> np.ndarray:
         """
-        Assign residuals to bins.
+        Assign calibration residuals to bins.
 
         Parameters
         ----------
-        residuals : numpy.ndarray
-            The residual values to be grouped in the right bins. With shape (n_samples, n_labels).
-        bin_indices : numpy.ndarray
-            The bin index for each binning_score. With shape (n_samples, n_labels).
+        residuals : np.ndarray, shape (n_samples, n_labels)
+            Calibration residuals, usually y_cal - pred_cal.
+
+        bin_indices : np.ndarray, shape (n_samples, n_labels)
+            Bin index for each sample and label.
+
+        n_bins : int
+            Total number of bins.
 
         Returns
         -------
-        grouped_residuals : numpy.ndarray
-            The residuals grouped by bins. With a nested structure of arrays. (Outer: labels, Inner: bins, Content: residuals)
+        grouped_residuals : np.ndarray, shape (n_labels, n_bins), dtype=object
+            grouped_residuals[label_idx, bin_idx] contains a 1D array with the
+            residuals assigned to that label/bin pair.
         """
-        residuals = np.asarray(residuals)
+        residuals = np.asarray(residuals, dtype=float)
         bin_indices = np.asarray(bin_indices)
-        n_bins = n_bins
-        
+
+        if n_bins < 1:
+            raise ValueError("n_bins must be at least 1.")
+
+        if residuals.ndim != 2:
+            raise ValueError("residuals must be a 2D array.")
+
+        if bin_indices.ndim != 2:
+            raise ValueError("bin_indices must be a 2D array.")
+
+        if residuals.shape != bin_indices.shape:
+            raise ValueError("residuals and bin_indices must have the same shape.")
+
+        if residuals.shape[1] == 0:
+            raise ValueError("residuals must have at least one label.")
+
         if not np.all(np.isfinite(residuals)):
             raise ValueError("residuals must contain only finite values.")
-        
-        if residuals.ndim != 2 or bin_indices.ndim != 2:
-            raise ValueError("residuals and bin_indices must be 2D arrays.")
-        
-        if residuals.shape != bin_indices.shape:
-            raise ValueError("The residuals and bin indices must have the same shape.")
-        
-        if residuals.shape[1] == 0:
-            raise ValueError("The residuals must have at least one label.")
-        
-        if np.any(bin_indices < 0) or np.any(bin_indices >= n_bins):
-            raise ValueError("bin_indices contain values outside the valid range.")
-        
-        grouped_residuals = np.empty((residuals.shape[1], n_bins), dtype=object)
 
-        for label_idx in range(residuals.shape[1]):
+        bin_indices = self._ensure_integer_bin_indices(bin_indices)
+
+        if np.any(bin_indices < 0) or np.any(bin_indices >= n_bins):
+            raise ValueError("bin_indices contain values outside [0, n_bins).")
+
+        n_labels = residuals.shape[1]
+
+        grouped_residuals = np.empty((n_labels, n_bins), dtype=object)
+
+        for label_idx in range(n_labels):
             for bin_idx in range(n_bins):
-                grouped_residuals[label_idx, bin_idx] = residuals[:, label_idx][bin_indices[:, label_idx] == bin_idx]
+                mask = bin_indices[:, label_idx] == bin_idx
+                grouped_residuals[label_idx, bin_idx] = residuals[mask, label_idx]
 
         return grouped_residuals
-    
 
+    @staticmethod
+    def _ensure_integer_bin_indices(bin_indices: np.ndarray) -> np.ndarray:
+        """
+        Ensure bin indices are integer-valued.
+
+        Allows arrays like [0.0, 1.0, 2.0], but rejects non-integer values
+        like [0.0, 1.5, 2.0].
+        """
+        if np.issubdtype(bin_indices.dtype, np.integer):
+            return bin_indices
+
+        bin_indices_as_int = bin_indices.astype(int)
+
+        if np.all(bin_indices == bin_indices_as_int):
+            return bin_indices_as_int
+
+        raise ValueError("bin_indices must contain integer values.")
