@@ -1,45 +1,89 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, asdict
 import numpy as np
+from warnings import warn
+
+from pycbc.types.timeseries import TimeSeries
 
 from .config import SimulationConfig
 from .parameters import CBCParameters
-from .sampling import ParameterSampler
+from .sampling import ParameterSampler, PriorConfig
 from .waveform import WaveformGenerator
+from .windowing import WaveformWindowSelector
 from .detectors import DetectorProjector
 from .noise import NoiseModel
-from .injection import SignalInjector
+from .injection import SignalInjector, InjectionResult
 from .processing import SignalProcessor
 from .labels import LabelTransformer
-from .snr import compute_detector_optimal_snr, compute_network_snr, rescale_distance_for_target_network_snr
+from .snr import (
+    compute_network_optimal_snr,
+    decide_distance_rescaling,
+    validate_snr_rescaling,
+)
 
-from dataclasses import dataclass, replace
-from pycbc.types.timeseries import TimeSeries
-from warnings import warn
+
+@dataclass(frozen=True)
+class BuiltSignalNetwork:
+    """
+    Intermediate object containing the noiseless projected signal network
+    embedded into fixed-duration zero segments.
+    """
+
+    params: CBCParameters
+    waveform: object
+    windowed: object
+    projection: object
+    placement: object
+    signal_segment_results: dict[str, InjectionResult]
+    signal_segments: dict[str, TimeSeries]
+    detector_snrs: dict[str, float]
+    network_snr: float
 
 
 @dataclass(frozen=True)
 class DatasetSample:
+    """
+    Single generated dataset sample.
+
+    Attributes
+    ----------
+    X : np.ndarray
+        Processed detector channels with shape (n_detectors, n_samples).
+    y : np.ndarray
+        Label vector.
+    parameters : CBCParameters
+        Final physical parameters used to generate the sample. If SNR rescaling
+        was applied, this contains the rescaled distance.
+    metadata : dict
+        Generation metadata.
+    """
+
     X: np.ndarray
     y: np.ndarray
     parameters: CBCParameters
-    injection_time: float | None = None
-    network_snr: float | None = None
+    metadata: dict
+
 
 @dataclass(frozen=True)
 class DatasetBatch:
+    """
+    Batch of generated dataset samples.
+    """
+
     X: np.ndarray
-    y: np.ndarray   
+    y: np.ndarray
     parameters: list[CBCParameters]
-    injection_times: list[float | None]
-    network_snrs: list[float | None]
+    metadata: list[dict]
 
 
 class DatasetBuilder:
-
     def __init__(
         self,
         config: SimulationConfig,
         parameter_sampler: ParameterSampler,
         waveform_generator: WaveformGenerator,
+        waveform_window_selector: WaveformWindowSelector,
         detector_projector: DetectorProjector,
         noise_model: NoiseModel,
         signal_injector: SignalInjector,
@@ -48,158 +92,204 @@ class DatasetBuilder:
         detector_names: list[str] | None = None,
         rng: np.random.Generator | None = None,
     ) -> None:
-        """
-        Initialize a DatasetBuilder object.
-
-        Parameters
-        ----------
-        parameter_sampler : ParameterSampler
-            The sampler for the parameters.
-        waveform_generator : WaveformGenerator
-            The generator for the waveforms.
-        detector_projector : DetectorProjector
-            The projector for the detectors.
-        noise_model : NoiseModel
-            The model for the noise.
-        signal_injector : signal_injector
-            The engine for injecting the signals into the noise.
-        signal_processor : SignalProcessor
-            The processor for the signals.
-        label_transformer : LabelTransformer
-            The transformer for the labels.
-        detector_names : list[str]
-            The names of the detectors to use.
-        """
         if detector_names is None:
             detector_names = ["H1", "L1", "V1"]
 
-        self.rng = rng if rng is not None else np.random.default_rng()
+        if not detector_names:
+            raise ValueError("detector_names must contain at least one detector.")
+
         self.config = config
         self.parameter_sampler = parameter_sampler
         self.waveform_generator = waveform_generator
+        self.waveform_window_selector = waveform_window_selector
         self.detector_projector = detector_projector
         self.noise_model = noise_model
         self.signal_injector = signal_injector
         self.signal_processor = signal_processor
         self.label_transformer = label_transformer
         self.detector_names = detector_names
+        self.rng = rng if rng is not None else np.random.default_rng()
 
-        if not detector_names: 
-            raise ValueError("detector_names must contain at least one detector.")
+    @classmethod
+    def from_config(
+        cls,
+        config: SimulationConfig,
+        detector_names: list[str] | None = None,
+        signal_processor_kwargs: dict | None = None,
+        label_transformer_kwargs: dict | None = None,
+        rng: np.random.Generator | None = None,
+    ) -> "DatasetBuilder":
+        if detector_names is None:
+            detector_names = ["H1", "L1", "V1"]
+
+        if signal_processor_kwargs is None:
+            signal_processor_kwargs = {}
+
+        if label_transformer_kwargs is None:
+            label_transformer_kwargs = {}
+
+        rng = rng if rng is not None else np.random.default_rng()
+
+        prior_config = cls._prior_config_from_simulation_config(config)
+
+        parameter_sampler = ParameterSampler(rng=rng, prior_config=prior_config)
+        waveform_generator = WaveformGenerator(config=config)
+        waveform_window_selector = WaveformWindowSelector(config=config)
+        detector_projector = DetectorProjector(detector_names=detector_names)
+        noise_model = NoiseModel(config=config)
+        signal_injector = SignalInjector(config=config, rng=rng)
+        signal_processor = SignalProcessor(
+            config=config,
+            **signal_processor_kwargs,
+            rng=rng,
+        )
+        label_transformer = LabelTransformer(**label_transformer_kwargs)
+
+        return cls(
+            config=config,
+            parameter_sampler=parameter_sampler,
+            waveform_generator=waveform_generator,
+            waveform_window_selector=waveform_window_selector,
+            detector_projector=detector_projector,
+            noise_model=noise_model,
+            signal_injector=signal_injector,
+            signal_processor=signal_processor,
+            label_transformer=label_transformer,
+            detector_names=detector_names,
+            rng=rng,
+        )
 
     def build_sample(
         self,
         params: CBCParameters | None = None,
         standardize_labels: bool = False,
-        injection_time: float | None = None,
+        geocentric_coalescence_time: float | None = None,
+        placement_policy: str = "random_contained",
     ) -> DatasetSample:
         """
-        Build a sample of a dataset
+        Build one simulated dataset sample.
 
-        Parameters
-        ----------
-        params : CBCParameters
-            The parameters of the binary compact object
-        injection_time : float | None
-            The injection time of the signal. If None, use the default injection time.
-        standardize_labels : bool
-            Whether to standardize the labels. If True, the labels will be standardized to have a mean of 0 and a standard deviation of 1.
-        rng : np.random.Generator | None
-            The random number generator to use. If None, the default random number generator is used.
-            
-        Returns
-        -------
-        DatasetSample
-            A DatasetSample object with the content: (X, y, parameters)
-            - X: The processed signal. The shape is (n_detectors, signal_length)
-            - y: The label
-            - parameters: The parameters of the binary compact object
-            - injection_time: The injection time of the signal in the geocentric reference frame
-            - network_snr: The network SNR of the signal
+        Pipeline
+        --------
+        1. Sample or receive physical parameters.
+        2. Generate full waveform.
+        3. Select the usable waveform window.
+        4. Project onto detectors using a geocentric reference time.
+        5. Choose a common 4 s strain segment containing the projected network.
+        6. Embed projected detector signals into zero-valued 4 s segments.
+        7. Compute initial SNR.
+        8. Optionally rescale distance to match target network SNR range.
+        9. Generate noise and inject the final projected signals.
+        10. Process detector channels.
+        11. Build labels and metadata.
         """
-
-        # Sample a new set of parameters if not provided
         if params is None:
             params = self.parameter_sampler.sample_one()
 
+        if geocentric_coalescence_time is None:
+            geocentric_coalescence_time = self._sample_geocentric_coalescence_time()
 
-        projected_waveform, current_network_snr = self._generate_projected_waveforms_and_snr(params)
+        initial_network = self._build_projected_signal_network(
+            params=params,
+            geocentric_coalescence_time=geocentric_coalescence_time,
+            placement_policy=placement_policy,
+        )
 
-        # Check if the network SNR is within the target network SNR range
-        if self.config.target_network_snr_range is not None:
-            target_network_snr_min, target_network_snr_max = self.config.target_network_snr_range
-            if current_network_snr < target_network_snr_min or current_network_snr > target_network_snr_max:
-                # Rescale the distance to achieve the target network SNR
-                
-                target_network_snr = self.rng.uniform(target_network_snr_min, target_network_snr_max)
-                rescaled_distance = rescale_distance_for_target_network_snr(params.distance, current_network_snr, target_network_snr)
-
-                params = replace(params, distance=rescaled_distance)
-                projected_waveform, current_network_snr = self._generate_projected_waveforms_and_snr(params)
-
-                # Check if the network SNR is within the target network SNR range assuming certain tolerance
-                relative_snr_error = np.abs(current_network_snr - target_network_snr) / target_network_snr
-                if relative_snr_error > self.config.snr_relative_tolerance:
-                    warning = f"The network SNR is far from the target network SNR range after rescaling. Current network SNR: {current_network_snr:.2f}, Target network SNR: {target_network_snr:.2f}, Relative SNR error: {relative_snr_error:.2f}."
-                    warn(warning)
-
-       
-        injection_time = self.set_injection_time(
-            projected_waveforms=projected_waveform,
-            injection_time=injection_time,
+        snr_decision = decide_distance_rescaling(
+            current_distance=params.distance,
+            current_network_snr=initial_network.network_snr,
+            target_network_snr_range=self.config.target_network_snr_range,
             rng=self.rng,
         )
 
-        channels = []
+        if snr_decision.should_rescale:
+            params = params.with_distance(snr_decision.new_distance)
 
-        # Iterate over the detectors
+            final_network = self._build_projected_signal_network(
+                params=params,
+                geocentric_coalescence_time=geocentric_coalescence_time,
+                placement_policy=placement_policy,
+            )
+
+            try:
+                validate_snr_rescaling(
+                    final_network_snr=final_network.network_snr,
+                    target_network_snr=snr_decision.target_network_snr,
+                    relative_tolerance=self.config.snr_relative_tolerance,
+                )
+            except ValueError as exc:
+                warn(str(exc))
+
+        else:
+            final_network = initial_network
+
+        noises = self.noise_model.sample_network(
+            detector_names=self.detector_names,
+            seed=int(self.rng.integers(0, 2**32 - 1)),
+        )
+
+        noises = {
+            detector_name: self.signal_injector.set_strain_start_time(
+                strain=noise,
+                start_time=final_network.placement.segment_start_time,
+            )
+            for detector_name, noise in noises.items()
+        }
+
+        injected_results = self.signal_injector.inject_network(
+            noises=noises,
+            signals=final_network.projection.strains,
+        )
+
+        channels: list[np.ndarray] = []
+
         for detector_name in self.detector_names:
-            # Sample the noise
-            noise = self.noise_model.sample(detector_name)
-
-            # Inject the waveform into the noise
-            #detector_injection_time = injection_time + time_delays[detector_name]
-            injected_signal = self.signal_injector.inject(noise, projected_waveform[detector_name], injection_time=injection_time)
-
-            # Process the signal
-            processed_signal = self.signal_processor.process(injected_signal.strain)
-
-            # Append the processed signal to the list
+            processed_signal = self.signal_processor.process(
+                injected_results[detector_name].strain
+            )
             channels.append(np.asarray(processed_signal))
 
-        # Stack the channels and produce the labels
         X = np.stack(channels, axis=0)
-        y = self.label_transformer.transform(params, standardize=standardize_labels)
+
+        y = self.label_transformer.transform(
+            params,
+            standardize=standardize_labels,
+        )
+
+        metadata = self._build_metadata(
+            geocentric_coalescence_time=geocentric_coalescence_time,
+            initial_network=initial_network,
+            final_network=final_network,
+            injected_results=injected_results,
+            snr_decision=snr_decision,
+            placement_policy=placement_policy,
+        )
 
         return DatasetSample(
             X=X,
             y=y,
             parameters=params,
-            injection_time=injection_time,
-            network_snr=current_network_snr,
+            metadata=metadata,
         )
-    
 
     def build_dataset(
         self,
         num_samples: int,
-        #params: CBCParameters | None = None,
         standardize_labels: bool = False,
-        injection_time: float | None = None,
+        geocentric_coalescence_time: float | None = None,
+        placement_policy: str = "random_contained",
         max_attempts: int | None = None,
     ) -> DatasetBatch:
-
         if num_samples <= 0:
             raise ValueError("num_samples must be a positive integer.")
 
         if max_attempts is None:
             max_attempts = 10 * num_samples
 
-        X_list = []
-        y_list = []
-        parameters_list = []
-        injection_times = []
-        network_snrs = []
+        X_list: list[np.ndarray] = []
+        y_list: list[np.ndarray] = []
+        parameters_list: list[CBCParameters] = []
+        metadata_list: list[dict] = []
 
         n_attempts = 0
         n_failed = 0
@@ -210,15 +300,15 @@ class DatasetBuilder:
             try:
                 sample = self.build_sample(
                     standardize_labels=standardize_labels,
-                    injection_time=injection_time,
+                    geocentric_coalescence_time=geocentric_coalescence_time,
+                    placement_policy=placement_policy,
                 )
 
-            except ValueError as e:
+            except (ValueError, RuntimeError) as exc:
                 n_failed += 1
 
-                # Para no llenar la salida con 1000 errores
                 if n_failed <= 10:
-                    print(f"Skipping failed sample attempt {n_attempts}: {e}")
+                    print(f"Skipping failed sample attempt {n_attempts}: {exc}")
                 elif n_failed == 11:
                     print("Further failed sample messages will be suppressed...")
 
@@ -227,8 +317,7 @@ class DatasetBuilder:
             X_list.append(sample.X)
             y_list.append(sample.y)
             parameters_list.append(sample.parameters)
-            injection_times.append(sample.injection_time)
-            network_snrs.append(sample.network_snr)
+            metadata_list.append(sample.metadata)
 
             n_done = len(X_list)
 
@@ -243,7 +332,7 @@ class DatasetBuilder:
             raise RuntimeError(
                 f"Could only build {len(X_list)} valid samples out of {num_samples} "
                 f"after {n_attempts} attempts. Failed samples: {n_failed}. "
-                f"Your simulation config is probably rejecting too many samples."
+                "Your simulation config is probably rejecting too many samples."
             )
 
         X = np.stack(X_list, axis=0)
@@ -258,165 +347,221 @@ class DatasetBuilder:
             X=X,
             y=y,
             parameters=parameters_list,
-            injection_times=injection_times,
-            network_snrs=network_snrs,
+            metadata=metadata_list,
         )
-    
 
-    @classmethod
-    def from_config(
-        cls,
-        config: SimulationConfig,
-        detector_names: list[str] | None = None,
-        signal_processor_kwargs: dict | None = None, # Dictionary containing the kwargs for the signal processor.
-        label_transformer_kwargs: dict | None = None,
-        rng: np.random.Generator | None = None,
-    ):
-        """
-        Create a new instance of the DatasetBuilder from a SimulationConfig object.
-
-        Parameters
-        ----------
-        config : SimulationConfig
-            The simulation configuration object.
-        detector_names : list[str] | None
-            The list of detector names to use. If None, use all three detectors: H1, L1, and V1.
-        signal_processor_kwargs : dict | None
-            The dictionary containing the kwargs for the signal processor. If None, use the default kwargs.
-        label_transformer_kwargs : dict | None
-            The dictionary containing the kwargs for the label transformer. If None, use the default kwargs.
-        rng : np.random.Generator | None
-            The random number generator to use. If None, use the default random number generator.
-
-        Returns
-        -------
-        DatasetBuilder
-            The new instance of the DatasetBuilder.
-        """
-
-        if detector_names is None:
-            detector_names = ["H1", "L1", "V1"]
-
-        if signal_processor_kwargs is None:
-            signal_processor_kwargs = {}
-
-        if label_transformer_kwargs is None:
-            label_transformer_kwargs = {}
-
-        rng = rng if rng is not None else np.random.default_rng()
-
-        parameter_sampler = ParameterSampler(rng=rng)
-        waveform_generator = WaveformGenerator(config=config)
-        detector_projector = DetectorProjector(detector_names=detector_names)
-        noise_model = NoiseModel(config=config)
-        signal_injector = SignalInjector(config=config, rng=rng)
-        signal_processor = SignalProcessor(config=config, **signal_processor_kwargs, rng=rng)
-        label_transformer = LabelTransformer(**label_transformer_kwargs)
-
-        return cls(
-            config=config,
-            parameter_sampler=parameter_sampler,
-            waveform_generator=waveform_generator,
-            detector_projector=detector_projector,
-            noise_model=noise_model,
-            signal_injector=signal_injector,
-            signal_processor=signal_processor,
-            label_transformer=label_transformer,
-            detector_names=detector_names,
-        )
-    
-
-    def set_injection_time(
+    def _build_projected_signal_network(
         self,
-        projected_waveforms: dict[str, TimeSeries],
-        injection_time: float | None = None,
-        rng: np.random.Generator | None = None,
-        ) -> float:
+        params: CBCParameters,
+        geocentric_coalescence_time: float,
+        placement_policy: str,
+    ) -> BuiltSignalNetwork:
         """
-        Choose a valid geocentric injection time for a set of projected detector waveforms.
+        Build the noiseless projected detector network and compute its SNR.
 
-        The returned injection_time is the geocentric reference time of the event
-        within the noise segment. It is chosen on the discrete sample grid so that,
-        after accounting for each waveform's detector-dependent start/end times,
-        every projected waveform fits fully inside the strain segment.
+        The projected detector signals are embedded into fixed-duration
+        zero-valued segments using the same placement policy later used for
+        actual noise injection.
         """
-        if rng is None:
-            rng = np.random.default_rng()
+        waveform = self.waveform_generator.generate(params)
 
-        delta_t = self.config.delta_t
-        strain_start = 0.0
-        strain_end = self.config.duration
+        windowed = self.waveform_window_selector.select(
+            waveform.h_plus,
+            waveform.h_cross,
+        )
 
-        lower_bounds = []
-        upper_bounds = []
+        projection = self.detector_projector.project(
+            h_plus=windowed.h_plus,
+            h_cross=windowed.h_cross,
+            parameters=params,
+            geocentric_coalescence_time=geocentric_coalescence_time,
+        )
 
-        for detector_name, waveform in projected_waveforms.items():
-            signal_start = float(waveform.start_time)
-            signal_end = float(waveform.end_time)
+        self._validate_detector_set(projection.strains)
 
-            # Continuous-time valid interval for the geocentric reference time
-            lower_bounds.append(strain_start - signal_start)
-            upper_bounds.append(strain_end - signal_end)
+        placement = self.signal_injector.choose_segment_placement_containing_network(
+            signals=projection.strains,
+            placement_policy=placement_policy,
+        )
 
-        global_min = max(lower_bounds)
-        global_max = min(upper_bounds)
+        zero_segments = {
+            detector_name: self.signal_injector.build_zero_strain(
+                start_time=placement.segment_start_time,
+            )
+            for detector_name in projection.strains
+        }
 
-        if global_min > global_max:
-            raise ValueError(
-                f"No valid geocentric injection time exists. "
-                f"global_min={global_min:.6f}, global_max={global_max:.6f}"
+        signal_segment_results = self.signal_injector.inject_network(
+            noises=zero_segments,
+            signals=projection.strains,
+        )
+
+        signal_segments = {
+            detector_name: result.strain
+            for detector_name, result in signal_segment_results.items()
+        }
+
+        psds = {
+            detector_name: self.noise_model.get_psd(detector_name)
+            for detector_name in signal_segments
+        }
+
+        detector_snrs, network_snr = compute_network_optimal_snr(
+            signal_segments=signal_segments,
+            psds=psds,
+            config=self.config,
+        )
+
+        return BuiltSignalNetwork(
+            params=params,
+            waveform=waveform,
+            windowed=windowed,
+            projection=projection,
+            placement=placement,
+            signal_segment_results=signal_segment_results,
+            signal_segments=signal_segments,
+            detector_snrs=detector_snrs,
+            network_snr=network_snr,
+        )
+
+    def _build_metadata(
+        self,
+        geocentric_coalescence_time: float,
+        initial_network: BuiltSignalNetwork,
+        final_network: BuiltSignalNetwork,
+        injected_results: dict[str, InjectionResult],
+        snr_decision,
+        placement_policy: str,
+    ) -> dict:
+        return {
+            "simulation": self._simulation_metadata(),
+            "geocentric_coalescence_time": geocentric_coalescence_time,
+            "detectors": list(self.detector_names),
+            "placement_policy": placement_policy,
+            "waveform": self._waveform_metadata(final_network),
+            "windowing": self._safe_dataclass_to_dict(final_network.windowed.metadata),
+            "projection": self._safe_dataclass_to_dict(final_network.projection.metadata),
+            "placement": self._safe_dataclass_to_dict(final_network.placement),
+            "snr": {
+                "initial_detector_snrs": dict(initial_network.detector_snrs),
+                "initial_network_snr": float(initial_network.network_snr),
+                "final_detector_snrs": dict(final_network.detector_snrs),
+                "final_network_snr": float(final_network.network_snr),
+                "snr_rescaled": bool(snr_decision.should_rescale),
+                "snr_rescaling_reason": snr_decision.reason,
+                "target_network_snr": float(snr_decision.target_network_snr),
+                "distance_before_rescale": float(snr_decision.old_distance),
+                "distance_after_rescale": float(snr_decision.new_distance),
+            },
+            "injection": self._injection_metadata(injected_results),
+            "noise": self.noise_model.metadata(),
+        }
+
+    def _waveform_metadata(self, network: BuiltSignalNetwork) -> dict:
+        metadata = {}
+
+        if hasattr(network.waveform, "metadata"):
+            metadata["generated"] = self._safe_dataclass_to_dict(
+                network.waveform.metadata
             )
 
-        # Use the central 50% of the valid interval as a safety margin
-        safe_min = global_min + 0.25 * (global_max - global_min)
-        safe_max = global_min + 0.75 * (global_max - global_min)
+        metadata["params_distance"] = float(network.params.distance)
 
-        # Convert the safe continuous interval to valid integer sample indices
-        min_index = int(np.ceil(safe_min / delta_t))
-        max_index = int(np.floor(safe_max / delta_t))
+        return metadata
 
-        if max_index < min_index:
+    def _injection_metadata(
+        self,
+        injected_results: dict[str, InjectionResult],
+    ) -> dict:
+        output = {}
+
+        for detector_name, result in injected_results.items():
+            output[detector_name] = {
+                "signal_start_time": float(result.signal_start_time),
+                "signal_end_time": float(result.signal_end_time),
+                "segment_start_time": float(result.segment_start_time),
+                "segment_end_time": float(result.segment_end_time),
+                "signal_start_index": int(result.signal_start_index),
+                "signal_end_index": int(result.signal_end_index),
+                "n_signal_samples": int(result.n_signal_samples),
+                "n_injected_samples": int(result.n_injected_samples),
+            }
+
+        return output
+
+    def _simulation_metadata(self) -> dict:
+        output = {
+            "sampling_frequency": float(self.config.sampling_frequency),
+            "duration": float(self.config.duration),
+            "delta_t": float(self.config.delta_t),
+            "length": int(self.config.length),
+            "delta_f": float(self.config.delta_f),
+            "flength": int(self.config.flength),
+            "low_frequency_cutoff": float(self.config.low_frequency_cutoff),
+            "waveform_approximant": self.config.waveform_approximant,
+            "target_network_snr_range": self.config.target_network_snr_range,
+            "snr_relative_tolerance": float(self.config.snr_relative_tolerance),
+            "truncation_policy": self.config.truncation_policy,
+            "required_final_duration": float(self.config.required_final_duration),
+        }
+
+        for optional_attr in [
+            "simulation_regime",
+            "waveform_family",
+            "event_time_reference",
+            "snr_on_truncated_signal",
+        ]:
+            if hasattr(self.config, optional_attr):
+                value = getattr(self.config, optional_attr)
+
+                if isinstance(value, (float, int, str, bool, tuple, type(None))):
+                    output[optional_attr] = value
+
+        return output
+
+    def _validate_detector_set(self, signals: dict[str, TimeSeries]) -> None:
+        signal_detectors = set(signals.keys())
+        expected_detectors = set(self.detector_names)
+
+        if signal_detectors != expected_detectors:
             raise ValueError(
-                "Safe injection interval is empty after discretization. "
-                f"safe_min={safe_min:.6f}, safe_max={safe_max:.6f}, "
-                f"min_index={min_index}, max_index={max_index}"
+                "Projected signal detector set does not match builder detector_names. "
+                f"signals={signal_detectors}, expected={expected_detectors}"
             )
 
-        if injection_time is None:
-            injection_index = rng.integers(min_index, max_index + 1)
-            injection_time = injection_index * delta_t
-        else:
-            # Quantize user-provided time to the sample grid
-            injection_index = int(round(injection_time / delta_t))
-            injection_time = injection_index * delta_t
-
-            if not (min_index <= injection_index <= max_index):
-                raise ValueError(
-                    f"injection_time={injection_time:.6f} s (index={injection_index}) "
-                    f"is outside the valid discrete interval "
-                    f"[{min_index * delta_t:.6f}, {max_index * delta_t:.6f}] s "
-                    f"(indices [{min_index}, {max_index}])."
-                )
-
-        return injection_time
- 
-
-
-    def _generate_projected_waveforms_and_snr(self, params: CBCParameters) -> tuple[dict[str, TimeSeries], float]:
+    def _sample_geocentric_coalescence_time(self) -> float:
         """
-        Compute the projected waveforms and the network SNR for a given set of parameters.
+        Return a geocentric coalescence time.
+
+        For now this is fixed for reproducibility. Later this can be sampled
+        over a GPS-time interval to vary antenna patterns with Earth's rotation.
         """
-        
-        # Generate the waveform
-        hp, hc = self.waveform_generator.generate(params)
+        return 1126259462.0
 
-        # Project the waveform onto the detector
-        projected_waveform = self.detector_projector.project(hp, hc, params)
+    @staticmethod
+    def _safe_dataclass_to_dict(obj) -> dict:
+        """
+        Convert a metadata dataclass to dict.
 
-        network_snr = []
-        for name, waveform in projected_waveform.items():
-            detector_noise = self.noise_model.psds[name]
-            optimal_snr =compute_detector_optimal_snr(waveform, detector_noise, self.config)
-            network_snr.append(optimal_snr)
+        This should only be used for lightweight metadata dataclasses, not for
+        objects containing TimeSeries arrays.
+        """
+        if hasattr(obj, "__dataclass_fields__"):
+            return asdict(obj)
 
-        return projected_waveform, compute_network_snr(np.array(network_snr))
+        if isinstance(obj, dict):
+            return dict(obj)
+
+        raise TypeError(f"Object of type {type(obj)} cannot be converted to dict.")
+    
+    @staticmethod
+    def _prior_config_from_simulation_config(config: SimulationConfig) -> PriorConfig:
+        regime = getattr(config, "simulation_regime", "BBH")
+
+        if regime == "BBH":
+            return PriorConfig.bbh()
+
+        if regime == "BNS":
+            return PriorConfig.bns()
+
+        raise ValueError(f"Unsupported simulation_regime: {regime}")

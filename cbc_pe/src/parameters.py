@@ -30,7 +30,7 @@ class CBCParameters:
     mass_1: float # in Msun
     mass_2: float # in Msun
     distance: float # in Mpc
-    inclination: float # in [0, pi], angle between line of sight and the orbital plane of the binary system
+    inclination: float # angle between line of sight and orbital angular momentum, in [0, pi]
     ra: float # in [0, 2*pi], like longitude
     dec: float # in [-pi/2, pi/2], similar to latitude
     spin_1z: float # in [-1, 1]
@@ -55,6 +55,11 @@ class CBCParameters:
             object.__setattr__(self, "mass_2", m1_old)
             object.__setattr__(self, "spin_1z", s2_old)
             object.__setattr__(self, "spin_2z", s1_old)
+
+        # To fix cases where floating point introduces a 2*pi + eps
+        object.__setattr__(self, "polarization_angle", self.polarization_angle % (2 * np.pi))
+        object.__setattr__(self, "ra", self.ra % (2 * np.pi))
+
 
         ## Validation##
         if self.mass_1 <= 0 or self.mass_2 <= 0:
@@ -85,3 +90,20 @@ class CBCParameters:
     @property
     def chi_eff(self) -> float:
         return (self.mass_1 * self.spin_1z + self.mass_2 * self.spin_2z) / self.total_mass
+    
+    def with_distance(self, distance: float) -> "CBCParameters":
+        """
+        Return a new parameter object with the same intrinsic/extrinsic
+        parameters but a different luminosity distance.
+        """
+        return CBCParameters(
+            mass_1=self.mass_1,
+            mass_2=self.mass_2,
+            distance=distance,
+            inclination=self.inclination,
+            ra=self.ra,
+            dec=self.dec,
+            spin_1z=self.spin_1z,
+            spin_2z=self.spin_2z,
+            polarization_angle=self.polarization_angle,
+        )
