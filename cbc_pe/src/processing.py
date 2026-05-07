@@ -1,111 +1,238 @@
 import numpy as np
-from .config import SimulationConfig
+
 from pycbc.types.timeseries import TimeSeries
 
+from .config import SimulationConfig
 
 
 class SignalProcessor:
     def __init__(
-            self, 
-            config: SimulationConfig, 
-            apply_whitening: bool = False, 
-            apply_lowpass: bool = False, 
-            apply_highpass: bool = False, 
-            apply_standardization: bool = False, 
-            preserve_length: bool = True, # Not implemented yet the False case
-            lowpass_frequency: float = 350.0, 
-            highpass_frequency: float = 30.0, 
-            rng = None,
-            ):
-        
-        if rng is None:
-            rng = np.random.default_rng()
-
+        self,
+        config: SimulationConfig,
+        apply_whitening: bool = False,
+        apply_lowpass: bool = False,
+        apply_highpass: bool = False,
+        apply_standardization: bool = False,
+        preserve_length: bool = True,
+        lowpass_frequency: float = 350.0,
+        highpass_frequency: float = 30.0,
+        fir_order: int = 512,
+        fir_beta: float = 0.5,
+        whitening_max_filter_fraction: float = 0.25,
+        rng: np.random.Generator | None = None,
+    ) -> None:
         self.config = config
         self.apply_whitening = apply_whitening
         self.apply_lowpass = apply_lowpass
         self.apply_highpass = apply_highpass
         self.apply_standardization = apply_standardization
         self.preserve_length = preserve_length
-        self.lowpass_frequency = lowpass_frequency 
-        self.highpass_frequency = highpass_frequency 
 
+        self.lowpass_frequency = lowpass_frequency
+        self.highpass_frequency = highpass_frequency
+
+        self.fir_order = fir_order
+        self.fir_beta = fir_beta
+        self.whitening_max_filter_fraction = whitening_max_filter_fraction
+
+        self.rng = rng if rng is not None else np.random.default_rng()
+
+        self._validate_config()
 
     def process(self, strain: TimeSeries) -> TimeSeries:
         """
-        Process the given strain using the configuration set in the constructor.
+        Process one detector strain segment.
 
-        The processing includes:
-            1. Whitening the strain to remove noise and improve SNR.
-            2. Apply a low-pass filter to remove frequencies higher than lowpass_frequency.
-            3. Apply a high-pass filter to remove frequencies lower than highpass_frequency.
-            4. Standardize the strain to zero mean and unit variance.
-            5. Restore the original length of the strain.
-        
-        Parameters
-        ----------
-        strain : TimeSeries
-            The strain to be processed.
-        
-        Returns
-        -------
-        TimeSeries
-            The processed strain.
+        The input is expected to be a fixed-duration TimeSeries with:
+            len(strain) == config.length
+            strain.delta_t == config.delta_t
+
+        If preserve_length=True, the output is padded back to the original
+        length after operations that remove corrupted edge samples.
         """
-        processing_strain = TimeSeries(strain.copy())
+        self._validate_input(strain)
+
+        processing_strain = strain.copy()
+
         original_length = len(processing_strain)
-        original_start_time = processing_strain.start_time
+        original_start_time = float(processing_strain.start_time)
 
         if self.apply_whitening:
-            # Whiten the strain to remove noise and improve SNR
-            # The whitening process is done using the PSD of the strain and a segment of the same duration, with a maximum filter duration of 1/3 of the segment duration.
-            # The PSD is estimated using Welch's method, 
             processing_strain = processing_strain.whiten(
-                segment_duration=processing_strain.get_duration(), # Duracion para estimar el PSD
-                max_filter_duration=processing_strain.get_duration() / 4, # Larger filter better resolution in frequency but more corrupted edges, if shorter less damage in edges but worse resolution/stability in the filter.
-                trunc_method='hann', # No se muy bien que es esto y que poner
+                segment_duration=processing_strain.get_duration(),
+                max_filter_duration=(
+                    processing_strain.get_duration()
+                    * self.whitening_max_filter_fraction
+                ),
+                trunc_method="hann",
                 remove_corrupted=True,
                 low_frequency_cutoff=self.highpass_frequency,
-                return_psd=False
+                return_psd=False,
             )
-              
+
         if self.apply_lowpass:
-            # Apply a low-pass filter to remove frequencies higher than lowpass_frequency
-            processing_strain = processing_strain.lowpass_fir(self.lowpass_frequency, order=512, beta=0.5, remove_corrupted=True) # Remove frequencies higher than lowpass_frequency, legacy uses order=8 and beta=5.0, I suggest order=512 and beta=0.5 instead. But we uses the legacy choice to comparative purposes.
+            processing_strain = processing_strain.lowpass_fir(
+                self.lowpass_frequency,
+                order=self.fir_order,
+                beta=self.fir_beta,
+                remove_corrupted=True,
+            )
+
         if self.apply_highpass:
-            # Apply a high-pass filter to remove frequencies lower than highpass_frequency
-            processing_strain = processing_strain.highpass_fir(self.highpass_frequency, order=512, beta=0.5, remove_corrupted=True) # Remove frequencies lower than highpass_frequency
-    
-        if self.apply_standardization: # Standardization changes the absolute scale of the signal
-            # Standardization is done by subtracting the mean and dividing by the standard deviation
-            # The mean and standard deviation are calculated using the entire signal
+            processing_strain = processing_strain.highpass_fir(
+                self.highpass_frequency,
+                order=self.fir_order,
+                beta=self.fir_beta,
+                remove_corrupted=True,
+            )
 
-            delta_t = processing_strain.delta_t
-            epoch = processing_strain.start_time
-
-            processing_array = np.asarray(processing_strain)
-            mean = np.mean(processing_array)
-            std_dev = np.std(processing_array)
-            if std_dev == 0:
-                processing_array = np.zeros_like(processing_array) # or zeros, not sure yet
-            else:
-                processing_array = (processing_array - mean) / std_dev
-            processing_strain = TimeSeries(processing_array,
-                                           delta_t=delta_t,
-                                           epoch=epoch)
+        if self.apply_standardization:
+            processing_strain = self._standardize(processing_strain)
 
         if self.preserve_length:
-            # Preserve the length of the original signal by zero-padding
-            new_length = len(processing_strain) 
-            diff_length = original_length - new_length
-            if diff_length < 0:
-                raise ValueError("Processed strain is longer than the original strain, cannot preserve length by zero-padding.")
-            left_pad = diff_length // 2
-            right_pad = diff_length - left_pad 
+            processing_strain = self._restore_length(
+                processing_strain=processing_strain,
+                original_length=original_length,
+                original_start_time=original_start_time,
+            )
 
-            processing_strain.prepend_zeros(left_pad)
-            processing_strain.append_zeros(right_pad)
-            processing_strain.start_time = original_start_time #We set the start time to the original start time, to align it with the duration of the original signal
-            
+        self._validate_output(processing_strain)
 
         return processing_strain
+
+    def metadata(self) -> dict:
+        return {
+            "apply_whitening": self.apply_whitening,
+            "apply_lowpass": self.apply_lowpass,
+            "apply_highpass": self.apply_highpass,
+            "apply_standardization": self.apply_standardization,
+            "preserve_length": self.preserve_length,
+            "lowpass_frequency": self.lowpass_frequency,
+            "highpass_frequency": self.highpass_frequency,
+            "fir_order": self.fir_order,
+            "fir_beta": self.fir_beta,
+            "whitening_max_filter_fraction": self.whitening_max_filter_fraction,
+        }
+
+    def _standardize(self, strain: TimeSeries) -> TimeSeries:
+        delta_t = strain.delta_t
+        epoch = strain.start_time
+
+        array = np.asarray(strain)
+
+        mean = float(np.mean(array))
+        std = float(np.std(array))
+
+        if not np.isfinite(mean) or not np.isfinite(std):
+            raise ValueError("Cannot standardize strain with non-finite mean/std.")
+
+        if std == 0.0:
+            standardized = np.zeros_like(array)
+        else:
+            standardized = (array - mean) / std
+
+        return TimeSeries(
+            initial_array=standardized,
+            delta_t=delta_t,
+            epoch=epoch,
+        )
+
+    def _restore_length(
+        self,
+        processing_strain: TimeSeries,
+        original_length: int,
+        original_start_time: float,
+    ) -> TimeSeries:
+        new_length = len(processing_strain)
+        diff_length = original_length - new_length
+
+        if diff_length < 0:
+            raise ValueError(
+                "Processed strain is longer than the original strain. "
+                f"processed_length={new_length}, original_length={original_length}."
+            )
+
+        if diff_length == 0:
+            processing_strain.start_time = original_start_time
+            return processing_strain
+
+        left_pad = diff_length // 2
+        right_pad = diff_length - left_pad
+
+        processing_strain.prepend_zeros(left_pad)
+        processing_strain.append_zeros(right_pad)
+
+        processing_strain.start_time = original_start_time
+
+        return processing_strain
+
+    def _validate_config(self) -> None:
+        if self.lowpass_frequency <= 0:
+            raise ValueError("lowpass_frequency must be positive.")
+
+        if self.highpass_frequency <= 0:
+            raise ValueError("highpass_frequency must be positive.")
+
+        if self.highpass_frequency >= self.lowpass_frequency:
+            raise ValueError(
+                "highpass_frequency must be smaller than lowpass_frequency."
+            )
+
+        nyquist = 0.5 * self.config.sampling_frequency
+
+        if self.lowpass_frequency >= nyquist:
+            raise ValueError(
+                "lowpass_frequency must be smaller than Nyquist frequency. "
+                f"lowpass_frequency={self.lowpass_frequency}, nyquist={nyquist}."
+            )
+
+        if self.fir_order <= 0:
+            raise ValueError("fir_order must be positive.")
+
+        if self.fir_beta <= 0:
+            raise ValueError("fir_beta must be positive.")
+
+        if not (0.0 < self.whitening_max_filter_fraction < 1.0):
+            raise ValueError(
+                "whitening_max_filter_fraction must be in (0, 1)."
+            )
+
+        if not self.preserve_length:
+            raise NotImplementedError(
+                "preserve_length=False is not supported yet."
+            )
+
+    def _validate_input(self, strain: TimeSeries) -> None:
+        if not isinstance(strain, TimeSeries):
+            raise TypeError("strain must be a TimeSeries.")
+
+        if len(strain) != self.config.length:
+            raise ValueError(
+                f"Input strain length mismatch: got {len(strain)}, "
+                f"expected {self.config.length}."
+            )
+
+        if strain.delta_t != self.config.delta_t:
+            raise ValueError(
+                f"Input strain delta_t mismatch: got {strain.delta_t}, "
+                f"expected {self.config.delta_t}."
+            )
+
+        if not np.all(np.isfinite(strain.numpy())):
+            raise ValueError("Input strain contains NaN or Inf.")
+
+    def _validate_output(self, strain: TimeSeries) -> None:
+        if len(strain) != self.config.length:
+            raise ValueError(
+                f"Output strain length mismatch: got {len(strain)}, "
+                f"expected {self.config.length}."
+            )
+
+        if strain.delta_t != self.config.delta_t:
+            raise ValueError(
+                f"Output strain delta_t mismatch: got {strain.delta_t}, "
+                f"expected {self.config.delta_t}."
+            )
+
+        if not np.all(np.isfinite(strain.numpy())):
+            raise ValueError("Output strain contains NaN or Inf.")

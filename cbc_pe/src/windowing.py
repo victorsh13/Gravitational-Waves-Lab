@@ -1,71 +1,97 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Literal
 
+import numpy as np
 from pycbc.types import TimeSeries
 
 from .config import SimulationConfig
 
 
 @dataclass(frozen=True)
-class WindowMetadata:
+class NetworkWindowMetadata:
     """
-    Metadata describing how a waveform was selected for a fixed-duration segment.
+    Metadata describing how a projected detector network was selected for a
+    fixed-duration training/inference segment.
 
-    Times are expressed in seconds relative to the waveform time coordinates.
+    All times are expressed in the absolute time coordinates of the projected
+    detector TimeSeries objects.
     """
 
     is_truncated: bool
     truncation_policy: str
 
-    full_duration: float
-    used_duration: float
+    detector_names: list[str]
 
-    full_n_samples: int
-    used_n_samples: int
+    full_network_start_time: float
+    full_network_end_time: float
+    full_network_duration: float
 
-    full_start_time: float
-    full_end_time: float
-
-    used_start_time: float
-    used_end_time: float
+    used_window_start_time: float
+    used_window_end_time: float
+    used_window_duration: float
 
     segment_duration: float
     required_final_duration: float
     required_available_final_duration: float
 
-    seconds_before_waveform_end_in_window: float
-    fraction_duration_used: float
+    seconds_before_network_end_in_window: float
+    fraction_network_duration_used: float
+
+    full_start_times: dict[str, float]
+    full_end_times: dict[str, float]
+    full_n_samples: dict[str, int]
+
+    used_start_times: dict[str, float]
+    used_end_times: dict[str, float]
+    used_n_samples: dict[str, int]
 
 
 @dataclass(frozen=True)
-class WindowedWaveform:
-    h_plus: TimeSeries
-    h_cross: TimeSeries
-    metadata: WindowMetadata
-
-
-class WaveformWindowSelector:
+class WindowedProjectedNetwork:
     """
-    Selects a fixed-duration window from a generated waveform.
+    Windowed projected detector strains.
 
-    The selector does not modify amplitudes, does not inject into noise, and does
-    not compute SNR. It only chooses which part of the waveform is retained.
+    The strains remain shorter than or equal to config.duration. They are not
+    padded to config.length here. Padding/placement into a fixed 4 s segment is
+    handled later by injection.py.
+    """
+
+    strains: dict[str, TimeSeries]
+    metadata: NetworkWindowMetadata
+
+
+class ProjectedNetworkWindowSelector:
+    """
+    Select a fixed-duration time window from a projected detector network.
+
+    This class operates after detector projection. That is deliberate:
+    detector projection can introduce physical time delays and small differences
+    in start time / length between detectors. Therefore the robust place to
+    decide the common training window is after projection, not before.
+
+    It does not compute SNR, does not inject noise, and does not process the
+    strain. It only chooses which part of the projected signal network is kept.
     """
 
     def __init__(self, config: SimulationConfig):
         self.config = config
 
-    def select(self, h_plus: TimeSeries, h_cross: TimeSeries) -> WindowedWaveform:
-        self._validate_input_pair(h_plus, h_cross)
+    def select(
+        self,
+        projected_strains: dict[str, TimeSeries],
+    ) -> WindowedProjectedNetwork:
+        self._validate_projected_strains(projected_strains)
 
         if self.config.truncation_policy == "none":
-            return self._select_none(h_plus, h_cross)
+            return self._select_none(projected_strains)
 
         if self.config.truncation_policy in {
             "keep_full_if_possible",
             "keep_last_segment",
         }:
-            return self._select_keep_last_segment(h_plus, h_cross)
+            return self._select_keep_last_network_window(projected_strains)
 
         raise ValueError(
             f"Unknown truncation_policy: {self.config.truncation_policy}"
@@ -73,160 +99,279 @@ class WaveformWindowSelector:
 
     def _select_none(
         self,
-        h_plus: TimeSeries,
-        h_cross: TimeSeries,
-    ) -> WindowedWaveform:
-        full_duration = self._duration(h_plus)
+        projected_strains: dict[str, TimeSeries],
+    ) -> WindowedProjectedNetwork:
+        network_start, network_end = self._network_time_bounds(projected_strains)
+        network_duration = network_end - network_start
 
-        if full_duration > self.config.duration:
+        if network_duration > self.config.duration:
             raise ValueError(
-                "Waveform is longer than the configured segment duration, "
-                "but truncation_policy='none'. "
-                f"waveform_duration={full_duration}, "
-                f"segment_duration={self.config.duration}"
+                "Projected network signal is longer than the configured "
+                "segment duration, but truncation_policy='none'. "
+                f"network_duration={network_duration}, "
+                f"segment_duration={self.config.duration}."
             )
 
         return self._build_result(
-            h_plus=h_plus,
-            h_cross=h_cross,
-            full_h_plus=h_plus,
+            full_projected_strains=projected_strains,
+            used_projected_strains=projected_strains,
             is_truncated=False,
+            used_window_start_time=network_start,
+            used_window_end_time=network_end,
         )
 
-    def _select_keep_last_segment(
+    def _select_keep_last_network_window(
         self,
-        h_plus: TimeSeries,
-        h_cross: TimeSeries,
-    ) -> WindowedWaveform:
-        full_duration = self._duration(h_plus)
+        projected_strains: dict[str, TimeSeries],
+    ) -> WindowedProjectedNetwork:
+        network_start, network_end = self._network_time_bounds(projected_strains)
+        network_duration = network_end - network_start
 
-        if full_duration <= self.config.duration:
+        if network_duration <= self.config.duration:
             return self._build_result(
-                h_plus=h_plus,
-                h_cross=h_cross,
-                full_h_plus=h_plus,
+                full_projected_strains=projected_strains,
+                used_projected_strains=projected_strains,
                 is_truncated=False,
+                used_window_start_time=network_start,
+                used_window_end_time=network_end,
             )
 
-        n_keep = self.config.length
+        used_window_end_time = network_end
+        used_window_start_time = network_end - self.config.duration
 
-        if n_keep <= 0:
-            raise ValueError("config.length must be positive.")
-
-        if n_keep > len(h_plus):
-            raise ValueError(
-                "Internal error: requested more samples than waveform length."
+        used_projected_strains = {
+            detector_name: self._slice_timeseries_by_time(
+                series=strain,
+                window_start_time=used_window_start_time,
+                window_end_time=used_window_end_time,
             )
-
-        start_index = len(h_plus) - n_keep
-        end_index = len(h_plus)
-
-        h_plus_window = h_plus[start_index:end_index]
-        h_cross_window = h_cross[start_index:end_index]
-
-        if len(h_plus_window) != self.config.length:
-            raise ValueError(
-                f"Window length mismatch: got {len(h_plus_window)}, "
-                f"expected {self.config.length}."
-    )
-
-        # PyCBC slicing should already update start_time correctly,
-        # but we enforce it explicitly for clarity and robustness.
-        new_start = h_plus.start_time + start_index * h_plus.delta_t
-        h_plus_window.start_time = new_start
-        h_cross_window.start_time = new_start
+            for detector_name, strain in projected_strains.items()
+        }
 
         return self._build_result(
-            h_plus=h_plus_window,
-            h_cross=h_cross_window,
-            full_h_plus=h_plus,
+            full_projected_strains=projected_strains,
+            used_projected_strains=used_projected_strains,
             is_truncated=True,
+            used_window_start_time=used_window_start_time,
+            used_window_end_time=used_window_end_time,
         )
 
     def _build_result(
         self,
-        h_plus: TimeSeries,
-        h_cross: TimeSeries,
-        full_h_plus: TimeSeries,
+        full_projected_strains: dict[str, TimeSeries],
+        used_projected_strains: dict[str, TimeSeries],
         is_truncated: bool,
-    ) -> WindowedWaveform:
-        self._validate_input_pair(h_plus, h_cross)
+        used_window_start_time: float,
+        used_window_end_time: float,
+    ) -> WindowedProjectedNetwork:
+        self._validate_projected_strains(full_projected_strains)
+        self._validate_projected_strains(used_projected_strains)
 
-        full_duration = self._duration(full_h_plus)
-        used_duration = self._duration(h_plus)
+        if set(full_projected_strains.keys()) != set(used_projected_strains.keys()):
+            raise ValueError(
+                "Full and used projected strain detector sets must match."
+            )
 
-        full_start_time = float(full_h_plus.start_time)
-        full_end_time = self._end_time(full_h_plus)
+        full_network_start_time, full_network_end_time = self._network_time_bounds(
+            full_projected_strains
+        )
+        full_network_duration = full_network_end_time - full_network_start_time
 
-        used_start_time = float(h_plus.start_time)
-        used_end_time = self._end_time(h_plus)
-
-        seconds_before_waveform_end_in_window = full_end_time - used_start_time
+        used_network_start_time, used_network_end_time = self._network_time_bounds(
+            used_projected_strains
+        )
+        used_network_duration = used_window_end_time - used_window_start_time
 
         required_available_final_duration = min(
             self.config.required_final_duration,
-            full_duration,
+            full_network_duration,
         )
 
-        tolerance = 1e-9 # avoid rejection because of floating point
+        seconds_before_network_end_in_window = (
+            full_network_end_time - used_window_start_time
+        )
 
-        if seconds_before_waveform_end_in_window + tolerance < required_available_final_duration:
+        tolerance = self.config.delta_t
+
+        if (
+            seconds_before_network_end_in_window + tolerance
+            < required_available_final_duration
+        ):
             raise ValueError(
-                "Selected window does not contain the required final duration. "
-                f"seconds_before_waveform_end_in_window="
-                f"{seconds_before_waveform_end_in_window}, "
-                f"required_available_final_duration={required_available_final_duration}, "
+                "Selected network window does not contain the required final "
+                "duration. "
+                f"seconds_before_network_end_in_window="
+                f"{seconds_before_network_end_in_window}, "
+                f"required_available_final_duration="
+                f"{required_available_final_duration}, "
                 f"configured_required_final_duration="
-                f"{self.config.required_final_duration}"
+                f"{self.config.required_final_duration}."
             )
 
-        metadata = WindowMetadata(
+        if used_network_duration > self.config.duration + tolerance:
+            raise ValueError(
+                "Used network window is longer than config.duration. "
+                f"used_network_duration={used_network_duration}, "
+                f"segment_duration={self.config.duration}."
+            )
+
+        full_start_times = {
+            detector_name: float(strain.start_time)
+            for detector_name, strain in full_projected_strains.items()
+        }
+
+        full_end_times = {
+            detector_name: self._end_time(strain)
+            for detector_name, strain in full_projected_strains.items()
+        }
+
+        full_n_samples = {
+            detector_name: len(strain)
+            for detector_name, strain in full_projected_strains.items()
+        }
+
+        used_start_times = {
+            detector_name: float(strain.start_time)
+            for detector_name, strain in used_projected_strains.items()
+        }
+
+        used_end_times = {
+            detector_name: self._end_time(strain)
+            for detector_name, strain in used_projected_strains.items()
+        }
+
+        used_n_samples = {
+            detector_name: len(strain)
+            for detector_name, strain in used_projected_strains.items()
+        }
+
+        metadata = NetworkWindowMetadata(
             is_truncated=is_truncated,
             truncation_policy=self.config.truncation_policy,
-            full_duration=full_duration,
-            used_duration=used_duration,
-            full_n_samples=len(full_h_plus),
-            used_n_samples=len(h_plus),
-            full_start_time=full_start_time,
-            full_end_time=full_end_time,
-            used_start_time=used_start_time,
-            used_end_time=used_end_time,
+            detector_names=list(used_projected_strains.keys()),
+            full_network_start_time=full_network_start_time,
+            full_network_end_time=full_network_end_time,
+            full_network_duration=full_network_duration,
+            used_window_start_time=used_window_start_time,
+            used_window_end_time=used_window_end_time,
+            used_window_duration=used_network_duration,
             segment_duration=self.config.duration,
             required_final_duration=self.config.required_final_duration,
             required_available_final_duration=required_available_final_duration,
-            seconds_before_waveform_end_in_window=seconds_before_waveform_end_in_window,
-            fraction_duration_used=used_duration / full_duration,
+            seconds_before_network_end_in_window=seconds_before_network_end_in_window,
+            fraction_network_duration_used=used_network_duration / full_network_duration,
+            full_start_times=full_start_times,
+            full_end_times=full_end_times,
+            full_n_samples=full_n_samples,
+            used_start_times=used_start_times,
+            used_end_times=used_end_times,
+            used_n_samples=used_n_samples,
         )
 
-        return WindowedWaveform(
-            h_plus=h_plus,
-            h_cross=h_cross,
+        return WindowedProjectedNetwork(
+            strains=used_projected_strains,
             metadata=metadata,
         )
 
-    def _validate_input_pair(self, h_plus: TimeSeries, h_cross: TimeSeries) -> None:
-        if len(h_plus) != len(h_cross):
-            raise ValueError("h_plus and h_cross must have the same length.")
+    def _slice_timeseries_by_time(
+        self,
+        series: TimeSeries,
+        window_start_time: float,
+        window_end_time: float,
+    ) -> TimeSeries:
+        """
+        Return the part of `series` inside [window_start_time, window_end_time].
 
-        if h_plus.delta_t != h_cross.delta_t:
-            raise ValueError("h_plus and h_cross must have the same delta_t.")
+        If the series only partially overlaps the window, only the overlapping
+        samples are returned. If there is no overlap, this raises an error.
+        """
 
-        if h_plus.start_time != h_cross.start_time:
-            raise ValueError("h_plus and h_cross must have the same start_time.")
+        series_start_time = float(series.start_time)
+        series_end_time = self._end_time(series)
+        delta_t = float(series.delta_t)
 
-        if h_plus.delta_t != self.config.delta_t:
+        overlap_start_time = max(series_start_time, window_start_time)
+        overlap_end_time = min(series_end_time, window_end_time)
+
+        tolerance = 0.5 * delta_t
+
+        if overlap_end_time <= overlap_start_time + tolerance:
             raise ValueError(
-                "Waveform delta_t does not match config.delta_t. "
-                f"waveform_delta_t={h_plus.delta_t}, "
-                f"config_delta_t={self.config.delta_t}"
+                "Detector strain has no overlap with selected network window. "
+                f"series_start_time={series_start_time}, "
+                f"series_end_time={series_end_time}, "
+                f"window_start_time={window_start_time}, "
+                f"window_end_time={window_end_time}."
             )
 
-        if len(h_plus) == 0:
-            raise ValueError("Waveform cannot be empty.")
+        start_index = int(np.ceil(
+            (overlap_start_time - series_start_time) / delta_t
+        ))
+        end_index = int(np.floor(
+            (overlap_end_time - series_start_time) / delta_t
+        ))
 
-    @staticmethod
-    def _duration(series: TimeSeries) -> float:
-        return len(series) * float(series.delta_t)
+        start_index = max(start_index, 0)
+        end_index = min(end_index, len(series))
+
+        if end_index <= start_index:
+            raise ValueError(
+                "Empty slice after index conversion. "
+                f"start_index={start_index}, end_index={end_index}, "
+                f"len(series)={len(series)}."
+            )
+
+        sliced = series[start_index:end_index]
+
+        new_start_time = series_start_time + start_index * delta_t
+        sliced.start_time = new_start_time
+
+        return sliced
+
+    def _validate_projected_strains(
+        self,
+        projected_strains: dict[str, TimeSeries],
+    ) -> None:
+        if len(projected_strains) == 0:
+            raise ValueError("projected_strains cannot be empty.")
+
+        for detector_name, strain in projected_strains.items():
+            if not isinstance(strain, TimeSeries):
+                raise TypeError(
+                    f"Projected strain for {detector_name} must be a TimeSeries."
+                )
+
+            if len(strain) == 0:
+                raise ValueError(
+                    f"Projected strain for {detector_name} cannot be empty."
+                )
+
+            if strain.delta_t != self.config.delta_t:
+                raise ValueError(
+                    f"Projected strain delta_t mismatch for {detector_name}: "
+                    f"got {strain.delta_t}, expected {self.config.delta_t}."
+                )
+
+            if not np.all(np.isfinite(strain.numpy())):
+                raise ValueError(
+                    f"Projected strain for {detector_name} contains NaN or Inf."
+                )
+
+    def _network_time_bounds(
+        self,
+        projected_strains: dict[str, TimeSeries],
+    ) -> tuple[float, float]:
+        start_times = [
+            float(strain.start_time)
+            for strain in projected_strains.values()
+        ]
+
+        end_times = [
+            self._end_time(strain)
+            for strain in projected_strains.values()
+        ]
+
+        return min(start_times), max(end_times)
 
     @staticmethod
     def _end_time(series: TimeSeries) -> float:

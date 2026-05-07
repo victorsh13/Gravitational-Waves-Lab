@@ -10,7 +10,7 @@ from .config import SimulationConfig
 from .parameters import CBCParameters
 from .sampling import ParameterSampler, PriorConfig
 from .waveform import WaveformGenerator
-from .windowing import WaveformWindowSelector
+from .windowing import ProjectedNetworkWindowSelector
 from .detectors import DetectorProjector
 from .noise import NoiseModel
 from .injection import SignalInjector, InjectionResult
@@ -83,7 +83,7 @@ class DatasetBuilder:
         config: SimulationConfig,
         parameter_sampler: ParameterSampler,
         waveform_generator: WaveformGenerator,
-        waveform_window_selector: WaveformWindowSelector,
+        network_window_selector: ProjectedNetworkWindowSelector,
         detector_projector: DetectorProjector,
         noise_model: NoiseModel,
         signal_injector: SignalInjector,
@@ -101,7 +101,7 @@ class DatasetBuilder:
         self.config = config
         self.parameter_sampler = parameter_sampler
         self.waveform_generator = waveform_generator
-        self.waveform_window_selector = waveform_window_selector
+        self.network_window_selector = network_window_selector
         self.detector_projector = detector_projector
         self.noise_model = noise_model
         self.signal_injector = signal_injector
@@ -132,9 +132,12 @@ class DatasetBuilder:
 
         prior_config = cls._prior_config_from_simulation_config(config)
 
-        parameter_sampler = ParameterSampler(rng=rng, prior_config=prior_config)
+        parameter_sampler = ParameterSampler(
+            rng=rng,
+            prior_config=prior_config,
+        )
         waveform_generator = WaveformGenerator(config=config)
-        waveform_window_selector = WaveformWindowSelector(config=config)
+        network_window_selector = ProjectedNetworkWindowSelector(config=config)
         detector_projector = DetectorProjector(detector_names=detector_names)
         noise_model = NoiseModel(config=config)
         signal_injector = SignalInjector(config=config, rng=rng)
@@ -149,7 +152,7 @@ class DatasetBuilder:
             config=config,
             parameter_sampler=parameter_sampler,
             waveform_generator=waveform_generator,
-            waveform_window_selector=waveform_window_selector,
+            network_window_selector=network_window_selector,
             detector_projector=detector_projector,
             noise_model=noise_model,
             signal_injector=signal_injector,
@@ -172,14 +175,14 @@ class DatasetBuilder:
         Pipeline
         --------
         1. Sample or receive physical parameters.
-        2. Generate full waveform.
-        3. Select the usable waveform window.
-        4. Project onto detectors using a geocentric reference time.
-        5. Choose a common 4 s strain segment containing the projected network.
-        6. Embed projected detector signals into zero-valued 4 s segments.
+        2. Generate full geocentric h_plus/h_cross waveform.
+        3. Project full waveform onto detectors using a geocentric reference time.
+        4. Select the usable projected detector-network window.
+        5. Choose a common 4 s strain segment containing the windowed network.
+        6. Embed windowed projected detector signals into zero-valued 4 s segments.
         7. Compute initial SNR.
         8. Optionally rescale distance to match target network SNR range.
-        9. Generate noise and inject the final projected signals.
+        9. Generate noise and inject the final windowed projected signals.
         10. Process detector channels.
         11. Build labels and metadata.
         """
@@ -236,9 +239,10 @@ class DatasetBuilder:
             for detector_name, noise in noises.items()
         }
 
+        # Important: inject the windowed projected network, not the full projection.
         injected_results = self.signal_injector.inject_network(
             noises=noises,
-            signals=final_network.projection.strains,
+            signals=final_network.windowed.strains,
         )
 
         channels: list[np.ndarray] = []
@@ -359,28 +363,31 @@ class DatasetBuilder:
         """
         Build the noiseless projected detector network and compute its SNR.
 
-        The projected detector signals are embedded into fixed-duration
-        zero-valued segments using the same placement policy later used for
-        actual noise injection.
+        The full h_plus/h_cross waveform is projected first. The projected
+        detector network is then windowed using one common absolute-time window.
+        The windowed projected signals are embedded into fixed-duration zero
+        segments using the same placement policy later used for actual noise
+        injection.
         """
         waveform = self.waveform_generator.generate(params)
 
-        windowed = self.waveform_window_selector.select(
-            waveform.h_plus,
-            waveform.h_cross,
-        )
-
         projection = self.detector_projector.project(
-            h_plus=windowed.h_plus,
-            h_cross=windowed.h_cross,
+            h_plus=waveform.h_plus,
+            h_cross=waveform.h_cross,
             parameters=params,
             geocentric_coalescence_time=geocentric_coalescence_time,
         )
 
         self._validate_detector_set(projection.strains)
 
+        windowed = self.network_window_selector.select(
+            projected_strains=projection.strains,
+        )
+
+        self._validate_detector_set(windowed.strains)
+
         placement = self.signal_injector.choose_segment_placement_containing_network(
-            signals=projection.strains,
+            signals=windowed.strains,
             placement_policy=placement_policy,
         )
 
@@ -388,12 +395,12 @@ class DatasetBuilder:
             detector_name: self.signal_injector.build_zero_strain(
                 start_time=placement.segment_start_time,
             )
-            for detector_name in projection.strains
+            for detector_name in windowed.strains
         }
 
         signal_segment_results = self.signal_injector.inject_network(
             noises=zero_segments,
-            signals=projection.strains,
+            signals=windowed.strains,
         )
 
         signal_segments = {
@@ -455,6 +462,8 @@ class DatasetBuilder:
             },
             "injection": self._injection_metadata(injected_results),
             "noise": self.noise_model.metadata(),
+            "processing": self.signal_processor.metadata(),
+            "labels": self.label_transformer.metadata(),
         }
 
     def _waveform_metadata(self, network: BuiltSignalNetwork) -> dict:
@@ -553,7 +562,7 @@ class DatasetBuilder:
             return dict(obj)
 
         raise TypeError(f"Object of type {type(obj)} cannot be converted to dict.")
-    
+
     @staticmethod
     def _prior_config_from_simulation_config(config: SimulationConfig) -> PriorConfig:
         regime = getattr(config, "simulation_regime", "BBH")

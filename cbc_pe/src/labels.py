@@ -1,102 +1,96 @@
 import numpy as np
+
 from .parameters import CBCParameters
 
+
 class LabelTransformer:
-    def __init__(self, mean: np.ndarray | None = None, std: np.ndarray | None = None):
-        """
-        Initialize a LabelTransformer object.
+    """
+    Transform CBCParameters into regression labels.
 
-        Parameters
-        ----------
-        mean : np.ndarray | None
-            The mean of the labels. If None, the mean is not standardized.
-        std : np.ndarray | None
-            The standard deviation of the labels. If None, the standard deviation is not standardized.
+    The physical label vector is:
 
-        Raises
-        ------
-        ValueError
-            If mean and std are not None and have different shapes or if std has zeros.
+        [chirp_mass, total_mass, chi_eff]
 
-        Notes
-        -----
-        The mean and standard deviation are used to standardize the labels. The standardization is applied before the transformation.
+    Optionally, labels can be standardized using mean/std computed from the
+    training set only.
+    """
 
-        """
-        if mean is not None and std is not None:
-            if mean.shape != std.shape:
-                raise ValueError("mean and std must have the same shape.")
-            if np.any(std == 0):
-                raise ValueError("std must not have zeros.")
+    label_names = ("chirp_mass", "total_mass", "chi_eff")
 
+    def __init__(
+        self,
+        mean: np.ndarray | None = None,
+        std: np.ndarray | None = None,
+    ):
         self.mean = None if mean is None else np.asarray(mean, dtype=float)
         self.std = None if std is None else np.asarray(std, dtype=float)
 
-        if self.mean is not None and self.std is not None:
+        if (self.mean is None) != (self.std is None):
+            raise ValueError("mean and std must either both be provided or both be None.")
+
+        if self.mean is not None:
             if self.mean.shape != (3,) or self.std.shape != (3,):
-                raise ValueError("mean and std must have shape (3,)")
-            if np.any(self.std == 0):
-                raise ValueError("std must not have zeros.")
+                raise ValueError("mean and std must have shape (3,).")
 
-    def transform(self, parameters: CBCParameters, standardize: bool = False) -> np.ndarray:
-        """
-        Transform the parameters into a set of labels.
+            if not np.all(np.isfinite(self.mean)):
+                raise ValueError("mean must contain only finite values.")
 
-        Parameters
-        ----------
-        parameters : CBCParameters
-            The parameters of the binary compact object.
-        standardize : bool
-            Whether to standardize the labels. If True, the labels will be standardized to have a mean of 0 and a standard deviation of 1.
+            if not np.all(np.isfinite(self.std)):
+                raise ValueError("std must contain only finite values.")
 
-        Returns
-        -------
-        labels : np.ndarray
-            The labels. The shape is (3,).
-        """
-        labels = np.array([
-            parameters.chirp_mass,
-            parameters.total_mass,
-            parameters.chi_eff,
-            ],
-            dtype=float,
-            )
+            if np.any(self.std <= 0):
+                raise ValueError("std values must be positive.")
+
+    def transform(
+        self,
+        parameters: CBCParameters,
+        standardize: bool = False,
+    ) -> np.ndarray:
+        labels = self.to_physical_labels(parameters)
 
         if standardize:
             if self.mean is None or self.std is None:
                 raise ValueError("mean and std are required for standardization.")
+
             labels = (labels - self.mean) / self.std
 
         return labels
-    
-    def inverse_transform(self, labels: np.ndarray, standardize: bool = False) -> np.ndarray:
-        """
-        Reverse the standardization of the labels. Recovering the physical values of the labels.
 
-        Parameters
-        ----------
-        labels : np.ndarray
-            The labels. The shape is (3,).
-        standardize : bool
-            Whether to standardize the labels. If True, the labels will be standardized to have a mean of 0 and a standard deviation of 1.
-        
-        Returns
-        -------
-        physical_labels : np.ndarray
-            The physical values of the labels. The shape is (3,).
-        """
+    def inverse_transform(
+        self,
+        labels: np.ndarray,
+        standardize: bool = False,
+    ) -> np.ndarray:
+        labels = np.asarray(labels, dtype=float)
+
+        if labels.shape != (3,):
+            raise ValueError("labels must have shape (3,).")
 
         if standardize:
             if self.mean is None or self.std is None:
-                raise ValueError("mean and std are required to recover the physical values.")
+                raise ValueError(
+                    "mean and std are required to recover physical labels."
+                )
+
             labels = labels * self.std + self.mean
 
-        physical_labels = np.array([
-            labels[0],
-            labels[1],
-            labels[2],
+        return labels.astype(float)
+
+    @classmethod
+    def to_physical_labels(cls, parameters: CBCParameters) -> np.ndarray:
+        return np.array(
+            [
+                parameters.chirp_mass,
+                parameters.total_mass,
+                parameters.chi_eff,
             ],
             dtype=float,
-            )
+        )
 
-        return physical_labels
+    def metadata(self) -> dict:
+        return {
+            "label_names": list(self.label_names),
+            "standardization_available": self.mean is not None and self.std is not None,
+            "mean": None if self.mean is None else self.mean.tolist(),
+            "std": None if self.std is None else self.std.tolist(),
+        }
