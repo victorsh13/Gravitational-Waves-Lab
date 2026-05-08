@@ -118,3 +118,12 @@ class ParameterSampler:
             raise ValueError("n_samples must be non-negative.")
 
         return [self.sample_one() for _ in range(n_samples)]
+    
+
+    @classmethod
+    def from_regime(cls, regime: Literal["BBH", "BNS"]) -> "PriorConfig":
+        if regime == "BBH":
+            return cls.bbh()
+        if regime == "BNS":
+            return cls.bns()
+        raise ValueError(f"Unknown regime: {regime}")

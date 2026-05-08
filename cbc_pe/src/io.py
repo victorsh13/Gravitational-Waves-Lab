@@ -72,7 +72,6 @@ def save_dataset_npz(
         "num_samples": int(batch.X.shape[0]),
         "X_shape": list(batch.X.shape),
         "y_shape": list(batch.y.shape),
-        "detector_names": detector_names,
         "parameters": [_parameters_to_dict(p) for p in batch.parameters],
         "metadata": _to_jsonable(batch.metadata),
     }

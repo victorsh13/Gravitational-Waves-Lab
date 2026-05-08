@@ -35,6 +35,7 @@ class InjectionResult:
     is_partially_clipped: bool
 
 
+
 @dataclass(frozen=True)
 class SegmentPlacement:
     segment_start_time: float
@@ -48,6 +49,12 @@ class SegmentPlacement:
 
     placement_policy: str
     signal_network_duration: float
+
+    safe_margin_start: float
+    safe_margin_end: float
+    margin_before_signal: float
+    margin_after_signal: float
+    margins_respected: bool
 
 
 class SignalInjector:
@@ -261,6 +268,7 @@ class SignalInjector:
             latest_signal_end_time - earliest_signal_start_time
         )
 
+        
         valid_start_min = latest_signal_end_time - self.config.duration
         valid_start_max = earliest_signal_start_time
 
@@ -307,6 +315,15 @@ class SignalInjector:
 
         segment_end_time = segment_start_time + self.config.duration
 
+        # Check for margins
+        margin_before_signal = earliest_signal_start_time - segment_start_time
+        margin_after_signal = segment_end_time - latest_signal_end_time
+
+        margins_respected = (
+            margin_before_signal + tolerance >= self.config.safe_margin_start
+            and margin_after_signal + tolerance >= self.config.safe_margin_end
+        )
+
         return SegmentPlacement(
             segment_start_time=segment_start_time,
             segment_end_time=segment_end_time,
@@ -316,6 +333,11 @@ class SignalInjector:
             valid_start_max=valid_start_max,
             placement_policy=placement_policy,
             signal_network_duration=signal_network_duration,
+            safe_margin_start=self.config.safe_margin_start,
+            safe_margin_end=self.config.safe_margin_end,
+            margin_before_signal=margin_before_signal,
+            margin_after_signal=margin_after_signal,
+            margins_respected=margins_respected,
         )
 
     

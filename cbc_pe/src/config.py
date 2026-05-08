@@ -145,3 +145,15 @@ class SimulationConfig:
             raise ValueError(
                 "duration * sampling_frequency must be an integer number of samples."
             )
+
+        if self.simulation_regime == "BBH":
+            if self.waveform_family != "IMR":
+                raise ValueError("BBH regime expects waveform_family='IMR'.")
+
+        if self.waveform_approximant == "SEOBNRv4_opt" and self.simulation_regime != "BBH":
+            raise ValueError("SEOBNRv4_opt is intended here for BBH simulations.")
+        
+        if not self.snr_on_truncated_signal:
+            raise NotImplementedError(
+                "snr_on_truncated_signal=False is not implemented in DatasetBuilder."
+            )

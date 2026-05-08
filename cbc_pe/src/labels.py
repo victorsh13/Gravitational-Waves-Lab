@@ -59,14 +59,14 @@ class LabelTransformer:
     def inverse_transform(
         self,
         labels: np.ndarray,
-        standardize: bool = False,
+        was_standardized: bool = False,
     ) -> np.ndarray:
         labels = np.asarray(labels, dtype=float)
 
         if labels.shape != (3,):
             raise ValueError("labels must have shape (3,).")
 
-        if standardize:
+        if was_standardized:
             if self.mean is None or self.std is None:
                 raise ValueError(
                     "mean and std are required to recover physical labels."

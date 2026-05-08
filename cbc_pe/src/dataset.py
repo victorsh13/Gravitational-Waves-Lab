@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 import numpy as np
-from warnings import warn
+import time
 
 from pycbc.types.timeseries import TimeSeries
 
@@ -110,6 +110,9 @@ class DatasetBuilder:
         self.detector_names = detector_names
         self.rng = rng if rng is not None else np.random.default_rng()
 
+        for detector_name in detector_names:
+            self.noise_model.get_psd(detector_name)
+
     @classmethod
     def from_config(
         cls,
@@ -214,14 +217,12 @@ class DatasetBuilder:
                 placement_policy=placement_policy,
             )
 
-            try:
-                validate_snr_rescaling(
-                    final_network_snr=final_network.network_snr,
-                    target_network_snr=snr_decision.target_network_snr,
-                    relative_tolerance=self.config.snr_relative_tolerance,
-                )
-            except ValueError as exc:
-                warn(str(exc))
+            
+            validate_snr_rescaling(
+                final_network_snr=final_network.network_snr,
+                target_network_snr=snr_decision.target_network_snr,
+                relative_tolerance=self.config.snr_relative_tolerance,
+            )
 
         else:
             final_network = initial_network
@@ -283,12 +284,16 @@ class DatasetBuilder:
         geocentric_coalescence_time: float | None = None,
         placement_policy: str = "random_contained",
         max_attempts: int | None = None,
+        progress_every: int = 10,
     ) -> DatasetBatch:
         if num_samples <= 0:
             raise ValueError("num_samples must be a positive integer.")
 
         if max_attempts is None:
             max_attempts = 10 * num_samples
+
+        if progress_every <= 0:
+            raise ValueError("progress_every must be positive.")
 
         X_list: list[np.ndarray] = []
         y_list: list[np.ndarray] = []
@@ -297,6 +302,8 @@ class DatasetBuilder:
 
         n_attempts = 0
         n_failed = 0
+
+        start_time = time.perf_counter()
 
         while len(X_list) < num_samples and n_attempts < max_attempts:
             n_attempts += 1
@@ -325,11 +332,19 @@ class DatasetBuilder:
 
             n_done = len(X_list)
 
-            if n_done % 10 == 0:
+            if n_done % progress_every == 0 or n_done == num_samples:
+                # Time depuration
+                elapsed = time.perf_counter() - start_time
+                samples_per_second = n_done / elapsed if elapsed > 0 else float("nan")
+                seconds_per_sample = elapsed / n_done if n_done > 0 else float("nan")
+
                 print(
                     f"Built sample {n_done} of {num_samples} "
                     f"--> {n_done / num_samples:.1%} completed "
-                    f"(attempts={n_attempts}, failed={n_failed})"
+                    f"(attempts={n_attempts}, failed={n_failed}, "
+                    f"elapsed={elapsed:.1f}s, "
+                    f"{seconds_per_sample:.2f}s/sample, "
+                    f"{samples_per_second:.2f} samples/s)"
                 )
 
         if len(X_list) < num_samples:
@@ -342,9 +357,20 @@ class DatasetBuilder:
         X = np.stack(X_list, axis=0)
         y = np.stack(y_list, axis=0)
 
+        # To print the time
+        total_elapsed = time.perf_counter() - start_time
+        samples_per_second = len(X_list) / total_elapsed if total_elapsed > 0 else float("nan")
+        seconds_per_sample = total_elapsed / len(X_list) if len(X_list) > 0 else float("nan")
+        failure_rate = n_failed / n_attempts if n_attempts > 0 else 0.0
+
         print(
             f"--> DATASET GENERATED with {len(X_list)} valid samples "
-            f"after {n_attempts} attempts. Failed samples: {n_failed}."
+            f"after {n_attempts} attempts. "
+            f"Failed samples: {n_failed} "
+            f"({failure_rate:.1%} failure rate). "
+            f"Total time: {total_elapsed:.1f}s "
+            f"({seconds_per_sample:.2f}s/sample, "
+            f"{samples_per_second:.2f} samples/s)."
         )
 
         return DatasetBatch(
@@ -442,6 +468,8 @@ class DatasetBuilder:
     ) -> dict:
         return {
             "simulation": self._simulation_metadata(),
+            "initial_parameters": self._parameters_metadata(initial_network.params),
+            "final_parameters": self._parameters_metadata(final_network.params),
             "geocentric_coalescence_time": geocentric_coalescence_time,
             "detectors": list(self.detector_names),
             "placement_policy": placement_policy,
@@ -465,6 +493,23 @@ class DatasetBuilder:
             "processing": self.signal_processor.metadata(),
             "labels": self.label_transformer.metadata(),
         }
+    
+    def _parameters_metadata(self, params: CBCParameters) -> dict:
+        return {
+            "mass_1": float(params.mass_1),
+            "mass_2": float(params.mass_2),
+            "distance": float(params.distance),
+            "inclination": float(params.inclination),
+            "ra": float(params.ra),
+            "dec": float(params.dec),
+            "spin_1z": float(params.spin_1z),
+            "spin_2z": float(params.spin_2z),
+            "polarization_angle": float(params.polarization_angle),
+            "chirp_mass": float(params.chirp_mass),
+            "total_mass": float(params.total_mass),
+            "chi_eff": float(params.chi_eff),
+        }
+
 
     def _waveform_metadata(self, network: BuiltSignalNetwork) -> dict:
         metadata = {}
@@ -490,10 +535,21 @@ class DatasetBuilder:
                 "signal_end_time": float(result.signal_end_time),
                 "segment_start_time": float(result.segment_start_time),
                 "segment_end_time": float(result.segment_end_time),
+
                 "signal_start_index": int(result.signal_start_index),
                 "signal_end_index": int(result.signal_end_index),
+
+                "overlap_start_index_strain": int(result.overlap_start_index_strain),
+                "overlap_end_index_strain": int(result.overlap_end_index_strain),
+                "overlap_start_index_signal": int(result.overlap_start_index_signal),
+                "overlap_end_index_signal": int(result.overlap_end_index_signal),
+
                 "n_signal_samples": int(result.n_signal_samples),
                 "n_injected_samples": int(result.n_injected_samples),
+
+                "n_clipped_before": int(result.n_clipped_before),
+                "n_clipped_after": int(result.n_clipped_after),
+                "is_partially_clipped": bool(result.is_partially_clipped),
             }
 
         return output

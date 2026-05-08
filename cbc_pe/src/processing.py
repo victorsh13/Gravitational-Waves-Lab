@@ -99,6 +99,14 @@ class SignalProcessor:
         self._validate_output(processing_strain)
 
         return processing_strain
+    
+    def process_network(self, strains: dict[str, TimeSeries]) -> dict[str, TimeSeries]:
+        processed = {}
+
+        for detector, strain in strains.items():
+            processed[detector] = self.process(strain)
+
+        return processed
 
     def metadata(self) -> dict:
         return {
