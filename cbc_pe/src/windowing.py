@@ -33,6 +33,7 @@ class NetworkWindowMetadata:
     used_window_duration: float
 
     segment_duration: float
+    max_window_duration: float
     required_final_duration: float
     required_available_final_duration: float
 
@@ -81,17 +82,35 @@ class ProjectedNetworkWindowSelector:
     def select(
         self,
         projected_strains: dict[str, TimeSeries],
+        max_duration: float | None = None,
     ) -> WindowedProjectedNetwork:
         self._validate_projected_strains(projected_strains)
 
+        if max_duration is None:
+            max_duration = self.config.duration
+
+        max_duration = float(max_duration)
+
+        if max_duration <= 0.0:
+            raise ValueError(f"max_duration must be positive, got {max_duration}.")
+
+        if max_duration > self.config.duration + self.config.delta_t:
+            raise ValueError(
+                "max_duration cannot be larger than config.duration. "
+                f"max_duration={max_duration}, config.duration={self.config.duration}."
+            )
+            
         if self.config.truncation_policy == "none":
-            return self._select_none(projected_strains)
+            return self._select_none(projected_strains, max_duration)
 
         if self.config.truncation_policy in {
             "keep_full_if_possible",
             "keep_last_segment",
         }:
-            return self._select_keep_last_network_window(projected_strains)
+            return self._select_keep_last_network_window(
+                projected_strains=projected_strains,
+                max_duration=max_duration,
+            )
 
         raise ValueError(
             f"Unknown truncation_policy: {self.config.truncation_policy}"
@@ -100,16 +119,18 @@ class ProjectedNetworkWindowSelector:
     def _select_none(
         self,
         projected_strains: dict[str, TimeSeries],
+        max_duration: float,
     ) -> WindowedProjectedNetwork:
         network_start, network_end = self._network_time_bounds(projected_strains)
         network_duration = network_end - network_start
 
-        if network_duration > self.config.duration:
+        if network_duration > max_duration:
             raise ValueError(
                 "Projected network signal is longer than the configured "
                 "segment duration, but truncation_policy='none'. "
                 f"network_duration={network_duration}, "
-                f"segment_duration={self.config.duration}."
+                f"segment_duration={self.config.duration}, "
+                f"max_duration={max_duration}."
             )
 
         return self._build_result(
@@ -118,26 +139,29 @@ class ProjectedNetworkWindowSelector:
             is_truncated=False,
             used_window_start_time=network_start,
             used_window_end_time=network_end,
+            max_duration=max_duration,
         )
 
     def _select_keep_last_network_window(
         self,
         projected_strains: dict[str, TimeSeries],
+        max_duration: float,
     ) -> WindowedProjectedNetwork:
         network_start, network_end = self._network_time_bounds(projected_strains)
         network_duration = network_end - network_start
 
-        if network_duration <= self.config.duration:
+        if network_duration <= max_duration:
             return self._build_result(
                 full_projected_strains=projected_strains,
                 used_projected_strains=projected_strains,
                 is_truncated=False,
                 used_window_start_time=network_start,
                 used_window_end_time=network_end,
+                max_duration=max_duration,
             )
 
         used_window_end_time = network_end
-        used_window_start_time = network_end - self.config.duration
+        used_window_start_time = network_end - max_duration
 
         used_projected_strains = {
             detector_name: self._slice_timeseries_by_time(
@@ -154,15 +178,17 @@ class ProjectedNetworkWindowSelector:
             is_truncated=True,
             used_window_start_time=used_window_start_time,
             used_window_end_time=used_window_end_time,
+            max_duration=max_duration,
         )
 
     def _build_result(
-        self,
+    self,
         full_projected_strains: dict[str, TimeSeries],
         used_projected_strains: dict[str, TimeSeries],
         is_truncated: bool,
         used_window_start_time: float,
         used_window_end_time: float,
+        max_duration: float,
     ) -> WindowedProjectedNetwork:
         self._validate_projected_strains(full_projected_strains)
         self._validate_projected_strains(used_projected_strains)
@@ -208,10 +234,11 @@ class ProjectedNetworkWindowSelector:
                 f"{self.config.required_final_duration}."
             )
 
-        if used_network_duration > self.config.duration + tolerance:
+        if used_network_duration > max_duration + tolerance:
             raise ValueError(
-                "Used network window is longer than config.duration. "
+                "Used network window is longer than max_duration. "
                 f"used_network_duration={used_network_duration}, "
+                f"max_duration={max_duration}, "
                 f"segment_duration={self.config.duration}."
             )
 
@@ -256,6 +283,7 @@ class ProjectedNetworkWindowSelector:
             used_window_end_time=used_window_end_time,
             used_window_duration=used_network_duration,
             segment_duration=self.config.duration,
+            max_window_duration=max_duration,
             required_final_duration=self.config.required_final_duration,
             required_available_final_duration=required_available_final_duration,
             seconds_before_network_end_in_window=seconds_before_network_end_in_window,

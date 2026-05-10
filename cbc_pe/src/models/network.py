@@ -128,39 +128,39 @@ class SimpleCNN(nn.Module):
         self.pool = nn.AdaptiveAvgPool1d(1)
 
         self.embedding_layer = nn.Sequential(
-            nn.Linear(128, embedding_dim),
+            nn.Linear(128, 64),
             nn.LeakyReLU(negative_slope=0.1),
-            nn.Dropout1d(p=dropout_dense),
-            nn.Linear(embedding_dim, 32),
+            nn.Dropout(p=dropout_dense),
+            nn.Linear(64, embedding_dim),
             nn.LeakyReLU(negative_slope=0.1),
         )
 
         # Linear layer
-        self.head = nn.Linear(32, n_outputs)
+        self.head = nn.Linear(embedding_dim, n_outputs)
 
 
     # ENCODER
-    def encode(self, x):    # (channels, time) = (3, 16384)
-        x = self.block1(x)  # (16, 8192)
-        x = self.block2(x)  # (32, 4096)
-        x = self.block3(x)  # (64, 2048)
-        x = self.block4(x)  # (128, 1024)
+    def encode(self, x):    # (batch, channels, time) = (batch, 3, 16384)
+        x = self.block1(x)  # (b, 16, ~8192)
+        x = self.block2(x)  # (b, 32, ~4096)
+        x = self.block3(x)  # (b, 64, ~2048)
+        x = self.block4(x)  # (b, 128, ~1024)
 
-        x = self.pool(x)    # (128, 1)
-        x = x.squeeze(-1)   # (128,)
+        x = self.pool(x)    # (b, 128, 1)
+        x = x.squeeze(-1)   # (b, 128)
 
         return x
 
     # EMBEDDING
     def embed(self, x):
-        features = self.encode(x)  # (128,)
-        embedding = self.embedding_layer(features)  # (64, 32)
+        features = self.encode(x)  # (b, 128)
+        embedding = self.embedding_layer(features)  # (b, 64, 32)
         return embedding
 
     # HEAD
     def forward(self, x, return_embedding=False):
         embedding = self.embed(x)
-        y_pred = self.head(embedding) #(3,)
+        y_pred = self.head(embedding) #(b, 3)
 
         if return_embedding:
             return y_pred, embedding

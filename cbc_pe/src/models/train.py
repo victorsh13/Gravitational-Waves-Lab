@@ -121,7 +121,6 @@ def train_model(
                 "optimizer_state_dict": copy.deepcopy(optimizer.state_dict()),
                 "train_loss": float(train_loss),
                 "best_val_loss": float(best_val_loss),
-                "history": copy.deepcopy(history),
                 "y_mean": torch.as_tensor(y_mean, dtype=torch.float32),
                 "y_std": torch.as_tensor(y_std, dtype=torch.float32),
                 "model_config": copy.deepcopy(model_config),

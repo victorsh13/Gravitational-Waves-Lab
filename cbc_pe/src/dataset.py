@@ -181,13 +181,14 @@ class DatasetBuilder:
         2. Generate full geocentric h_plus/h_cross waveform.
         3. Project full waveform onto detectors using a geocentric reference time.
         4. Select the usable projected detector-network window.
-        5. Choose a common 4 s strain segment containing the windowed network.
-        6. Embed windowed projected detector signals into zero-valued 4 s segments.
+        5. Choose a common final 4 s output segment containing the windowed network.
+        6. Embed the signal into zero-valued 4 s segments for signal-only SNR.
         7. Compute initial SNR.
-        8. Optionally rescale distance to match target network SNR range.
-        9. Generate noise and inject the final windowed projected signals.
-        10. Process detector channels.
-        11. Build labels and metadata.
+        8. Optionally rescale distance.
+        9. Generate longer processing-context noise segments around the final 4 s segment.
+        10. Inject the final windowed projected signals into those context segments.
+        11. Process the context segments and crop back to the final 4 s output.
+        12. Build labels and metadata.
         """
         if params is None:
             params = self.parameter_sampler.sample_one()
@@ -227,31 +228,64 @@ class DatasetBuilder:
         else:
             final_network = initial_network
 
+        processing_length = self.config.processing_length
+
+        context_segment_start_time = (
+            final_network.placement.segment_start_time
+            - self.config.processing_context_start_seconds
+        )
+
         noises = self.noise_model.sample_network(
             detector_names=self.detector_names,
             seed=int(self.rng.integers(0, 2**32 - 1)),
+            length=processing_length,
         )
 
         noises = {
             detector_name: self.signal_injector.set_strain_start_time(
                 strain=noise,
-                start_time=final_network.placement.segment_start_time,
+                start_time=context_segment_start_time,
+                expected_length=processing_length,
             )
             for detector_name, noise in noises.items()
         }
 
         # Important: inject the windowed projected network, not the full projection.
+        # This injection happens in the longer processing-context segment.
         injected_results = self.signal_injector.inject_network(
             noises=noises,
             signals=final_network.windowed.strains,
         )
 
+        psds = {
+            detector_name: self.noise_model.get_psd(
+                detector_name,
+                length=processing_length,
+            )
+            for detector_name in self.detector_names
+        }
+
+        injected_strains = {
+            detector_name: injected_results[detector_name].strain
+            for detector_name in self.detector_names
+        }
+
+        processed_network = self.signal_processor.process_network(
+            strains=injected_strains,
+            psds=psds,
+        )
+
         channels: list[np.ndarray] = []
 
         for detector_name in self.detector_names:
-            processed_signal = self.signal_processor.process(
-                injected_results[detector_name].strain
+            processed_signal = processed_network[detector_name]
+
+            self._validate_processed_output_alignment(
+                processed_signal=processed_signal,
+                expected_start_time=final_network.placement.segment_start_time,
+                detector_name=detector_name,
             )
+
             channels.append(np.asarray(processed_signal))
 
         X = np.stack(channels, axis=0)
@@ -406,8 +440,12 @@ class DatasetBuilder:
 
         self._validate_detector_set(projection.strains)
 
+        safe_margin_start = float(self.config.safe_margin_start)
+        safe_margin_end = float(self.config.safe_margin_end)
+
         windowed = self.network_window_selector.select(
             projected_strains=projection.strains,
+            max_duration=self.config.duration,
         )
 
         self._validate_detector_set(windowed.strains)
@@ -415,6 +453,9 @@ class DatasetBuilder:
         placement = self.signal_injector.choose_segment_placement_containing_network(
             signals=windowed.strains,
             placement_policy=placement_policy,
+            safe_margin_start=safe_margin_start,
+            safe_margin_end=safe_margin_end,
+            enforce_safe_margins=True,
         )
 
         zero_segments = {
@@ -491,6 +532,7 @@ class DatasetBuilder:
             "injection": self._injection_metadata(injected_results),
             "noise": self.noise_model.metadata(),
             "processing": self.signal_processor.metadata(),
+            "processing_context": self._processing_context_metadata(final_network.placement),
             "labels": self.label_transformer.metadata(),
         }
     
@@ -568,6 +610,15 @@ class DatasetBuilder:
             "snr_relative_tolerance": float(self.config.snr_relative_tolerance),
             "truncation_policy": self.config.truncation_policy,
             "required_final_duration": float(self.config.required_final_duration),
+
+            "processing_context_start_samples": int(self.config.processing_context_start_samples),
+            "processing_context_end_samples": int(self.config.processing_context_end_samples),
+            "processing_context_start_seconds": float(self.config.processing_context_start_seconds),
+            "processing_context_end_seconds": float(self.config.processing_context_end_seconds),
+            "processing_length": int(self.config.processing_length),
+            "processing_duration": float(self.config.processing_duration),
+            "processing_delta_f": float(self.config.processing_delta_f),
+            "processing_flength": int(self.config.processing_flength),
         }
 
         for optional_attr in [
@@ -583,6 +634,76 @@ class DatasetBuilder:
                     output[optional_attr] = value
 
         return output
+    
+    def _processing_context_metadata(self, placement) -> dict:
+        context_start_time = (
+            placement.segment_start_time
+            - self.config.processing_context_start_seconds
+        )
+        context_end_time = (
+            placement.segment_end_time
+            + self.config.processing_context_end_seconds
+        )
+
+        return {
+            "output_segment_start_time": float(placement.segment_start_time),
+            "output_segment_end_time": float(placement.segment_end_time),
+
+            "context_segment_start_time": float(context_start_time),
+            "context_segment_end_time": float(context_end_time),
+
+            "output_length": int(self.config.length),
+            "output_duration": float(self.config.duration),
+
+            "processing_input_length": int(self.config.processing_length),
+            "processing_input_duration": float(self.config.processing_duration),
+
+            "context_start_samples": int(self.config.processing_context_start_samples),
+            "context_end_samples": int(self.config.processing_context_end_samples),
+
+            "context_start_seconds": float(self.config.processing_context_start_seconds),
+            "context_end_seconds": float(self.config.processing_context_end_seconds),
+        }
+    
+
+    def _processing_safe_margins_for_internal_padding(self) -> tuple[float, float]:
+        """
+        Safe margins required to keep the signal away from processing-corrupted edges.
+
+        We take the maximum between config margins and processor-recommended margins.
+        """
+        processor_start, processor_end = self.signal_processor.recommended_safe_margins()
+
+        safe_margin_start = max(
+            float(self.config.safe_margin_start),
+            float(processor_start),
+        )
+        safe_margin_end = max(
+            float(self.config.safe_margin_end),
+            float(processor_end),
+        )
+
+        return safe_margin_start, safe_margin_end
+
+
+    def _usable_network_duration_for_internal_padding(self) -> float:
+        safe_margin_start, safe_margin_end = self._processing_safe_margins_for_internal_padding()
+
+        usable_duration = (
+            self.config.duration
+            - safe_margin_start
+            - safe_margin_end
+        )
+
+        if usable_duration <= 0:
+            raise ValueError(
+                "Safe margins leave no usable duration for the signal. "
+                f"duration={self.config.duration}, "
+                f"safe_margin_start={safe_margin_start}, "
+                f"safe_margin_end={safe_margin_end}."
+            )
+
+        return float(usable_duration)
 
     def _validate_detector_set(self, signals: dict[str, TimeSeries]) -> None:
         signal_detectors = set(signals.keys())
@@ -593,6 +714,42 @@ class DatasetBuilder:
                 "Projected signal detector set does not match builder detector_names. "
                 f"signals={signal_detectors}, expected={expected_detectors}"
             )
+
+    def _validate_processed_output_alignment(
+        self,
+        processed_signal: TimeSeries,
+        expected_start_time: float,
+        detector_name: str,
+    ) -> None:
+        if len(processed_signal) != self.config.length:
+            raise ValueError(
+                "Processed output length mismatch. "
+                f"detector={detector_name}, "
+                f"got={len(processed_signal)}, expected={self.config.length}."
+            )
+
+        if processed_signal.delta_t != self.config.delta_t:
+            raise ValueError(
+                "Processed output delta_t mismatch. "
+                f"detector={detector_name}, "
+                f"got={processed_signal.delta_t}, expected={self.config.delta_t}."
+            )
+
+        dt_error = abs(
+            float(processed_signal.start_time)
+            - float(expected_start_time)
+        )
+
+        if dt_error > self.config.delta_t:
+            raise ValueError(
+                "Processed output start_time is not aligned with final placement. "
+                f"detector={detector_name}, "
+                f"processed_start_time={float(processed_signal.start_time)}, "
+                f"expected_start_time={expected_start_time}, "
+                f"dt_error={dt_error}, "
+                f"delta_t={self.config.delta_t}."
+            )
+
 
     def _sample_geocentric_coalescence_time(self) -> float:
         """

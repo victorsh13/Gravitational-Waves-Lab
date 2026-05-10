@@ -55,6 +55,7 @@ class SegmentPlacement:
     margin_before_signal: float
     margin_after_signal: float
     margins_respected: bool
+    enforce_safe_margins: bool
 
 
 class SignalInjector:
@@ -167,13 +168,22 @@ class SignalInjector:
     def build_zero_strain(
         self,
         start_time: float,
+        length: int | None = None,
     ) -> TimeSeries:
         """
-        Build an empty zero-valued strain segment with the configured duration.
-        Useful for SNR calculations or tests.
+        Build an empty zero-valued strain segment.
+
+        By default this builds the final model-length segment. Passing length allows
+        building a longer processing-context segment.
         """
+        if length is None:
+            length = self.config.length
+
+        if length <= 0:
+            raise ValueError("length must be positive.")
+
         return TimeSeries(
-            initial_array=np.zeros(self.config.length),
+            initial_array=np.zeros(length),
             delta_t=self.config.delta_t,
             epoch=start_time,
         )
@@ -182,14 +192,18 @@ class SignalInjector:
         self,
         strain: TimeSeries,
         start_time: float,
+        expected_length: int | None = None,
     ) -> TimeSeries:
         """
         Return a copy of a strain segment with a new absolute start time.
+
+        If expected_length is provided, validate against it. Otherwise accept the
+        current strain length.
         """
-        if len(strain) != self.config.length:
+        if expected_length is not None and len(strain) != expected_length:
             raise ValueError(
                 f"Strain length mismatch: got {len(strain)}, "
-                f"expected {self.config.length}."
+                f"expected {expected_length}."
             )
 
         if strain.delta_t != self.config.delta_t:
@@ -219,37 +233,72 @@ class SignalInjector:
                 f"strain.delta_t={strain.delta_t}, config.delta_t={self.config.delta_t}"
             )
 
-        if len(strain) != self.config.length:
+        allowed_lengths = {
+            self.config.length,
+            self.config.processing_length,
+        }
+
+        if len(strain) not in allowed_lengths:
             raise ValueError(
-                f"Strain length mismatch: got {len(strain)}, "
-                f"expected {self.config.length}."
+                "Strain length mismatch: got "
+                f"{len(strain)}, expected one of {sorted(allowed_lengths)}."
             )
 
         if len(signal) == 0:
             raise ValueError("Signal cannot be empty.")
+
+        if signal.delta_t != self.config.delta_t:
+            raise ValueError(
+                "Signal delta_t does not match config.delta_t. "
+                f"signal.delta_t={signal.delta_t}, config.delta_t={self.config.delta_t}"
+            )
         
 
     def choose_segment_placement_containing_network(
         self,
         signals: dict[str, TimeSeries],
         placement_policy: str = "random_contained",
+        safe_margin_start: float | None = None,
+        safe_margin_end: float | None = None,
+        enforce_safe_margins: bool = True,
     ) -> SegmentPlacement:
-        
-        delta_ts = {ifo: float(signal.delta_t) for ifo, signal in signals.items()}
+
+        if len(signals) == 0:
+            raise ValueError("signals cannot be empty.")
+
+        delta_ts = {
+            ifo: float(signal.delta_t)
+            for ifo, signal in signals.items()
+        }
 
         if any(abs(dt - self.config.delta_t) > 0.0 for dt in delta_ts.values()):
             raise ValueError(
                 "All signals must have delta_t matching config.delta_t. "
                 f"delta_ts={delta_ts}, config_delta_t={self.config.delta_t}"
             )
-        
-        empty = [ifo for ifo, signal in signals.items() if len(signal) == 0]
+
+        empty = [
+            ifo for ifo, signal in signals.items()
+            if len(signal) == 0
+        ]
 
         if empty:
             raise ValueError(f"Empty projected signals found for detectors: {empty}")
 
-        if len(signals) == 0:
-            raise ValueError("signals cannot be empty.")
+        if safe_margin_start is None:
+            safe_margin_start = self.config.safe_margin_start
+
+        if safe_margin_end is None:
+            safe_margin_end = self.config.safe_margin_end
+
+        safe_margin_start = float(safe_margin_start)
+        safe_margin_end = float(safe_margin_end)
+
+        if safe_margin_start < 0.0 or safe_margin_end < 0.0:
+            raise ValueError(
+                "safe_margin_start and safe_margin_end must be non-negative. "
+                f"got {safe_margin_start}, {safe_margin_end}"
+            )
 
         signal_start_times = {
             ifo: float(signal.start_time)
@@ -268,21 +317,39 @@ class SignalInjector:
             latest_signal_end_time - earliest_signal_start_time
         )
 
-        
-        valid_start_min = latest_signal_end_time - self.config.duration
-        valid_start_max = earliest_signal_start_time
+        if enforce_safe_margins:
+            valid_start_min = (
+                latest_signal_end_time
+                + safe_margin_end
+                - self.config.duration
+            )
+            valid_start_max = (
+                earliest_signal_start_time
+                - safe_margin_start
+            )
+        else:
+            valid_start_min = latest_signal_end_time - self.config.duration
+            valid_start_max = earliest_signal_start_time
 
         tolerance = self.config.delta_t
 
         if valid_start_min > valid_start_max + tolerance:
             raise ValueError(
-                "Projected network signal does not fit inside the configured "
-                "segment duration. "
+                "Projected network signal does not fit inside the configured segment "
+                "duration with the requested safe margins. "
                 f"network_signal_duration={signal_network_duration}, "
                 f"segment_duration={self.config.duration}, "
+                f"safe_margin_start={safe_margin_start}, "
+                f"safe_margin_end={safe_margin_end}, "
+                f"enforce_safe_margins={enforce_safe_margins}, "
                 f"valid_start_min={valid_start_min}, "
                 f"valid_start_max={valid_start_max}."
             )
+
+        # If the interval is only numerically negative within tolerance,
+        # collapse it to a single valid point.
+        if valid_start_max < valid_start_min:
+            valid_start_max = valid_start_min
 
         if placement_policy == "end_aligned":
             segment_start_time = valid_start_min
@@ -315,14 +382,24 @@ class SignalInjector:
 
         segment_end_time = segment_start_time + self.config.duration
 
-        # Check for margins
         margin_before_signal = earliest_signal_start_time - segment_start_time
         margin_after_signal = segment_end_time - latest_signal_end_time
 
         margins_respected = (
-            margin_before_signal + tolerance >= self.config.safe_margin_start
-            and margin_after_signal + tolerance >= self.config.safe_margin_end
+            margin_before_signal + tolerance >= safe_margin_start
+            and margin_after_signal + tolerance >= safe_margin_end
         )
+
+        if enforce_safe_margins and not margins_respected:
+            raise RuntimeError(
+                "Internal placement error: safe margins were enforced but not respected. "
+                f"margin_before_signal={margin_before_signal}, "
+                f"margin_after_signal={margin_after_signal}, "
+                f"safe_margin_start={safe_margin_start}, "
+                f"safe_margin_end={safe_margin_end}, "
+                f"segment_start_time={segment_start_time}, "
+                f"segment_end_time={segment_end_time}."
+            )
 
         return SegmentPlacement(
             segment_start_time=segment_start_time,
@@ -333,11 +410,11 @@ class SignalInjector:
             valid_start_max=valid_start_max,
             placement_policy=placement_policy,
             signal_network_duration=signal_network_duration,
-            safe_margin_start=self.config.safe_margin_start,
-            safe_margin_end=self.config.safe_margin_end,
+            safe_margin_start=safe_margin_start,
+            safe_margin_end=safe_margin_end,
             margin_before_signal=margin_before_signal,
             margin_after_signal=margin_after_signal,
             margins_respected=margins_respected,
+            enforce_safe_margins=enforce_safe_margins,
         )
-
-    
+        

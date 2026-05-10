@@ -68,8 +68,14 @@ class SimulationConfig:
     event_time_reference: Literal["geocentric"] = "geocentric"
 
     # Injection margins inside the fixed strain segment
-    safe_margin_start: float = 0.5  # s
-    safe_margin_end: float = 0.5  # s
+    safe_margin_start: float = 0.0  # s
+    safe_margin_end: float = 0.0  # s
+
+    # Processing context around the final CNN segment.
+    # These are extra samples generated before/after the final output segment
+    # so whitening/FIR edge corruption happens outside the returned 4 s window.
+    processing_context_start_samples: int = 0
+    processing_context_end_samples: int = 0
 
     @property
     def delta_t(self) -> float:
@@ -99,6 +105,42 @@ class SimulationConfig:
     def safe_margin_end_samples(self) -> int:
         return int(round(self.safe_margin_end * self.sampling_frequency))
 
+
+    #Processing context
+    @property
+    def processing_context_start_seconds(self) -> float:
+        return self.processing_context_start_samples * self.delta_t
+
+    @property
+    def processing_context_end_seconds(self) -> float:
+        return self.processing_context_end_samples * self.delta_t
+
+    @property
+    def processing_length(self) -> int:
+        return (
+            self.length
+            + self.processing_context_start_samples
+            + self.processing_context_end_samples
+        )
+
+    @property
+    def processing_duration(self) -> float:
+        return self.processing_length * self.delta_t
+
+    @property
+    def processing_delta_f(self) -> float:
+        return 1.0 / self.processing_duration
+
+    @property
+    def processing_flength(self) -> int:
+        return self.processing_length // 2 + 1
+
+    @property
+    def has_processing_context(self) -> bool:
+        return (
+            self.processing_context_start_samples > 0
+            or self.processing_context_end_samples > 0
+        )
 
     def __post_init__(self) -> None:
         if self.sampling_frequency <= 0:
@@ -157,3 +199,16 @@ class SimulationConfig:
             raise NotImplementedError(
                 "snr_on_truncated_signal=False is not implemented in DatasetBuilder."
             )
+        
+        # Processing validations
+        if self.processing_context_start_samples < 0:
+            raise ValueError("processing_context_start_samples must be non-negative.")
+
+        if self.processing_context_end_samples < 0:
+            raise ValueError("processing_context_end_samples must be non-negative.")
+
+        if not isinstance(self.processing_context_start_samples, int):
+            raise TypeError("processing_context_start_samples must be an integer.")
+
+        if not isinstance(self.processing_context_end_samples, int):
+            raise TypeError("processing_context_end_samples must be an integer.")

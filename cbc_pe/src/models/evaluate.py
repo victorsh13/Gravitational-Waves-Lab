@@ -109,3 +109,5 @@ def extract_predictions_and_embeddings(model, loader, device):
 
     return pred, emb, y
 
+def inverse_standardize(y_std, mean, std):
+    return y_std * std + mean
