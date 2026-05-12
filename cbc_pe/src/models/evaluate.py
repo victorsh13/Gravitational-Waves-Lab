@@ -1,5 +1,6 @@
 import numpy as np
 import torch    
+import pandas as pd
 
 
 
@@ -34,6 +35,65 @@ def predict_on_loader(model, loader, device):
     targets = np.concatenate(targets, axis=0)
 
     return preds, targets
+
+
+def regression_metrics(y_true, y_pred, label_names, split_name="test"):
+    """
+    Computes regression metrics per label.
+
+    Parameters
+    ----------
+    y_true : np.ndarray
+        True labels. Shape (N, n_labels).
+
+    y_pred : np.ndarray
+        Predicted labels. Shape (N, n_labels).
+
+    label_names : list[str]
+        Names of the target labels.
+
+    split_name : str
+        Name of the evaluated split: train, val, cal, test.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per label with regression metrics.
+    """
+
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+
+    residual = y_pred - y_true
+    abs_error = np.abs(residual)
+
+    mse = np.mean(residual ** 2, axis=0)
+    rmse = np.sqrt(mse)
+    mae = np.mean(abs_error, axis=0)
+    bias = np.mean(residual, axis=0)
+    median_abs_error = np.median(abs_error, axis=0)
+    residual_std = np.std(residual, axis=0)
+
+    ss_res = np.sum(residual ** 2, axis=0)
+    ss_tot = np.sum((y_true - np.mean(y_true, axis=0)) ** 2, axis=0)
+    r2 = 1.0 - ss_res / ss_tot
+
+    rows = []
+
+    for j, label in enumerate(label_names):
+        rows.append({
+            "split": split_name,
+            "label": label,
+            "MSE": mse[j],
+            "RMSE": rmse[j],
+            "MAE": mae[j],
+            "bias": bias[j],
+            "median_abs_error": median_abs_error[j],
+            "residual_std": residual_std[j],
+            "R2": r2[j],
+        })
+
+    return pd.DataFrame(rows)
 
 
 # To obtain the mse errors per label
