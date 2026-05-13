@@ -14,21 +14,22 @@ cbc_pe/
 │   ├── injection.py
 │   ├── processing.py
 │   ├── labels.py
-│   ├── dataset.py
+│   ├── snr.py
 │   └── conformal/
 │       ├── apply.py
 │       ├── binning.py
 │       ├── calibration.py
 │       ├── metrics.py
+│       ├── difficulty.py
 │       └── pipeline.py
 │   
 │
 ├── tests/
-│   ├── test_parameters.py
-│   ├── test_sampling.py
-│   ├── test_injection.py
-│   ├── test_processing.py
-│   └── test_conformal.py
+│   ├── test_parameters.py   # Not yet implemented
+│   ├── test_sampling.py     # Not yet implemented
+│   ├── test_injection.py    # Not yet implemented
+│   ├── test_processing.py   # Not yet implemented
+│   └── test_conformal.py    # Not yet implemented
 │
 ├── notebooks/
 │   ├── 01_sanity_checks.ipynb
