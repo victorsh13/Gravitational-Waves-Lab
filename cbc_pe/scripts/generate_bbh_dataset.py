@@ -23,7 +23,7 @@ def parse_args():
     parser.add_argument(
         "--file-name",
         type=str,
-        default="bbh_psdwhite_context4p8125_crop4s_seobnrv4opt_snr10-25_n100.npz",
+        default="bbh_4s_seobnrv4opt_snr10-25_nX.npz",
     )
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--progress-every", type=int, default=10)
@@ -87,7 +87,7 @@ def main():
         num_samples=args.num_samples,
         standardize_labels=False,
         placement_policy="random_contained",
-        progress_every=10,
+        progress_every=args.progress_every,
     )
 
     elapsed = time.perf_counter() - t0
