@@ -274,18 +274,14 @@ class SimpleCNN_Pool(nn.Module):
         )
 
         # Global Poolingg
-        self.pool = nn.AdaptiveAvgPool1d(8)
+        self.pool = nn.AdaptiveAvgPool1d(4)
 
         self.embedding_layer = nn.Sequential(
-            nn.Linear(128 * 8, 512),
+            nn.Linear(128 * 4, 128),
             nn.LeakyReLU(negative_slope=0.1),
             nn.Dropout(p=dropout_dense),
 
-            nn.Linear(512, 256),
-            nn.LeakyReLU(negative_slope=0.1),
-            nn.Dropout(p=dropout_dense),
-            
-            nn.Linear(256, embedding_dim),
+            nn.Linear(128, embedding_dim),
         )
 
         # Linear layer
