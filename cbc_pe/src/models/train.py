@@ -77,8 +77,8 @@ def train_model(
         weight_decay=weight_decay,
     )
 
-    #loss_fn = nn.MSELoss() #MSE Used in baseline
-    loss_fn = nn.SmoothL1Loss(beta=1)
+    loss_fn = nn.MSELoss() #MSE Used in baseline
+    #loss_fn = nn.SmoothL1Loss(beta=1)
 
     history = {
         "train_loss": [],
