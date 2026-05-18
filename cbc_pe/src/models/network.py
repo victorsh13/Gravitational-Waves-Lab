@@ -235,6 +235,7 @@ class SimpleCNN_Pool(nn.Module):
             embedding_dim=32,
             dropout_conv=0.05,
             dropout_dense=0.1,
+            pool_size=4,
             ):
         
         super().__init__()
@@ -274,10 +275,10 @@ class SimpleCNN_Pool(nn.Module):
         )
 
         # Global Poolingg
-        self.pool = nn.AdaptiveAvgPool1d(4)
+        self.pool = nn.AdaptiveAvgPool1d(pool_size)
 
         self.embedding_layer = nn.Sequential(
-            nn.Linear(128 * 4, 128),
+            nn.Linear(128 * pool_size, 128),
             nn.LeakyReLU(negative_slope=0.1),
             nn.Dropout(p=dropout_dense),
 
