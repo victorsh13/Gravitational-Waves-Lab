@@ -32,7 +32,7 @@
   },
 
   "outputs": {
-    "checkpoint_tag": "pool4_emb64_mse",
+    "checkpoint_tag": "pool4_emb64",
     "save_predictions": true
   }
 }

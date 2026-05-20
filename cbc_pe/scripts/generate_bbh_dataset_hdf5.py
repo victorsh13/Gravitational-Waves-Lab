@@ -2,21 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+import os
 import argparse
 import time
 import json
+from typing import Any
+
 import numpy as np
 import h5py
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT))
-
-from src.config import SimulationConfig
-from src.dataset import DatasetBuilder
-
-
-DETECTOR_NAMES = ["H1", "L1", "V1"]
-LABEL_NAMES = ["chirp_mass", "total_mass", "chi_eff"]
 
 PARAMETER_KEYS = [
     "mass_1",
@@ -33,61 +27,93 @@ PARAMETER_KEYS = [
     "chi_eff",
 ]
 
+LABEL_NAMES = ["chirp_mass", "total_mass", "chi_eff"]
+
 
 def parse_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Generate CBC BBH dataset directly into HDF5."
+    )
 
-    parser.add_argument("--num-samples", type=int, required=True)
-    parser.add_argument("--chunk-size", type=int, default=2500)
-    parser.add_argument("--seed", type=int, default=1234)
-    parser.add_argument("--output-file", type=str, required=True)
+    parser.add_argument(
+        "--config",
+        type=Path,
+        required=True,
+        help="Path to generation JSON config.",
+    )
 
-    parser.add_argument("--overwrite", action="store_true")
-    parser.add_argument("--resume", action="store_true")
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Override config and overwrite existing HDF5 file.",
+    )
 
-    parser.add_argument("--progress-every", type=int, default=100)
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Override config and resume existing HDF5 file.",
+    )
 
     return parser.parse_args()
 
 
-def build_config() -> SimulationConfig:
+def load_json(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        raise FileNotFoundError(f"Config file not found: {path}")
+
+    with path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_json(obj: dict[str, Any], path: Path):
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(obj, f, indent=2, ensure_ascii=False)
+
+
+def get_required(d: dict[str, Any], key: str):
+    if key not in d:
+        raise KeyError(f"Missing required config key: {key}")
+    return d[key]
+
+
+def resolve_path(base: Path, value: str | Path) -> Path:
+    path = Path(value)
+
+    if path.is_absolute():
+        return path
+
+    return base / path
+
+
+def build_simulation_config(sim_cfg: dict[str, Any]):
+    from src.config import SimulationConfig
+
     return SimulationConfig(
-        duration=4.0,
-        safe_margin_start=0.0,
-        safe_margin_end=0.0,
-        processing_context_start_samples=1664,
-        processing_context_end_samples=1664,
+        duration=float(sim_cfg.get("duration", 4.0)),
+        safe_margin_start=float(sim_cfg.get("safe_margin_start", 0.0)),
+        safe_margin_end=float(sim_cfg.get("safe_margin_end", 0.0)),
+        processing_context_start_samples=int(
+            sim_cfg.get("processing_context_start_samples", 1664)
+        ),
+        processing_context_end_samples=int(
+            sim_cfg.get("processing_context_end_samples", 1664)
+        ),
     )
 
 
-def build_builder(config: SimulationConfig, rng: np.random.Generator) -> DatasetBuilder:
+def build_builder(config, detector_names, signal_processor_kwargs, label_transformer_kwargs, rng):
+    from src.dataset import DatasetBuilder
+
     return DatasetBuilder.from_config(
         config=config,
-        detector_names=DETECTOR_NAMES,
-        signal_processor_kwargs={
-            "whitening_method": "psd",
-            "apply_highpass": True,
-            "apply_lowpass": True,
-            "apply_standardization": False,
-            "output_mode": "crop_to_config",
-
-            "whitening_low_frequency_cutoff": 30.0,
-            "whitening_max_filter_duration": 0.5,
-            "whitening_trunc_method": "hann",
-
-            "highpass_frequency": 30.0,
-            "lowpass_frequency": 512.0,
-
-            "fir_order": 256,
-            "fir_beta": 5.0,
-            "remove_corrupted": True,
-        },
-        label_transformer_kwargs={},
+        detector_names=detector_names,
+        signal_processor_kwargs=signal_processor_kwargs,
+        label_transformer_kwargs=label_transformer_kwargs,
         rng=rng,
     )
 
 
-def parameter_to_dict(p) -> dict:
+def parameter_to_dict(p) -> dict[str, float]:
     return {
         "mass_1": float(p.mass_1),
         "mass_2": float(p.mass_2),
@@ -122,22 +148,27 @@ def get_nested(d: dict, keys: list[str], default=np.nan):
 def create_hdf5_file(
     path: Path,
     num_samples: int,
-    config: SimulationConfig,
-    chunk_size: int,
-    seed: int,
-    overwrite: bool = False,
+    config,
+    detector_names: list[str],
+    generation_cfg: dict[str, Any],
+    signal_processor_cfg: dict[str, Any],
+    overwrite: bool,
 ):
     if path.exists():
         if not overwrite:
             raise FileExistsError(
                 f"File already exists: {path}. "
-                "Use --overwrite to replace it or --resume to continue."
+                "Use --overwrite or set output.overwrite=true, "
+                "or use --resume to continue."
             )
         path.unlink()
 
     path.parent.mkdir(parents=True, exist_ok=True)
 
     f = h5py.File(path, "w")
+
+    chunk_size = int(generation_cfg["chunk_size"])
+    seed = int(generation_cfg["seed"])
 
     f.attrs["num_samples"] = int(num_samples)
     f.attrs["num_written"] = int(0)
@@ -146,7 +177,7 @@ def create_hdf5_file(
     f.attrs["seed"] = int(seed)
     f.attrs["chunk_size"] = int(chunk_size)
 
-    f.attrs["detector_names"] = json.dumps(DETECTOR_NAMES)
+    f.attrs["detector_names"] = json.dumps(detector_names)
     f.attrs["label_names"] = json.dumps(LABEL_NAMES)
 
     f.attrs["duration"] = float(config.duration)
@@ -154,18 +185,28 @@ def create_hdf5_file(
     f.attrs["sampling_frequency"] = float(config.sampling_frequency)
     f.attrs["low_frequency_cutoff"] = float(config.low_frequency_cutoff)
 
-    f.attrs["processing_context_start_samples"] = int(config.processing_context_start_samples)
-    f.attrs["processing_context_end_samples"] = int(config.processing_context_end_samples)
+    f.attrs["processing_context_start_samples"] = int(
+        config.processing_context_start_samples
+    )
+    f.attrs["processing_context_end_samples"] = int(
+        config.processing_context_end_samples
+    )
     f.attrs["processing_length"] = int(config.processing_length)
+
+    f.attrs["placement_policy"] = str(generation_cfg.get("placement_policy", "random_contained"))
+    f.attrs["standardize_labels"] = bool(generation_cfg.get("standardize_labels", False))
+
+    # Store processor config as JSON string in attrs.
+    f.attrs["signal_processor_config"] = json.dumps(signal_processor_cfg)
 
     x_chunk_n = min(64, num_samples)
     scalar_chunk_n = min(4096, num_samples)
 
     f.create_dataset(
         "X",
-        shape=(num_samples, len(DETECTOR_NAMES), config.length),
+        shape=(num_samples, len(detector_names), config.length),
         dtype="float32",
-        chunks=(x_chunk_n, len(DETECTOR_NAMES), config.length),
+        chunks=(x_chunk_n, len(detector_names), config.length),
     )
 
     f.create_dataset(
@@ -194,7 +235,7 @@ def create_hdf5_file(
         chunks=(scalar_chunk_n,),
     )
 
-    for det in DETECTOR_NAMES:
+    for det in detector_names:
         snr_group.create_dataset(
             det,
             shape=(num_samples,),
@@ -231,12 +272,16 @@ def create_hdf5_file(
 def open_or_create_hdf5(
     path: Path,
     num_samples: int,
-    config: SimulationConfig,
-    chunk_size: int,
-    seed: int,
+    config,
+    detector_names: list[str],
+    generation_cfg: dict[str, Any],
+    signal_processor_cfg: dict[str, Any],
     overwrite: bool,
     resume: bool,
 ):
+    if overwrite and resume:
+        raise ValueError("Use either overwrite or resume, not both.")
+
     if resume:
         if not path.exists():
             raise FileNotFoundError(f"Cannot resume. File does not exist: {path}")
@@ -244,6 +289,7 @@ def open_or_create_hdf5(
         f = h5py.File(path, "r+")
 
         existing_num_samples = int(f.attrs["num_samples"])
+
         if existing_num_samples != num_samples:
             f.close()
             raise ValueError(
@@ -251,8 +297,12 @@ def open_or_create_hdf5(
                 f"but requested num_samples={num_samples}."
             )
 
+        status = f.attrs.get("dataset_status", "unknown")
+        num_written = int(f.attrs.get("num_written", 0))
+
         print(f"Resuming existing HDF5 file: {path}")
-        print(f"num_written = {int(f.attrs['num_written'])}")
+        print(f"dataset_status: {status}")
+        print(f"num_written: {num_written}")
 
         return f
 
@@ -260,8 +310,9 @@ def open_or_create_hdf5(
         path=path,
         num_samples=num_samples,
         config=config,
-        chunk_size=chunk_size,
-        seed=seed,
+        detector_names=detector_names,
+        generation_cfg=generation_cfg,
+        signal_processor_cfg=signal_processor_cfg,
         overwrite=overwrite,
     )
 
@@ -273,6 +324,7 @@ def write_batch_to_hdf5(
     end: int,
     chunk_id: int,
     chunk_seed: int,
+    detector_names: list[str],
 ):
     expected_n = end - start
 
@@ -308,7 +360,7 @@ def write_batch_to_hdf5(
     )
     f["snr/network"][start:end] = network_snr
 
-    for det in DETECTOR_NAMES:
+    for det in detector_names:
         det_snr = np.asarray(
             [get_nested(m, ["snr", "final_detector_snrs", det]) for m in metadata],
             dtype=np.float32,
@@ -324,8 +376,8 @@ def write_batch_to_hdf5(
 
 def save_sidecar_metadata_json(
     output_file: Path,
-    args,
-    config: SimulationConfig,
+    generation_config_path: Path,
+    full_config: dict[str, Any],
     status: str,
 ):
     metadata_file = output_file.with_suffix(".metadata.json")
@@ -334,78 +386,120 @@ def save_sidecar_metadata_json(
         "dataset_file": output_file.name,
         "format": "hdf5",
         "status": status,
-        "num_samples": int(args.num_samples),
-        "chunk_size": int(args.chunk_size),
-        "seed": int(args.seed),
-        "detector_names": DETECTOR_NAMES,
-        "label_names": LABEL_NAMES,
-        "simulation": {
-            "duration": float(config.duration),
-            "length": int(config.length),
-            "sampling_frequency": float(config.sampling_frequency),
-            "low_frequency_cutoff": float(config.low_frequency_cutoff),
-            "processing_context_start_samples": int(config.processing_context_start_samples),
-            "processing_context_end_samples": int(config.processing_context_end_samples),
-            "processing_length": int(config.processing_length),
-        },
+        "generation_config_file": str(generation_config_path),
+        "config": full_config,
         "notes": (
             "Large dataset stored in HDF5. "
             "Per-sample numerical metadata is stored as HDF5 datasets."
         ),
     }
 
-    with metadata_file.open("w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, ensure_ascii=False)
+    save_json(payload, metadata_file)
 
     print(f"Saved sidecar metadata to: {metadata_file}")
 
 
 def main():
     args = parse_args()
+    cfg = load_json(args.config)
 
-    if args.overwrite and args.resume:
-        raise ValueError("Use either --overwrite or --resume, not both.")
+    project_root = Path(get_required(cfg, "project_root"))
+    data_root = Path(get_required(cfg, "data_root"))
 
-    config = build_config()
-    output_file = Path(args.output_file)
+    if not project_root.exists():
+        raise FileNotFoundError(f"project_root does not exist: {project_root}")
 
+    os.chdir(project_root)
+
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+
+    output_cfg = get_required(cfg, "output")
+    generation_cfg = get_required(cfg, "generation")
+    simulation_cfg = get_required(cfg, "simulation")
+    detector_names = get_required(cfg, "detectors")
+    signal_processor_cfg = get_required(cfg, "signal_processor")
+    label_transformer_cfg = cfg.get("label_transformer", {})
+
+    output_file = resolve_path(data_root / "processed", get_required(output_cfg, "file_name"))
+
+    # CLI overrides config.
+    overwrite = bool(args.overwrite or output_cfg.get("overwrite", False))
+    resume = bool(args.resume or output_cfg.get("resume", False))
+
+    if overwrite and resume:
+        raise ValueError("Cannot use overwrite and resume at the same time.")
+
+    num_samples = int(get_required(generation_cfg, "num_samples"))
+    chunk_size = int(generation_cfg.get("chunk_size", 2500))
+    seed = int(generation_cfg.get("seed", 1234))
+    progress_every = int(generation_cfg.get("progress_every", 100))
+    placement_policy = str(generation_cfg.get("placement_policy", "random_contained"))
+    standardize_labels = bool(generation_cfg.get("standardize_labels", False))
+
+    generation_cfg["chunk_size"] = chunk_size
+    generation_cfg["seed"] = seed
+
+    print("=" * 80)
     print("Generating directly to HDF5")
-    print(f"Output file: {output_file}")
-    print(f"Total samples: {args.num_samples}")
-    print(f"Chunk size: {args.chunk_size}")
-    print(f"Seed: {args.seed}")
+    print("=" * 80)
+    print("config:", args.config)
+    print("project_root:", project_root)
+    print("data_root:", data_root)
+    print("output_file:", output_file)
+    print("num_samples:", num_samples)
+    print("chunk_size:", chunk_size)
+    print("seed:", seed)
+    print("overwrite:", overwrite)
+    print("resume:", resume)
+    print("detectors:", detector_names)
 
-    total_chunks = int(np.ceil(args.num_samples / args.chunk_size))
+    config = build_simulation_config(simulation_cfg)
+
+    print()
+    print("Simulation")
+    print("duration:", config.duration)
+    print("length:", config.length)
+    print("processing_length:", config.processing_length)
+    print("context start:", config.processing_context_start_samples)
+    print("context end:", config.processing_context_end_samples)
+
+    total_chunks = int(np.ceil(num_samples / chunk_size))
 
     h5 = open_or_create_hdf5(
         path=output_file,
-        num_samples=args.num_samples,
+        num_samples=num_samples,
         config=config,
-        chunk_size=args.chunk_size,
-        seed=args.seed,
-        overwrite=args.overwrite,
-        resume=args.resume,
+        detector_names=detector_names,
+        generation_cfg=generation_cfg,
+        signal_processor_cfg=signal_processor_cfg,
+        overwrite=overwrite,
+        resume=resume,
     )
 
     global_t0 = time.perf_counter()
+    status = "failed_or_interrupted"
 
     try:
         num_written = int(h5.attrs["num_written"])
-        start_chunk = num_written // args.chunk_size
 
-        if num_written % args.chunk_size != 0 and num_written != args.num_samples:
+        if num_written % chunk_size != 0 and num_written != num_samples:
             raise ValueError(
                 f"Cannot resume cleanly from num_written={num_written}. "
                 "Expected it to be a multiple of chunk_size."
             )
 
+        start_chunk = num_written // chunk_size
+
+        print()
+        print(f"Total chunks: {total_chunks}")
         print(f"Starting from chunk {start_chunk + 1}/{total_chunks}")
 
         for chunk_id in range(start_chunk, total_chunks):
-            start = chunk_id * args.chunk_size
-            end = min(start + args.chunk_size, args.num_samples)
+            start = chunk_id * chunk_size
+            end = min(start + chunk_size, num_samples)
             current_size = end - start
-            chunk_seed = args.seed + chunk_id
+            chunk_seed = seed + chunk_id
 
             print()
             print("=" * 80)
@@ -415,15 +509,21 @@ def main():
             print("=" * 80)
 
             rng = np.random.default_rng(chunk_seed)
-            builder = build_builder(config=config, rng=rng)
+            builder = build_builder(
+                config=config,
+                detector_names=detector_names,
+                signal_processor_kwargs=signal_processor_cfg,
+                label_transformer_kwargs=label_transformer_cfg,
+                rng=rng,
+            )
 
             t0 = time.perf_counter()
 
             batch = builder.build_dataset(
                 num_samples=current_size,
-                standardize_labels=False,
-                placement_policy="random_contained",
-                progress_every=args.progress_every,
+                standardize_labels=standardize_labels,
+                placement_policy=placement_policy,
+                progress_every=progress_every,
             )
 
             gen_elapsed = time.perf_counter() - t0
@@ -437,6 +537,7 @@ def main():
                 end=end,
                 chunk_id=chunk_id,
                 chunk_seed=chunk_seed,
+                detector_names=detector_names,
             )
 
             h5.flush()
@@ -445,6 +546,7 @@ def main():
 
             print(f"Chunk generation time: {gen_elapsed:.1f} s")
             print(f"Chunk total time: {elapsed:.1f} s")
+            print(f"Seconds/sample: {elapsed / current_size:.4f}")
             print(f"Samples/s: {current_size / elapsed:.2f}")
             print(f"num_written: {int(h5.attrs['num_written'])}")
 
@@ -453,26 +555,25 @@ def main():
 
         h5.attrs["dataset_status"] = "complete"
         h5.flush()
-
-    except Exception:
-        h5.attrs["dataset_status"] = "failed_or_interrupted"
-        h5.flush()
-        raise
+        status = "complete"
 
     finally:
         h5.close()
 
+        save_sidecar_metadata_json(
+            output_file=output_file,
+            generation_config_path=args.config,
+            full_config=cfg,
+            status=status,
+        )
+
     global_elapsed = time.perf_counter() - global_t0
 
-    save_sidecar_metadata_json(
-        output_file=output_file,
-        args=args,
-        config=config,
-        status="complete",
-    )
-
     print()
-    print("Finished.")
+    print("=" * 80)
+    print("Finished")
+    print("=" * 80)
+    print(f"status: {status}")
     print(f"Total elapsed: {global_elapsed:.1f} s")
     print(f"Saved to: {output_file}")
 
