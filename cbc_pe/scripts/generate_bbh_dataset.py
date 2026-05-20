@@ -1,3 +1,4 @@
+from __future__ import annotations
 # scripts/generate_bbh_dataset.py
 
 from pathlib import Path
