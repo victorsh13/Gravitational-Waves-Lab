@@ -1,7 +1,7 @@
-#!/usr/bin/env bash
+!/usr/bin/env bash
 set -euo pipefail
 
-LOCAL_DIR="/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/data/"
+LOCAL_DIR="/scratch/vserrano/cbc_pe_data/"
 REMOTE_HOST="ciemat-pcaecuda2"
 REMOTE_DIR="/data/vserrano/cbc_pe_data/"
 

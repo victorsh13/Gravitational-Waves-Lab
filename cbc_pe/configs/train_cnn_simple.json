@@ -3,10 +3,10 @@
   "data_root": "/data/vserrano/cbc_pe_data",
 
   "dataset": {
-    "dataset_id": "bbh_processed_4s_seobnrv4opt_snr10-25_n15000",
-    "dataset_file": "bbh_processed_4s_seobnrv4opt_snr10-25_n15000.h5",
-    "split_file": "bbh_processed_4s_seobnrv4opt_snr10-25_n15000_splits_train12000_val3000_seed123.npz",
-    "label_stats_file": "bbh_processed_4s_seobnrv4opt_snr10-25_n15000_label_stats_train_only_train12000_val3000_seed123.npz"
+    "dataset_id": "bbh_processed_4s_seobnrv4opt_snr10-25_n100_000",
+    "dataset_file": "bbh_processed_4s_seobnrv4opt_snr10-25_n100_000.h5",
+    "split_file": "bbh_processed_4s_seobnrv4opt_snr10-25_n100_000_splits_train80000_val20000_seed123.npz",
+    "label_stats_file": "bbh_processed_4s_seobnrv4opt_snr10-25_n100_000_label_stats_train_only_train80000_val20000_seed123.npz"
   },
 
   "model": {

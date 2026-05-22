@@ -4,7 +4,7 @@ set -euo pipefail
 REMOTE_HOST="pcaecuda2.ciemat.es"
 REMOTE_PORT="822"
 REMOTE_DIR="/data/vserrano/cbc_pe_data/"
-LOCAL_DIR="/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/data/"
+LOCAL_DIR="/scratch/vserrano/cbc_pe_data/"
 
 EXTRA_ARGS=()
 

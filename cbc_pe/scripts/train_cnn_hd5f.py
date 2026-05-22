@@ -216,8 +216,12 @@ def main():
     print("=" * 80)
 
     splits = np.load(split_path)
+
     train_idx = splits["train_idx"].astype(np.int64)
     val_idx = splits["val_idx"].astype(np.int64)
+
+    cal_idx = splits["cal_idx"].astype(np.int64) if "cal_idx" in splits.files else None
+    test_idx = splits["test_idx"].astype(np.int64) if "test_idx" in splits.files else None
 
     stats = np.load(label_stats_path)
     y_mean = stats["y_mean"].astype(np.float32)
@@ -228,8 +232,11 @@ def main():
     else:
         label_names = ["chirp_mass", "total_mass", "chi_eff"]
 
+    
     print("train size:", len(train_idx))
     print("val size:", len(val_idx))
+    print("cal size:", 0 if cal_idx is None else len(cal_idx))
+    print("test size:", 0 if test_idx is None else len(test_idx))
     print("label_names:", label_names)
     print("y_mean:", y_mean)
     print("y_std:", y_std)
@@ -237,9 +244,27 @@ def main():
     if np.any(y_std <= 0):
         raise ValueError(f"Invalid y_std values: {y_std}")
 
-    overlap = np.intersect1d(train_idx, val_idx)
-    if len(overlap) > 0:
-        raise ValueError(f"Train/val overlap detected: {len(overlap)} samples")
+    split_dict = {
+        "train": train_idx,
+        "val": val_idx,
+    }
+
+    if cal_idx is not None:
+        split_dict["cal"] = cal_idx
+
+    if test_idx is not None:
+        split_dict["test"] = test_idx
+
+    split_names = list(split_dict.keys())
+
+    for i, name_a in enumerate(split_names):
+        for name_b in split_names[i + 1:]:
+            overlap = np.intersect1d(split_dict[name_a], split_dict[name_b])
+            if len(overlap) > 0:
+                raise ValueError(
+                    f"Overlap detected between {name_a} and {name_b}: "
+                    f"{len(overlap)} samples"
+                )
 
     print()
     print("=" * 80)
@@ -259,6 +284,25 @@ def main():
         y_mean=y_mean,
         y_std=y_std,
     )
+
+    cal_dataset = None
+    test_dataset = None
+
+    if cal_idx is not None:
+        cal_dataset = HDF5RegressionDataset(
+            h5_path=dataset_path,
+            indices=cal_idx,
+            y_mean=y_mean,
+            y_std=y_std,
+        )
+
+    if test_idx is not None:
+        test_dataset = HDF5RegressionDataset(
+            h5_path=dataset_path,
+            indices=test_idx,
+            y_mean=y_mean,
+            y_std=y_std,
+        )
 
     batch_size = int(training_cfg.get("batch_size", 64))
     num_workers = int(training_cfg.get("num_workers", 0))
@@ -340,6 +384,9 @@ def main():
         "loss": training_cfg.get("loss", "MSELoss"),
         "train_size": len(train_idx),
         "val_size": len(val_idx),
+        "cal_size": 0 if cal_idx is None else len(cal_idx),
+        "test_size": 0 if test_idx is None else len(test_idx),
+        "split_seed": seed,
         "split_seed": seed,
     }
 
@@ -411,56 +458,107 @@ def main():
         print("Extracting predictions and embeddings")
         print("=" * 80)
 
-        train_loader_eval = DataLoader(
-            train_dataset,
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=num_workers,
-            pin_memory=pin_memory,
-        )
+        def predict_split(split_name, dataset):
+            loader = DataLoader(
+                dataset,
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=num_workers,
+                pin_memory=pin_memory,
+            )
 
-        pred_train, emb_train, y_train_eval = extract_predictions_and_embeddings(
-            model,
-            train_loader_eval,
-            device,
-        )
+            print(f"Predicting split: {split_name}")
 
-        pred_val, emb_val, y_val_eval = extract_predictions_and_embeddings(
-            model,
-            val_loader,
-            device,
-        )
+            pred, emb, y_eval = extract_predictions_and_embeddings(
+                model,
+                loader,
+                device,
+            )
+
+            print(f"  pred_{split_name}: {pred.shape}")
+            print(f"  emb_{split_name}:  {emb.shape}")
+            print(f"  y_{split_name}:    {y_eval.shape}")
+
+            return pred, emb, y_eval
+
+        save_payload = {
+            "y_mean": y_mean,
+            "y_std": y_std,
+            "label_names": np.array(label_names),
+
+            "checkpoint_file": checkpoint_file_name,
+            "dataset_path": str(dataset_path),
+            "split_path": str(split_path),
+            "label_stats_path": str(label_stats_path),
+
+            "model_config": np.array(full_model_config, dtype=object),
+        }
+
+        pred_train, emb_train, y_train_eval = predict_split("train", train_dataset)
+        save_payload.update({
+            "pred_train": pred_train,
+            "emb_train": emb_train,
+            "y_train": y_train_eval,
+            "idx_train": train_idx,
+        })
+
+        pred_val, emb_val, y_val_eval = predict_split("val", val_dataset)
+        save_payload.update({
+            "pred_val": pred_val,
+            "emb_val": emb_val,
+            "y_val": y_val_eval,
+            "idx_val": val_idx,
+        })
+
+        if cal_dataset is not None:
+            pred_cal, emb_cal, y_cal_eval = predict_split("cal", cal_dataset)
+            save_payload.update({
+                "pred_cal": pred_cal,
+                "emb_cal": emb_cal,
+                "y_cal": y_cal_eval,
+                "idx_cal": cal_idx,
+            })
+
+        if test_dataset is not None:
+            pred_test, emb_test, y_test_eval = predict_split("test", test_dataset)
+            save_payload.update({
+                "pred_test": pred_test,
+                "emb_test": emb_test,
+                "y_test": y_test_eval,
+                "idx_test": test_idx,
+            })
+
+        available_splits = ["train", "val"]
+
+        if cal_dataset is not None:
+            available_splits.append("cal")
+
+        if test_dataset is not None:
+            available_splits.append("test")
+
+        save_payload["available_splits"] = np.array(available_splits)
+
+        suffix = "_".join(available_splits)
 
         pred_file_name = checkpoint_file_name.replace(
             "_checkpoint.pt",
-            "_train_val_predictions_embeddings.npz",
+            f"_{suffix}_predictions_embeddings.npz",
         )
 
         pred_path = results_dir / pred_file_name
 
-        np.savez_compressed(
-            pred_path,
-            pred_train=pred_train,
-            emb_train=emb_train,
-            y_train=y_train_eval,
-            pred_val=pred_val,
-            emb_val=emb_val,
-            y_val=y_val_eval,
-            y_mean=y_mean,
-            y_std=y_std,
-            train_idx=train_idx,
-            val_idx=val_idx,
-            label_names=np.array(label_names),
-            checkpoint_file=checkpoint_file_name,
-            dataset_path=str(dataset_path),
-            split_path=str(split_path),
-            label_stats_path=str(label_stats_path),
-        )
+        np.savez_compressed(pred_path, **save_payload)
 
         print("Saved predictions/embeddings:", pred_path)
 
     train_dataset.close()
     val_dataset.close()
+
+    if cal_dataset is not None:
+        cal_dataset.close()
+
+    if test_dataset is not None:
+        test_dataset.close()
 
     print()
     print("=" * 80)

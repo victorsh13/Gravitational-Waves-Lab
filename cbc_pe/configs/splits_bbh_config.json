@@ -1,15 +1,15 @@
 {
-  "project_root": "/data/vserrano/gw/Gravitational-Waves-Lab/cbc_pe",
-  "data_root": "/data/vserrano/cbc_pe_data",
+  "project_root": "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe",
+  "data_root": "/scratch/vserrano/cbc_pe_data",
 
   "dataset": {
-    "dataset_id": "bbh_4s_seobnrv4opt_snr10-25_n15000",
-    "dataset_file": "bbh_4s_seobnrv4opt_snr10-25_n15000.h5"
+    "dataset_id": "bbh_processed_4s_seobnrv4opt_snr10-25_n100_000",
+    "dataset_file": "bbh_processed_4s_seobnrv4opt_snr10-25_n100_000.h5"
   },
 
   "splits": {
-    "train_size": 12000,
-    "val_size": 3000,
+    "train_size": 80000,
+    "val_size": 20000,
     "cal_size": 0,
     "test_size": 0,
     "seed": 123,
@@ -18,7 +18,7 @@
 
   "output": {
     "output_dir": "processed",
-    "prefix": "bbh_4s_seobnrv4opt_snr10-25_n15000",
+    "prefix": "bbh_processed_4s_seobnrv4opt_snr10-25_n100_000",
     "overwrite": true
   }
 }
