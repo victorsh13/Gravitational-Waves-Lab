@@ -46,30 +46,56 @@ The `cbc_pe/data/` directory is ignored by Git.
 
 ## 2. Create dataset splits
 
-Train, validation, calibration, and test splits are created using:
-
 Dataset splits are created using:
 
 ```bash
 python cbc_pe/scripts/create_hdf5_splits.py --config cbc_pe/configs/splits_bbh_config.json
 ```
 
-The current default split config is intended for CNN training and validation.
-
-At the moment, splits_bbh_config.json uses
-
-train = 80000
-validation = 20000
-calibration = 0
-test = 0
-
-This is enough for training and validating CNN models, but it is not enough for final Mondrian conformal evaluation.
-
-For final conformal analysis, a separate split config with non-zero calibration and test sets should be created. The split script supports calibration and test sets when cal_size and test_size are set in the config.
+The script also supports:
 
 ```bash
 python cbc_pe/scripts/create_hdf5_splits.py --config cbc_pe/configs/splits_bbh_config.json --overwrite
 ```
+
+### Current architecture-selection split
+
+During the current CNN architecture-selection phase, the default split is:
+
+```text
+train = 80000
+validation = 20000
+calibration = 0
+test = 0
+```
+
+This corresponds to an 80/20 train/validation split on the 100k dataset.
+
+This split is useful for comparing CNN architectures, losses, pooling strategies, embedding dimensions, and training settings.
+
+However, this split is not sufficient for final Mondrian conformal evaluation because it does not include separate calibration and test sets.
+
+### Final conformal split
+
+Once the CNN architecture is selected, the intended final split is:
+
+```text
+train = 70%
+validation = 10%
+calibration = 10%
+test = 10%
+```
+
+For a 100k dataset, this would correspond to:
+
+```text
+train = 70000
+validation = 10000
+calibration = 10000
+test = 10000
+```
+
+For larger datasets, such as 500k or 1M samples, the same 70/10/10/10 logic can be used.
 
 The intended role of each split is:
 
@@ -78,8 +104,7 @@ The intended role of each split is:
 - `calibration`: used to calibrate conformal intervals
 - `test`: used only for final evaluation
 
-The calibration and test sets should not be used during CNN training.
-
+The calibration and test sets should not be used during CNN training or architecture selection.
 ## 3. Train CNN models
 
 CNN models are trained using:
