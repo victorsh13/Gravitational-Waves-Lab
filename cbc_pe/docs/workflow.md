@@ -48,11 +48,24 @@ The `cbc_pe/data/` directory is ignored by Git.
 
 Train, validation, calibration, and test splits are created using:
 
+Dataset splits are created using:
+
 ```bash
 python cbc_pe/scripts/create_hdf5_splits.py --config cbc_pe/configs/splits_bbh_config.json
 ```
 
-The script also supports:
+The current default split config is intended for CNN training and validation.
+
+At the moment, splits_bbh_config.json uses
+
+train = 80000
+validation = 20000
+calibration = 0
+test = 0
+
+This is enough for training and validating CNN models, but it is not enough for final Mondrian conformal evaluation.
+
+For final conformal analysis, a separate split config with non-zero calibration and test sets should be created. The split script supports calibration and test sets when cal_size and test_size are set in the config.
 
 ```bash
 python cbc_pe/scripts/create_hdf5_splits.py --config cbc_pe/configs/splits_bbh_config.json --overwrite
