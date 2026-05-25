@@ -89,6 +89,7 @@ Current visible notebooks:
 
 ```text
 notebooks/01_signal_generation_demo.ipynb
+notebooks/02_cnn_training_hdf5_demo.ipynb
 notebooks/03_cnn_evaluation_hdf5_demo.ipynb
 notebooks/04_mondrian_hdf5_demo.ipynb
 ```
@@ -96,6 +97,7 @@ notebooks/04_mondrian_hdf5_demo.ipynb
 Notebook roles:
 
 01_signal_generation_demo.ipynb: visual and numerical sanity checks for generated BBH signals.
+02_cnn_training_hdf5_demo.ipynb: lightweight inspection of HDF5 training configs, dataset shapes, splits, label statistics, loaders, and model construction.
 03_cnn_evaluation_hdf5_demo.ipynb: CNN prediction diagnostics using HDF5-based training outputs.
 04_mondrian_hdf5_demo.ipynb: Mondrian conformal analysis using saved predictions, labels, and embeddings.
 
