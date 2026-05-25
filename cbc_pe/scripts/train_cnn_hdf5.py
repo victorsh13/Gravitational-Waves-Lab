@@ -386,8 +386,8 @@ def main():
         "val_size": len(val_idx),
         "cal_size": 0 if cal_idx is None else len(cal_idx),
         "test_size": 0 if test_idx is None else len(test_idx),
-        "split_seed": seed,
-        "split_seed": seed,
+        "training_seed": seed,
+        "split_seed": int(splits["seed"]) if "seed" in splits.files else None, 
     }
 
     print()
