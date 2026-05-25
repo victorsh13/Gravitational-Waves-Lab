@@ -1,26 +1,46 @@
-# Data
-cbc_pe/data/
-*.npz
-
-# Models / checkpoints
-cbc_pe/models/
-*.pt
-*.pth
-*.ckpt
-
-# Python cache
+# Python
 __pycache__/
-*.pyc
-
-# Notebook checkpoints
+*.py[cod]
 .ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+.vscode/
+*.Zone.Identifier
 
 # Environments
 pycbc-env/
 .venv/
+env/
+venv/
 
-#To keep the data folder but not the data files, use
-cbc_pe/data/*
+# Data: keep folder structure, ignore contents
+cbc_pe/data/**
+!cbc_pe/data/
 !cbc_pe/data/.gitkeep
+!cbc_pe/data/raw/
 !cbc_pe/data/raw/.gitkeep
+!cbc_pe/data/processed/
 !cbc_pe/data/processed/.gitkeep
+!cbc_pe/data/debug/
+!cbc_pe/data/debug/.gitkeep
+!cbc_pe/data/models/
+!cbc_pe/data/models/.gitkeep
+!cbc_pe/data/results/
+!cbc_pe/data/results/.gitkeep
+
+# Local outputs / generated artifacts
+cbc_pe/outputs/
+cbc_pe/runs/
+cbc_pe/logs/
+cbc_pe/figures/
+
+# Heavy artifacts anywhere
+*.npz
+*.h5
+*.hdf5
+*.pt
+*.pth
+*.ckpt
+*.log
+nohup.out
