@@ -10,8 +10,8 @@
   },
 
   "model": {
-    "class_name": "SimpleCNN",
-    "architecture_name": "SimpleCNN",
+    "class_name": "SimpleCNN_Baseline",
+    "architecture_name": "SimpleCNN_Baseline",
     "kwargs": {
       "embedding_dim": 64,
       "dropout_conv": 0.05,
