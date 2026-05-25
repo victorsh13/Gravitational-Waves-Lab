@@ -89,11 +89,26 @@ Current visible notebooks:
 
 ```text
 notebooks/01_signal_generation_demo.ipynb
-notebooks/02_train_cnn.ipynb
-notebooks/02_train_cnn_v3.ipynb
-notebooks/03_evaluate_cnn.ipynb
-notebooks/03_mondrian.ipynb
+notebooks/03_cnn_evaluation_hdf5_demo.ipynb
 notebooks/04_mondrian_hdf5_demo.ipynb
+```
+
+Notebook roles:
+
+01_signal_generation_demo.ipynb: visual and numerical sanity checks for generated BBH signals.
+03_cnn_evaluation_hdf5_demo.ipynb: CNN prediction diagnostics using HDF5-based training outputs.
+04_mondrian_hdf5_demo.ipynb: Mondrian conformal analysis using saved predictions, labels, and embeddings.
+
+CNN training is script-based:
+
+```bash
+python cbc_pe/scripts/train_cnn_hdf5.py --config cbc_pe/configs/train_simpleCNN_baseline.json
+```
+
+A lightweight training-inspection notebook may be added later as:
+
+```bash
+notebooks/02_cnn_training_hdf5_demo.ipynb
 ```
 
 Exploratory or outdated notebooks are archived under:
