@@ -101,7 +101,15 @@ def build_simulation_config(sim_cfg: dict[str, Any]):
     )
 
 
-def build_builder(config, detector_names, signal_processor_kwargs, label_transformer_kwargs, rng):
+def build_builder(
+    config,
+    detector_names,
+    signal_processor_kwargs,
+    label_transformer_kwargs,
+    parameter_sampler_kwargs,
+    rng,
+    ):
+    
     from src.dataset import DatasetBuilder
 
     return DatasetBuilder.from_config(
@@ -109,6 +117,7 @@ def build_builder(config, detector_names, signal_processor_kwargs, label_transfo
         detector_names=detector_names,
         signal_processor_kwargs=signal_processor_kwargs,
         label_transformer_kwargs=label_transformer_kwargs,
+        parameter_sampler_kwargs=parameter_sampler_kwargs,
         rng=rng,
     )
 
@@ -420,6 +429,7 @@ def main():
     detector_names = get_required(cfg, "detectors")
     signal_processor_cfg = get_required(cfg, "signal_processor")
     label_transformer_cfg = cfg.get("label_transformer", {})
+    parameter_sampler_cfg = cfg.get("parameter_sampler", {})
 
     output_file = resolve_path(data_root / "processed", get_required(output_cfg, "file_name"))
 

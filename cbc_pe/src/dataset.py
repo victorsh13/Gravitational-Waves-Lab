@@ -120,6 +120,7 @@ class DatasetBuilder:
         detector_names: list[str] | None = None,
         signal_processor_kwargs: dict | None = None,
         label_transformer_kwargs: dict | None = None,
+        parameter_sampler_kwargs: dict | None = None,
         rng: np.random.Generator | None = None,
     ) -> "DatasetBuilder":
         if detector_names is None:
@@ -133,7 +134,10 @@ class DatasetBuilder:
 
         rng = rng if rng is not None else np.random.default_rng()
 
-        prior_config = cls._prior_config_from_simulation_config(config)
+        prior_config = PriorConfig.from_dict(
+            parameter_sampler_kwargs,
+            default_regime=getattr(config, "simulation_regime", "BBH"),
+        )
 
         parameter_sampler = ParameterSampler(
             rng=rng,
