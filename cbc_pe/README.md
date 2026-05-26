@@ -20,7 +20,7 @@ cbc_pe/
 ├── data/           local datasets and generated artifacts, ignored by Git
 ├── docs/           project documentation
 ├── notebooks/      lightweight demos and analysis notebooks
-├── scripts/        command-line scripts for generation, splits, and training
+├── scripts/        command-line scripts for the HDF5 workflow
 ├── src/            source code
 └── tests/          tests
 ```
@@ -44,6 +44,8 @@ To overwrite an existing output file:
 ```bash
 python cbc_pe/scripts/generate_bbh_dataset_hdf5.py --config cbc_pe/configs/generate_bbh_config.json --overwrite
 ```
+
+Older NPZ-based scripts are kept under `scripts/legacy_npz/` for reference, but the official large-scale workflow is HDF5-based.
 
 ### 2. Create HDF5 splits
 
