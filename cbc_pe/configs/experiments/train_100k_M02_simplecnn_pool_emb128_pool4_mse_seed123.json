@@ -16,7 +16,7 @@
       "embedding_dim": 128,
       "dropout_conv": 0.05,
       "dropout_dense": 0.1,
-      "pool_size": 4
+      "pool_size": 1
     }
   },
 
@@ -32,7 +32,7 @@
   },
 
   "outputs": {
-    "checkpoint_tag": "emb128_pool4",
+    "checkpoint_tag": "M02_emb128_pool1",
     "save_predictions": true
   }
 }
