@@ -6,6 +6,7 @@ Final conformal evaluation will use a separate 70/10/10/10 split after selecting
 
 | Run ID | Config | Model | Embedding dim | Pool size | Loss | Train size | Val size | Best val loss | Notes |
 |---|---|---|---:|---:|---|---:|---:|---:|---|
-| baseline_emb64_mse | train_simpleCNN_baseline.json | SimpleCNN_Baseline | 64 | n/a | MSELoss | 80000 | 20000 | 0.1771 | Baseline architecture |
-| pool1_emb128_mse | train_simpleCNN_pool.json | SimpleCNN_Pool | 128 | 1 | MSELoss | 80000 | 20000 | 0.1785 | Pooling experiment with embedding_dim=128 |
-| M02_pool4_emb128_mse | train_simpleCNN_pool4_emb128.json | SimpleCNN_Pool | 128 | 4 | MSELoss | 80000 | 20000 | 0.1829 | Tests whether retaining coarse temporal structure improves over pool1 |
+| M00_baseline_emb64_mse | train_simpleCNN_baseline.json | SimpleCNN_Baseline | 64 | n/a | MSELoss | 80000 | 20000 | 0.1771 | Best so far; lowest global val MSE and best per-label RMSE |
+| M01_pool1_emb128_mse | train_100k_M01_simplecnn_pool_emb128_pool1_mse_seed123.json | SimpleCNN_Pool | 128 | 1 | MSELoss | 80000 | 20000 | 0.1785 | Larger embedding did not improve; slightly worse than M00 across labels |
+| M02_pool4_emb128_mse | train_100k_M02_simplecnn_pool_emb128_pool4_mse_seed123.json | SimpleCNN_Pool | 128 | 4 | MSELoss | 80000 | 20000 | 0.1829 | Pool4 worsened all labels; no evidence that coarse temporal retention helps yet |
+| M04_pooldeep_emb128_pool4_mse | train_100k_M04_simplecnn_pooldeep_emb128_pool4_mse_seed123.json | SimpleCNN_PoolDeep | 128 | 4 | MSELoss | 80000 | 20000 | running | Tests whether M02 was limited by shallow dense head |
