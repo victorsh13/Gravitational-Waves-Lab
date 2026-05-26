@@ -1,4 +1,4 @@
-!/usr/bin/env bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 LOCAL_DIR="/scratch/vserrano/cbc_pe_data/"

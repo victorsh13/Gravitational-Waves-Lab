@@ -280,7 +280,7 @@ class SimpleCNN_PoolDeep(nn.Module): # Here we used a deeper embedding layer
             dropout=dropout_conv,
         )
 
-        # Global Poolingg
+        # Adaptive average pooling
         self.pool = nn.AdaptiveAvgPool1d(pool_size)
 
         self.embedding_layer = nn.Sequential(
@@ -310,14 +310,14 @@ class SimpleCNN_PoolDeep(nn.Module): # Here we used a deeper embedding layer
         x = self.block3(x)  # (b, 64, ~2048)
         x = self.block4(x)  # (b, 128, ~1024)
 
-        x = self.pool(x)    # (b, 128, 8)
-        x = x.flatten(start_dim=1)  # (b, 128*8) = (b, 1024)
+        x = self.pool(x)    # (b, 128, 4)
+        x = x.flatten(start_dim=1)  # (b, 128*4) = (b, 512)
 
         return x
 
     # EMBEDDING
     def embed(self, x):
-        features = self.encode(x)  # (b, 128)
+        features = self.encode(x)  # (b, 128 * pool_size)
         embedding = self.embedding_layer(features)  # (b, emb_dim)
         return embedding
 

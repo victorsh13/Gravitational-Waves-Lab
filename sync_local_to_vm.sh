@@ -17,7 +17,8 @@ rsync -av --progress --delete "${EXTRA_ARGS[@]}" \
   --exclude "**/__pycache__/" \
   --exclude "**/*.pyc" \
   --exclude ".git/" \
-  --exclude ".venv/" \  --exclude "venv/" \
+  --exclude ".venv/" \
+  --exclude "venv/" \
   --exclude "env/" \
   --exclude "*.npz" \
   --exclude "*.h5" \
