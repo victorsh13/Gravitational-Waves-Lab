@@ -8,3 +8,4 @@ Final conformal evaluation will use a separate 70/10/10/10 split after selecting
 |---|---|---|---:|---:|---|---:|---:|---:|---|
 | baseline_emb64_mse | train_simpleCNN_baseline.json | SimpleCNN_Baseline | 64 | n/a | MSELoss | 80000 | 20000 | 0.1771 | Baseline architecture |
 | pool1_emb128_mse | train_simpleCNN_pool.json | SimpleCNN_Pool | 128 | 1 | MSELoss | 80000 | 20000 | 0.1785 | Pooling experiment with embedding_dim=128 |
+| M02_pool4_emb128_mse | train_simpleCNN_pool4_emb128.json | SimpleCNN_Pool | 128 | 4 | MSELoss | 80000 | 20000 | 0.1829 | Tests whether retaining coarse temporal structure improves over pool1 |
