@@ -524,6 +524,7 @@ def main():
                 detector_names=detector_names,
                 signal_processor_kwargs=signal_processor_cfg,
                 label_transformer_kwargs=label_transformer_cfg,
+                parameter_sampler_kwargs=parameter_sampler_cfg,
                 rng=rng,
             )
 

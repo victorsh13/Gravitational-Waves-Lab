@@ -20,3 +20,5 @@ with h5py.File(path, "r") as f:
     print("chi_eff:", f["parameters/chi_eff"][:])
 
     print("network_snr:", f["snr/network"][:])
+
+
