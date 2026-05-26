@@ -109,11 +109,11 @@ CNN training is script-based:
 python cbc_pe/scripts/train_cnn_hdf5.py --config cbc_pe/configs/train_simpleCNN_baseline.json
 ```
 
-A lightweight training-inspection notebook may be added later as:
+```markdown
+The lightweight training-inspection notebook is:
 
-```bash
+```text
 notebooks/02_cnn_training_hdf5_demo.ipynb
-```
 
 Exploratory or outdated notebooks are archived under:
 
