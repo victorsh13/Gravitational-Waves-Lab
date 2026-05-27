@@ -1,0 +1,37 @@
+{
+  "project_root": "/data/vserrano/gw/Gravitational-Waves-Lab/cbc_pe",
+  "data_root": "/data/vserrano/cbc_pe_data",
+
+  "dataset": {
+    "dataset_id": "bbh_processed_4s_seobnrv4opt_snr10-25_n100_000",
+    "dataset_file": "bbh_processed_4s_seobnrv4opt_snr10-25_n100_000.h5",
+    "split_file": "bbh_processed_4s_seobnrv4opt_snr10-25_n100_000_splits_train80000_val20000_seed123.npz",
+    "label_stats_file": "bbh_processed_4s_seobnrv4opt_snr10-25_n100_000_label_stats_train_only_train80000_val20000_seed123.npz"
+  },
+
+  "model": {
+    "class_name": "SimpleCNN_Baseline",
+    "architecture_name": "SimpleCNN_Baseline",
+    "kwargs": {
+      "embedding_dim": 64,
+      "dropout_conv": 0.05,
+      "dropout_dense": 0.1
+    }
+  },
+
+  "training": {
+    "seed": 125,
+    "batch_size": 64,
+    "max_epochs": 200,
+    "patience": 40,
+    "learning_rate": 0.0003,
+    "weight_decay": 0.0003,
+    "num_workers": 0,
+    "loss": "MSELoss"
+  },
+
+  "outputs": {
+    "checkpoint_tag": "M00_simple_emb64_mse",
+    "save_predictions": true
+  }
+}
