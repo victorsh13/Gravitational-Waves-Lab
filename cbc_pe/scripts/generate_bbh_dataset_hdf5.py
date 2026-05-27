@@ -235,6 +235,35 @@ def create_hdf5_file(
             chunks=(scalar_chunk_n,),
         )
 
+    inj_group = f.create_group("injection")
+
+    for det in detector_names:
+        det_group = inj_group.create_group(det)
+
+        for key in [
+            "signal_start_time",
+            "signal_end_time",
+            "segment_start_time",
+            "segment_end_time",
+            "signal_start_index",
+            "signal_end_index",
+            "n_signal_samples",
+            "n_injected_samples",
+            "n_clipped_before",
+            "n_clipped_after",
+            "is_partially_clipped",
+        ]:
+            dtype = "bool" if key == "is_partially_clipped" else "float64"
+            if key.endswith("_index") or key.startswith("n_"):
+                dtype = "int64"
+
+            det_group.create_dataset(
+                key,
+                shape=(num_samples,),
+                dtype=dtype,
+                chunks=(scalar_chunk_n,),
+            )
+
     snr_group = f.create_group("snr")
 
     snr_group.create_dataset(
@@ -274,6 +303,7 @@ def create_hdf5_file(
         dtype="int64",
         chunks=(scalar_chunk_n,),
     )
+
 
     return f
 
@@ -375,6 +405,15 @@ def write_batch_to_hdf5(
             dtype=np.float32,
         )
         f[f"snr/{det}"][start:end] = det_snr
+
+    for det in detector_names:
+        for i, m in enumerate(metadata):
+            inj = m["injection"][det]
+            row = start + i
+
+            for key, value in inj.items():
+                if f"injection/{det}/{key}" in f:
+                    f[f"injection/{det}/{key}"][row] = value
 
     f["generation/chunk_id"][start:end] = np.full(expected_n, chunk_id, dtype=np.int32)
     f["generation/local_index"][start:end] = np.arange(expected_n, dtype=np.int32)
