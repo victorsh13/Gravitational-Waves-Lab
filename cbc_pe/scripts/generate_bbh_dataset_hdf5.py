@@ -29,6 +29,74 @@ PARAMETER_KEYS = [
 
 LABEL_NAMES = ["chirp_mass", "total_mass", "chi_eff"]
 
+PLACEMENT_KEYS = {
+    "segment_start_time": "float64",
+    "segment_end_time": "float64",
+    "earliest_signal_start_time": "float64",
+    "latest_signal_end_time": "float64",
+    "valid_start_min": "float64",
+    "valid_start_max": "float64",
+    "signal_network_duration": "float64",
+    "safe_margin_start": "float64",
+    "safe_margin_end": "float64",
+    "margin_before_signal": "float64",
+    "margin_after_signal": "float64",
+    "margins_respected": "bool",
+    "enforce_safe_margins": "bool",
+}
+
+WINDOWING_KEYS = {
+    "is_truncated": "bool",
+    "full_network_start_time": "float64",
+    "full_network_end_time": "float64",
+    "full_network_duration": "float64",
+    "used_window_start_time": "float64",
+    "used_window_end_time": "float64",
+    "used_window_duration": "float64",
+    "segment_duration": "float64",
+    "max_window_duration": "float64",
+    "required_final_duration": "float64",
+    "required_available_final_duration": "float64",
+    "seconds_before_network_end_in_window": "float64",
+    "fraction_network_duration_used": "float64",
+}
+
+PROJECTION_NETWORK_KEYS = {
+    "geocentric_coalescence_time": "float64",
+}
+
+PROJECTION_DETECTOR_KEYS = {
+    "expected_detector_time_delays": "float64",
+    "detector_arrival_times": "float64",
+    "projected_start_times": "float64",
+    "projected_end_times": "float64",
+}
+
+SNR_EXTRA_KEYS = {
+    "initial_network": "float32",
+    "target_network": "float32",
+    "snr_rescaled": "bool",
+    "distance_before_rescale": "float32",
+    "distance_after_rescale": "float32",
+}
+
+INJECTION_KEYS = {
+    "signal_start_time": "float64",
+    "signal_end_time": "float64",
+    "segment_start_time": "float64",
+    "segment_end_time": "float64",
+    "signal_start_index": "int64",
+    "signal_end_index": "int64",
+    "overlap_start_index_strain": "int64",
+    "overlap_end_index_strain": "int64",
+    "overlap_start_index_signal": "int64",
+    "overlap_end_index_signal": "int64",
+    "n_signal_samples": "int64",
+    "n_injected_samples": "int64",
+    "n_clipped_before": "int64",
+    "n_clipped_after": "int64",
+    "is_partially_clipped": "bool",
+}
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -154,6 +222,21 @@ def get_nested(d: dict, keys: list[str], default=np.nan):
     return current
 
 
+def get_nested_required(d: dict, keys: list[str]):
+    current = d
+
+    for key in keys:
+        if not isinstance(current, dict):
+            raise KeyError(f"Expected dict while reading nested key path: {keys}")
+
+        if key not in current:
+            raise KeyError(f"Missing nested key path: {keys}")
+
+        current = current[key]
+
+    return current
+
+
 def create_hdf5_file(
     path: Path,
     num_samples: int,
@@ -235,28 +318,53 @@ def create_hdf5_file(
             chunks=(scalar_chunk_n,),
         )
 
+    placement_group = f.create_group("placement")
+
+    for key, dtype in PLACEMENT_KEYS.items():
+        placement_group.create_dataset(
+            key,
+            shape=(num_samples,),
+            dtype=dtype,
+            chunks=(scalar_chunk_n,),
+        )
+
+    windowing_group = f.create_group("windowing")
+
+    for key, dtype in WINDOWING_KEYS.items():
+        windowing_group.create_dataset(
+            key,
+            shape=(num_samples,),
+            dtype=dtype,
+            chunks=(scalar_chunk_n,),
+        )
+
+    projection_group = f.create_group("projection")
+
+    for key, dtype in PROJECTION_NETWORK_KEYS.items():
+        projection_group.create_dataset(
+            key,
+            shape=(num_samples,),
+            dtype=dtype,
+            chunks=(scalar_chunk_n,),
+        )
+
+    for det in detector_names:
+        det_group = projection_group.create_group(det)
+
+        for key, dtype in PROJECTION_DETECTOR_KEYS.items():
+            det_group.create_dataset(
+                key,
+                shape=(num_samples,),
+                dtype=dtype,
+                chunks=(scalar_chunk_n,),
+            )
+
     inj_group = f.create_group("injection")
 
     for det in detector_names:
         det_group = inj_group.create_group(det)
 
-        for key in [
-            "signal_start_time",
-            "signal_end_time",
-            "segment_start_time",
-            "segment_end_time",
-            "signal_start_index",
-            "signal_end_index",
-            "n_signal_samples",
-            "n_injected_samples",
-            "n_clipped_before",
-            "n_clipped_after",
-            "is_partially_clipped",
-        ]:
-            dtype = "bool" if key == "is_partially_clipped" else "float64"
-            if key.endswith("_index") or key.startswith("n_"):
-                dtype = "int64"
-
+        for key, dtype in INJECTION_KEYS.items():
             det_group.create_dataset(
                 key,
                 shape=(num_samples,),
@@ -272,6 +380,14 @@ def create_hdf5_file(
         dtype="float32",
         chunks=(scalar_chunk_n,),
     )
+
+    for key, dtype in SNR_EXTRA_KEYS.items():
+        snr_group.create_dataset(
+            key,
+            shape=(num_samples,),
+            dtype=dtype,
+            chunks=(scalar_chunk_n,),
+        )
 
     for det in detector_names:
         snr_group.create_dataset(
@@ -393,27 +509,71 @@ def write_batch_to_hdf5(
 
     metadata = batch.metadata
 
+    for key in PLACEMENT_KEYS:
+        values = np.asarray(
+            [get_nested_required(m, ["placement", key]) for m in metadata],
+            dtype=f[f"placement/{key}"].dtype,
+        )
+        f[f"placement/{key}"][start:end] = values
+
+    for key in WINDOWING_KEYS:
+        values = np.asarray(
+            [get_nested_required(m, ["windowing", key]) for m in metadata],
+            dtype=f[f"windowing/{key}"].dtype,
+        )
+        f[f"windowing/{key}"][start:end] = values
+
+    for key in PROJECTION_NETWORK_KEYS:
+        values = np.asarray(
+            [get_nested_required(m, ["projection", key]) for m in metadata],
+            dtype=f[f"projection/{key}"].dtype,
+        )
+        f[f"projection/{key}"][start:end] = values
+
+    for det in detector_names:
+        for key in PROJECTION_DETECTOR_KEYS:
+            values = np.asarray(
+                [get_nested_required(m, ["projection", key, det]) for m in metadata],
+                dtype=f[f"projection/{det}/{key}"].dtype,
+            )
+            f[f"projection/{det}/{key}"][start:end] = values
+
+
     network_snr = np.asarray(
-        [get_nested(m, ["snr", "final_network_snr"]) for m in metadata],
+        [get_nested_required(m, ["snr", "final_network_snr"]) for m in metadata],
         dtype=np.float32,
     )
     f["snr/network"][start:end] = network_snr
 
     for det in detector_names:
         det_snr = np.asarray(
-            [get_nested(m, ["snr", "final_detector_snrs", det]) for m in metadata],
+            [get_nested_required(m, ["snr", "final_detector_snrs", det]) for m in metadata],
             dtype=np.float32,
         )
         f[f"snr/{det}"][start:end] = det_snr
 
-    for det in detector_names:
-        for i, m in enumerate(metadata):
-            inj = m["injection"][det]
-            row = start + i
+    snr_extra_map = {
+        "initial_network": ["snr", "initial_network_snr"],
+        "target_network": ["snr", "target_network_snr"],
+        "snr_rescaled": ["snr", "snr_rescaled"],
+        "distance_before_rescale": ["snr", "distance_before_rescale"],
+        "distance_after_rescale": ["snr", "distance_after_rescale"],
+    }
 
-            for key, value in inj.items():
-                if f"injection/{det}/{key}" in f:
-                    f[f"injection/{det}/{key}"][row] = value
+    for out_key, nested_keys in snr_extra_map.items():
+        values = np.asarray(
+            [get_nested_required(m, nested_keys) for m in metadata],
+            dtype=f[f"snr/{out_key}"].dtype,
+        )
+        f[f"snr/{out_key}"][start:end] = values
+
+    for det in detector_names:
+        for key in INJECTION_KEYS:
+            values = np.asarray(
+                [get_nested_required(m, ["injection", det, key]) for m in metadata],
+                dtype=f[f"injection/{det}/{key}"].dtype,
+            )
+            f[f"injection/{det}/{key}"][start:end] = values
 
     f["generation/chunk_id"][start:end] = np.full(expected_n, chunk_id, dtype=np.int32)
     f["generation/local_index"][start:end] = np.arange(expected_n, dtype=np.int32)

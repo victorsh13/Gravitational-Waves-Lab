@@ -1,24 +1,27 @@
 from pathlib import Path
 import h5py
-import numpy as np
 
-path = Path("/scratch/vserrano/cbc_pe_data/processed/bbh_processed_32s_m1-20_m2-20_n2.h5")
+path = Path("/scratch/vserrano/cbc_pe_data/processed/bbh_processed_4s_seobnrv4opt_snr10-25_n2_test.h5")
 
 with h5py.File(path, "r") as f:
-    print("X shape:", f["X"].shape)
-    print("duration:", f.attrs["duration"])
-    print("sampling_frequency:", f.attrs["sampling_frequency"])
-    print("length:", f.attrs["length"])
+    print(list(f.keys()))
 
+    print("X:", f["X"].shape)
     print("mass_1:", f["parameters/mass_1"][:])
     print("mass_2:", f["parameters/mass_2"][:])
-    print("spin_1z:", f["parameters/spin_1z"][:])
-    print("spin_2z:", f["parameters/spin_2z"][:])
 
-    print("total_mass:", f["parameters/total_mass"][:])
-    print("chirp_mass:", f["parameters/chirp_mass"][:])
-    print("chi_eff:", f["parameters/chi_eff"][:])
+    print("placement keys:", list(f["placement"].keys()))
+    print("windowing keys:", list(f["windowing"].keys()))
+    print("projection keys:", list(f["projection"].keys()))
+    print("injection H1 keys:", list(f["injection/H1"].keys()))
+    print("snr keys:", list(f["snr"].keys()))
 
-    print("network_snr:", f["snr/network"][:])
+    print("snr/network:", f["snr/network"][:])
+    print("snr/initial_network:", f["snr/initial_network"][:])
+    print("snr/target_network:", f["snr/target_network"][:])
+    print("distance_before:", f["snr/distance_before_rescale"][:])
+    print("distance_after:", f["snr/distance_after_rescale"][:])
 
+    print("H1 signal_start_index:", f["injection/H1/signal_start_index"][:])
+    print("H1 overlap_start_index_strain:", f["injection/H1/overlap_start_index_strain"][:])
 
