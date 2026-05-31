@@ -1,0 +1,37 @@
+{
+  "project_root": "/home/victor/gw/cbc_pe",
+  "data_root": "/home/victor/gw/cbc_pe/data",
+
+  "dataset": {
+    "dataset_id": "bbh_4s_n5000_P1_bandpass_30_512",
+    "dataset_file": "bbh_processed_4s_seobnrv4opt_snr10-25_n5000_P1_bandpass_30_512.h5",
+    "split_file": "bbh_4s_n5000_processing_benchmark_splits_train3500_val750_test750_seed2026.npz",
+    "label_stats_file": "bbh_4s_n5000_processing_benchmark_label_stats_train_only_seed2026.npz"
+  },
+
+  "model": {
+    "class_name": "SimpleCNN_Baseline",
+    "architecture_name": "SimpleCNN_Baseline",
+    "kwargs": {
+      "embedding_dim": 64,
+      "dropout_conv": 0.05,
+      "dropout_dense": 0.1
+    }
+  },
+
+  "training": {
+    "seed": 123,
+    "batch_size": 64,
+    "max_epochs": 200,
+    "patience": 40,
+    "learning_rate": 0.0003,
+    "weight_decay": 0.0003,
+    "num_workers": 0,
+    "loss": "MSELoss"
+  },
+
+  "outputs": {
+    "checkpoint_tag": "processing_P1_simple_emb64_mse",
+    "save_predictions": true
+  }
+}
