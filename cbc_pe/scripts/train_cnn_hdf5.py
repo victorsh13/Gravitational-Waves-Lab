@@ -308,20 +308,28 @@ def main():
     num_workers = int(training_cfg.get("num_workers", 0))
     pin_memory = device.type == "cuda"
 
-    train_loader = DataLoader(
-        train_dataset,
+    loader_kwargs = dict(
         batch_size=batch_size,
-        shuffle=True,
         num_workers=num_workers,
         pin_memory=pin_memory,
     )
 
+    if num_workers > 0:
+        loader_kwargs.update(
+            persistent_workers=True,
+            prefetch_factor=4,
+        )
+
+    train_loader = DataLoader(
+        train_dataset,
+        shuffle=True,
+        **loader_kwargs,
+    )
+
     val_loader = DataLoader(
         val_dataset,
-        batch_size=batch_size,
         shuffle=False,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
+        **loader_kwargs,
     )
 
     # Sanity check
