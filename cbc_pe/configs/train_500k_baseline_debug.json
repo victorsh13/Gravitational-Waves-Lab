@@ -22,8 +22,8 @@
   "training": {
     "seed": 123,
     "batch_size": 64,
-    "max_epochs": 1,
-    "patience": 1,
+    "max_epochs": 2,
+    "patience": 2,
     "learning_rate": 0.0003,
     "weight_decay": 0.0003,
     "num_workers": 4,

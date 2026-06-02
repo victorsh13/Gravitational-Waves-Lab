@@ -308,32 +308,47 @@ def main():
     num_workers = int(training_cfg.get("num_workers", 0))
     pin_memory = device.type == "cuda"
 
-    loader_kwargs = dict(
+    train_loader_kwargs = dict(
         batch_size=batch_size,
+        shuffle=True,
         num_workers=num_workers,
         pin_memory=pin_memory,
     )
 
+    # For training we use workers.
+    # For large HDF5 datasets, use moderate prefetching to avoid excessive memory pressure.
     if num_workers > 0:
-        loader_kwargs.update(
-            persistent_workers=True,
-            prefetch_factor=4,
+        train_loader_kwargs.update(
+            persistent_workers=False,
+            prefetch_factor=2,
         )
 
     train_loader = DataLoader(
         train_dataset,
-        shuffle=True,
-        **loader_kwargs,
+        **train_loader_kwargs,
     )
 
+    # Validation: without workers to avoid blocking HDF5.
     val_loader = DataLoader(
         val_dataset,
+        batch_size=batch_size,
         shuffle=False,
-        **loader_kwargs,
+        num_workers=0,
+        pin_memory=False,
     )
 
-    # Sanity check
-    X_batch, y_batch = next(iter(train_loader))
+    # Sanity check.
+    # Use a deterministic, single-process loader to avoid expensive random HDF5
+    # access before training, especially for large datasets.
+    sanity_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=0,
+        pin_memory=False,
+    )
+
+    X_batch, y_batch = next(iter(sanity_loader))
 
     print("X_batch:", X_batch.shape, X_batch.dtype)
     print("y_batch:", y_batch.shape, y_batch.dtype)

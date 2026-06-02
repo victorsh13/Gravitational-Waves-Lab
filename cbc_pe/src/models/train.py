@@ -93,6 +93,11 @@ def train_model(
     start_time = time.time()
 
     for epoch in range(max_epochs):
+
+        epoch_t0 = time.time()
+        print(f"Epoch {epoch:03d} | starting train", flush=True)
+        train_t0 = time.time()
+
         train_loss = train_one_epoch(
             model=model,
             loader=train_loader,
@@ -101,11 +106,31 @@ def train_model(
             device=device,
         )
 
+        print(
+            f"Epoch {epoch:03d} | train done "
+            f"({time.time() - train_t0:.1f}s) | train_loss = {train_loss:.6f}",
+            flush=True,
+        )
+
+        print(f"Epoch {epoch:03d} | starting val", flush=True)
+        val_t0 = time.time()
+
         val_loss = validate_one_epoch(
             model=model,
             loader=val_loader,
             loss_fn=loss_fn,
             device=device,
+        )
+
+        print(
+            f"Epoch {epoch:03d} | val done "
+            f"({time.time() - val_t0:.1f}s) | val_loss = {val_loss:.6f}",
+            flush=True,
+        )
+
+        print(
+            f"Epoch {epoch:03d} | total epoch time = {time.time() - epoch_t0:.1f}s",
+            flush=True,
         )
 
         history["train_loss"].append(float(train_loss))

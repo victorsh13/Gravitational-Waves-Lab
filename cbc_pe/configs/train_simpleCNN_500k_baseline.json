@@ -22,11 +22,11 @@
   "training": {
     "seed": 123,
     "batch_size": 64,
-    "max_epochs": 200,
-    "patience": 40,
+    "max_epochs": 120,
+    "patience": 25,
     "learning_rate": 0.0003,
     "weight_decay": 0.0003,
-    "num_workers": 6,
+    "num_workers": 4,
     "loss": "MSELoss"
   },
 
