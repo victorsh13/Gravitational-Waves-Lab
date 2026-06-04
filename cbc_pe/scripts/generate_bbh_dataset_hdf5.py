@@ -288,6 +288,8 @@ def create_hdf5_file(
     f.attrs["placement_policy"] = str(generation_cfg.get("placement_policy", "random_contained"))
     f.attrs["standardize_labels"] = bool(generation_cfg.get("standardize_labels", False))
 
+    f.attrs["strain_mode"] = str(generation_cfg.get("strain_mode", "in_noise"))
+
     # Store processor config as JSON string in attrs.
     f.attrs["signal_processor_config"] = json.dumps(signal_processor_cfg)
 
@@ -645,6 +647,13 @@ def main():
     progress_every = int(generation_cfg.get("progress_every", 100))
     placement_policy = str(generation_cfg.get("placement_policy", "random_contained"))
     standardize_labels = bool(generation_cfg.get("standardize_labels", False))
+    strain_mode = str(generation_cfg.get("strain_mode", "noisy"))
+
+    if strain_mode not in {"in_noise", "gw_only"}:
+        raise ValueError(
+            "generation.strain_mode must be one of {'in_noise', 'gw_only'}, "
+            f"got {strain_mode}."
+        )
 
     generation_cfg["chunk_size"] = chunk_size
     generation_cfg["seed"] = seed
@@ -662,6 +671,7 @@ def main():
     print("overwrite:", overwrite)
     print("resume:", resume)
     print("detectors:", detector_names)
+    print("strain_mode:", strain_mode)
 
     config = build_simulation_config(simulation_cfg)
 
@@ -734,6 +744,7 @@ def main():
                 standardize_labels=standardize_labels,
                 placement_policy=placement_policy,
                 progress_every=progress_every,
+                strain_mode=strain_mode,
             )
 
             gen_elapsed = time.perf_counter() - t0

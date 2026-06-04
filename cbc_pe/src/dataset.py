@@ -175,6 +175,7 @@ class DatasetBuilder:
         standardize_labels: bool = False,
         geocentric_coalescence_time: float | None = None,
         placement_policy: str = "random_contained",
+        strain_mode: str = "in_noise",
     ) -> DatasetSample:
         """
         Build one simulated dataset sample.
@@ -194,6 +195,12 @@ class DatasetBuilder:
         11. Process the context segments and crop back to the final 4 s output.
         12. Build labels and metadata.
         """
+        if strain_mode not in {"in_noise", "gw_only"}:
+            raise ValueError(
+                "strain_mode must be one of {'in_noise', 'gw_only'}, "
+                f"got {strain_mode}."
+            )
+
         if params is None:
             params = self.parameter_sampler.sample_one()
 
@@ -239,20 +246,31 @@ class DatasetBuilder:
             - self.config.processing_context_start_seconds
         )
 
-        noises = self.noise_model.sample_network(
-            detector_names=self.detector_names,
-            seed=int(self.rng.integers(0, 2**32 - 1)),
-            length=processing_length,
-        )
-
-        noises = {
-            detector_name: self.signal_injector.set_strain_start_time(
-                strain=noise,
-                start_time=context_segment_start_time,
-                expected_length=processing_length,
+        # May I implement it in NoiseModel
+        if strain_mode == "noisy":
+            noises = self.noise_model.sample_network(
+                detector_names=self.detector_names,
+                seed=int(self.rng.integers(0, 2**32 - 1)),
+                length=processing_length,
             )
-            for detector_name, noise in noises.items()
-        }
+
+            noises = {
+                detector_name: self.signal_injector.set_strain_start_time(
+                    strain=noise,
+                    start_time=context_segment_start_time,
+                    expected_length=processing_length,
+                )
+                for detector_name, noise in noises.items()
+            }
+
+        elif strain_mode == "gw_only":
+            noises = {
+                detector_name: self.signal_injector.build_zero_strain(
+                    start_time=context_segment_start_time,
+                    length=processing_length,
+                )
+                for detector_name in self.detector_names
+            }
 
         # Important: inject the windowed projected network, not the full projection.
         # This injection happens in the longer processing-context segment.
@@ -323,6 +341,7 @@ class DatasetBuilder:
         placement_policy: str = "random_contained",
         max_attempts: int | None = None,
         progress_every: int = 10,
+        strain_mode: str = "in_noise",
     ) -> DatasetBatch:
         if num_samples <= 0:
             raise ValueError("num_samples must be a positive integer.")
@@ -351,6 +370,7 @@ class DatasetBuilder:
                     standardize_labels=standardize_labels,
                     geocentric_coalescence_time=geocentric_coalescence_time,
                     placement_policy=placement_policy,
+                    strain_mode=strain_mode,
                 )
 
             except (ValueError, RuntimeError) as exc:
@@ -509,6 +529,7 @@ class DatasetBuilder:
         final_network: BuiltSignalNetwork,
         injected_results: dict[str, InjectionResult],
         snr_decision,
+        strain_mode: str,
         placement_policy: str,
     ) -> dict:
         return {
@@ -517,6 +538,7 @@ class DatasetBuilder:
             "final_parameters": self._parameters_metadata(final_network.params),
             "geocentric_coalescence_time": geocentric_coalescence_time,
             "detectors": list(self.detector_names),
+            "strain_mode": strain_mode,
             "placement_policy": placement_policy,
             "waveform": self._waveform_metadata(final_network),
             "windowing": self._safe_dataclass_to_dict(final_network.windowed.metadata),

@@ -14,7 +14,8 @@
     "seed": 1234,
     "progress_every": 250,
     "placement_policy": "random_contained",
-    "standardize_labels": false
+    "standardize_labels": false,
+    "strain_mode": "in_noise"
   },
 
   "simulation": {
