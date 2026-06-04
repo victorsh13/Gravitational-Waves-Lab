@@ -246,8 +246,7 @@ class DatasetBuilder:
             - self.config.processing_context_start_seconds
         )
 
-        # May I implement it in NoiseModel
-        if strain_mode == "noisy":
+        if strain_mode == "in_noise":
             noises = self.noise_model.sample_network(
                 detector_names=self.detector_names,
                 seed=int(self.rng.integers(0, 2**32 - 1)),
@@ -323,7 +322,9 @@ class DatasetBuilder:
             final_network=final_network,
             injected_results=injected_results,
             snr_decision=snr_decision,
+            strain_mode=strain_mode,
             placement_policy=placement_policy,
+
         )
 
         return DatasetSample(

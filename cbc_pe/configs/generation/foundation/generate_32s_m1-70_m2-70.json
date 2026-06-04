@@ -3,7 +3,7 @@
   "data_root": "/scratch/vserrano/cbc_pe_data",
 
   "output": {
-    "file_name": "bbh_processed_32s_m1-80_m2-80_n100_01.h5",
+    "file_name": "bbh_32s_m1-xx_m2-xx_n100/processed_noisy/bbh_processed_32s_m1-70_m2-70_n100_01.h5",
     "overwrite": false,
     "resume": false
   },

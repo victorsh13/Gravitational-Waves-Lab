@@ -647,7 +647,7 @@ def main():
     progress_every = int(generation_cfg.get("progress_every", 100))
     placement_policy = str(generation_cfg.get("placement_policy", "random_contained"))
     standardize_labels = bool(generation_cfg.get("standardize_labels", False))
-    strain_mode = str(generation_cfg.get("strain_mode", "noisy"))
+    strain_mode = str(generation_cfg.get("strain_mode", "in_noise"))
 
     if strain_mode not in {"in_noise", "gw_only"}:
         raise ValueError(
