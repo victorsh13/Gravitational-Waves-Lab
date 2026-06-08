@@ -1,0 +1,21 @@
+{
+  "base_config": "configs/generation/foundation/gw_only_32s_base.json",
+  "output_dir": "bbh_32s_m1-xx_m2-xx_n100/gw_only",
+  "file_indices": [6, 7, 8, 9, 10],
+  "mass_pairs": [
+    
+    {"m1": 20, "m2": 20, "base_seed": 2000},
+    {"m1": 20, "m2": 40, "base_seed": 2400},
+    {"m1": 20, "m2": 60, "base_seed": 2600},
+    {"m1": 20, "m2": 80, "base_seed": 2800},
+
+    {"m1": 30, "m2": 30, "base_seed": 3000},
+    {"m1": 40, "m2": 40, "base_seed": 4000},
+    {"m1": 50, "m2": 50, "base_seed": 5000},
+    {"m1": 60, "m2": 60, "base_seed": 6000},
+    {"m1": 70, "m2": 70, "base_seed": 7000},
+    {"m1": 80, "m2": 80, "base_seed": 8000},
+    {"m1": 90, "m2": 90, "base_seed": 9000}
+
+  ]
+}
