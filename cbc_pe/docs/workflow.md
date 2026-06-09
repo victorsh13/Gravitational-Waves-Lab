@@ -15,14 +15,14 @@ NPZ files are still useful for small debugging datasets, but they should not be 
 Synthetic BBH datasets are generated using:
 
 ```bash
-python cbc_pe/scripts/generate_bbh_dataset_hdf5.py --config cbc_pe/configs/generate_bbh_config.json
+python cbc_pe/scripts/generate_bbh_dataset_hdf5.py --config cbc_pe/configs/generation/generate_500k_bbh_4s.json
 ```
 
 The script also supports:
 
 ```bash
-python cbc_pe/scripts/generate_bbh_dataset_hdf5.py --config cbc_pe/configs/generate_bbh_config.json --resume
-python cbc_pe/scripts/generate_bbh_dataset_hdf5.py --config cbc_pe/configs/generate_bbh_config.json --overwrite
+python cbc_pe/scripts/generate_bbh_dataset_hdf5.py --config cbc_pe/configs/generation/generate_500k_bbh_4s.json --resume
+python cbc_pe/scripts/generate_bbh_dataset_hdf5.py --config cbc_pe/configs/generation/generate_500k_bbh_4s.json --overwrite
 ```
 
 The generation pipeline includes:
@@ -49,13 +49,13 @@ The `cbc_pe/data/` directory is ignored by Git.
 Dataset splits are created using:
 
 ```bash
-python cbc_pe/scripts/create_hdf5_splits.py --config cbc_pe/configs/splits_bbh_config.json
+python cbc_pe/scripts/create_hdf5_splits.py --config cbc_pe/configs/splits/splits_100k_train80_val20_seed123.json
 ```
 
 The script also supports:
 
 ```bash
-python cbc_pe/scripts/create_hdf5_splits.py --config cbc_pe/configs/splits_bbh_config.json --overwrite
+python cbc_pe/scripts/create_hdf5_splits.py --config cbc_pe/configs/splits/splits_100k_train80_val20_seed123.json --overwrite
 ```
 
 ### Current architecture-selection split
@@ -110,7 +110,7 @@ The calibration and test sets should not be used during CNN training or architec
 CNN models are trained using:
 
 ```bash
-python cbc_pe/scripts/train_cnn_hdf5.py --config cbc_pe/configs/train_simpleCNN_baseline.json
+python cbc_pe/scripts/train_cnn_hdf5.py --config cbc_pe/configs/experiments/train_100k_M00_simplecnn_emb64_mse_seed123.json
 ```
 
 Alternative model configurations can be stored under:
@@ -122,8 +122,8 @@ cbc_pe/configs/
 Current examples:
 
 ```text
-train_simpleCNN_baseline.json
-train_simpleCNN_pool.json
+configs/experiments/train_100k_M00_simplecnn_emb64_mse_seed123.json
+configs/experiments/train_100k_M02_simplecnn_pool_emb128_pool4_mse_seed123.json
 ```
 
 Model checkpoints, prediction files, embeddings, histories, and logs are generated artifacts and should not be committed to Git.

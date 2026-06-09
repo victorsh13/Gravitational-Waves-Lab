@@ -35,13 +35,13 @@ test = 10%
 Training is launched from the repository root using:
 
 ```bash
-python cbc_pe/scripts/train_cnn_hdf5.py --config cbc_pe/configs/train_simpleCNN_baseline.json
+python cbc_pe/scripts/train_cnn_hdf5.py --config cbc_pe/configs/experiments/train_100k_M00_simplecnn_emb64_mse_seed123.json
 ```
 
 For the pooling architecture:
 
 ```bash
-python cbc_pe/scripts/train_cnn_hdf5.py --config cbc_pe/configs/train_simpleCNN_pool.json
+python cbc_pe/scripts/train_cnn_hdf5.py --config cbc_pe/configs/experiments/train_100k_M02_simplecnn_pool_emb128_pool4_mse_seed123.json
 ```
 
 The training script reads:
@@ -64,8 +64,8 @@ cbc_pe/configs/
 Current examples:
 
 ```text
-train_simpleCNN_baseline.json
-train_simpleCNN_pool.json
+configs/experiments/train_100k_M00_simplecnn_emb64_mse_seed123.json
+configs/experiments/train_100k_M02_simplecnn_pool_emb128_pool4_mse_seed123.json
 ```
 
 For multiple architecture experiments, prefer adding explicit configs under:

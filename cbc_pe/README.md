@@ -30,19 +30,19 @@ cbc_pe/
 ### 1. Generate an HDF5 BBH dataset
 
 ```bash
-python cbc_pe/scripts/generate_bbh_dataset_hdf5.py --config cbc_pe/configs/generate_bbh_config.json
+python cbc_pe/scripts/generate_bbh_dataset_hdf5.py --config cbc_pe/configs/generation/generate_500k_bbh_4s.json
 ```
 
 To resume an interrupted generation:
 
 ```bash
-python cbc_pe/scripts/generate_bbh_dataset_hdf5.py --config cbc_pe/configs/generate_bbh_config.json --resume
+python cbc_pe/scripts/generate_bbh_dataset_hdf5.py --config cbc_pe/configs/generation/generate_500k_bbh_4s.json --resume
 ```
 
 To overwrite an existing output file:
 
 ```bash
-python cbc_pe/scripts/generate_bbh_dataset_hdf5.py --config cbc_pe/configs/generate_bbh_config.json --overwrite
+python cbc_pe/scripts/generate_bbh_dataset_hdf5.py --config cbc_pe/configs/generation/generate_500k_bbh_4s.json --overwrite
 ```
 
 Older NPZ-based scripts are kept under `scripts/legacy_npz/` for reference, but the official large-scale workflow is HDF5-based.
@@ -50,7 +50,7 @@ Older NPZ-based scripts are kept under `scripts/legacy_npz/` for reference, but 
 ### 2. Create HDF5 splits
 
 ```bash
-python cbc_pe/scripts/create_hdf5_splits.py --config cbc_pe/configs/splits_bbh_config.json
+python cbc_pe/scripts/create_hdf5_splits.py --config cbc_pe/configs/splits/splits_100k_train80_val20_seed123.json
 ```
 
 The current default split is intended for CNN architecture selection:
@@ -76,13 +76,13 @@ test = 10%
 Baseline model:
 
 ```bash
-python cbc_pe/scripts/train_cnn_hdf5.py --config cbc_pe/configs/train_simpleCNN_baseline.json
+python cbc_pe/scripts/train_cnn_hdf5.py --config cbc_pe/configs/experiments/train_100k_M00_simplecnn_emb64_mse_seed123.json
 ```
 
 Pooling model:
 
 ```bash
-python cbc_pe/scripts/train_cnn_hdf5.py --config cbc_pe/configs/train_simpleCNN_pool.json
+python cbc_pe/scripts/train_cnn_hdf5.py --config cbc_pe/configs/experiments/train_100k_M02_simplecnn_pool_emb128_pool4_mse_seed123.json
 ```
 
 ## Notebooks
@@ -106,7 +106,7 @@ Notebook roles:
 CNN training is script-based:
 
 ```bash
-python cbc_pe/scripts/train_cnn_hdf5.py --config cbc_pe/configs/train_simpleCNN_baseline.json
+python cbc_pe/scripts/train_cnn_hdf5.py --config cbc_pe/configs/experiments/train_100k_M00_simplecnn_emb64_mse_seed123.json
 ```
 
 The lightweight training-inspection notebook is:
