@@ -359,36 +359,34 @@ The 500k M00 baseline run supports the following conclusions:
 
 7. The next technical bottleneck is not necessarily model capacity, but data-loading efficiency.
 
-## I/O optimization debug: sorted-block batches
+## HDF5 I/O optimization debug
 
-A debug run was performed using a sorted-block batch sampler for the 500k HDF5 dataset.
+A set of debug runs was performed to reduce the training time of the 500k HDF5 dataset.
 
-The motivation was that the original training pipeline used shuffled sample-level HDF5 access, which is inefficient for the current HDF5 layout:
+The original training pipeline used shuffled sample-level HDF5 access. This was inefficient because the HDF5 dataset is chunked as:
 
 - `X chunks = (64, 3, 16384)`
 - `batch_size = 64`
 
-The sorted-block sampler groups physically nearby HDF5 indices into batches and shuffles the order of the batches between epochs. This improves HDF5 locality while preserving stochasticity at the batch level.
+Two alternative data-loading modes were tested:
 
-Debug configuration:
-
-- `batch_sampler = sorted_block`
-- `num_workers = 6`
-- `val_num_workers = 4`
-- `max_epochs = 3`
-- `save_predictions = false`
+1. `sorted_block`: groups physically nearby HDF5 indices into batches.
+2. `hdf5_batch_slices`: uses an `IterableDataset` that reads full batches from HDF5, using contiguous slices when the batch is dense and fancy indexing when the batch is sparse.
 
 Observed debug timings:
 
-| epoch | train_loss | val_loss | train_time_s | val_time_s | epoch_time_s |
-|---:|---:|---:|---:|---:|---:|
-| 1 | 0.540163 | 0.381555 | 928.6 | 168.6 | 1097.2 |
-| 2 | 0.354093 | 0.284130 | 891.2 | 166.2 | 1057.4 |
-| 3 | 0.302040 | 0.251019 | 727.6 | 150.1 | 877.7 |
+| mode | epoch | train_loss | val_loss | train_time_s | val_time_s | epoch_time_s |
+|---|---:|---:|---:|---:|---:|---:|
+| sorted_block | 1 | 0.540163 | 0.381555 | 928.6 | 168.6 | 1097.2 |
+| sorted_block | 2 | 0.354093 | 0.284130 | 891.2 | 166.2 | 1057.4 |
+| sorted_block | 3 | 0.302040 | 0.251019 | 727.6 | 150.1 | 877.7 |
+| hdf5_batch_slices | 1 | 0.518039 | 0.367898 | 779.3 | 169.3 | 948.6 |
+| hdf5_batch_slices | 2 | 0.331414 | 0.282257 | 647.1 | 159.6 | 806.7 |
+| hdf5_batch_slices | 3 | 0.295274 | 0.255147 | 643.5 | 154.7 | 798.2 |
 
-The sorted-block debug run reduced epoch time from roughly 35 minutes to approximately 15-18 minutes. The validation loss decreased normally during the debug run, suggesting that the sampler does not obviously break training dynamics.
+The `hdf5_batch_slices` mode reduced epoch time from roughly 35 minutes in the original run to approximately 13-16 minutes in the debug run. The validation loss decreased normally during the debug run, suggesting that the new data-loading mode does not obviously break training dynamics.
 
-GPU usage still oscillated, indicating that input loading remains a bottleneck. The next possible optimization would be batch-level HDF5 reads, where whole batches are read as slices instead of using sample-level `__getitem__` calls.
+GPU usage still oscillates, so data loading and CPU-to-GPU transfer remain relevant bottlenecks. Further optimization may require testing larger batch sizes, for example `batch_size=128`.
 
 ## Next steps
 

@@ -100,6 +100,9 @@ def train_model(
         if hasattr(train_loader, "batch_sampler") and hasattr(train_loader.batch_sampler, "set_epoch"):
             train_loader.batch_sampler.set_epoch(epoch)
 
+        if hasattr(train_loader, "dataset") and hasattr(train_loader.dataset, "set_epoch"):
+            train_loader.dataset.set_epoch(epoch)
+
         epoch_t0 = time.time()
 
         print(f"Epoch {(epoch+1):03d} | starting train", flush=True)

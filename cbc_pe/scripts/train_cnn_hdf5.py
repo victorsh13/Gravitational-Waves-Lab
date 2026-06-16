@@ -110,10 +110,12 @@ def main():
 
     # Project imports after sys.path setup
     from src.models.dataset import HDF5RegressionDataset
+    from src.models.hdf5_batch_dataset import HDF5BatchIterableDataset
     from src.models.train import train_model
     from src.models.evaluate import extract_predictions_and_embeddings
     from src.models.utils import set_seed
     from src.models.samplers import SortedBlockBatchSampler
+    
 
     dataset_cfg = get_required(cfg, "dataset")
     model_cfg = get_required(cfg, "model")
@@ -309,10 +311,15 @@ def main():
     num_workers = int(training_cfg.get("num_workers", 0))
     pin_memory = device.type == "cuda"
 
+    data_loading_mode = str(training_cfg.get("data_loading_mode", "sample"))
+
+    print("data_loading_mode:", data_loading_mode)
+
     batch_sampler_mode = str(training_cfg.get("batch_sampler", "default"))
     drop_last = bool(training_cfg.get("drop_last", True))
     shuffle_batches = bool(training_cfg.get("shuffle_batches", True))
     shuffle_within_batch = bool(training_cfg.get("shuffle_within_batch", False))
+    max_slice_overread = float(training_cfg.get("max_slice_overread", 4.0))
     persistent_workers = bool(training_cfg.get("persistent_workers", num_workers > 0))
     prefetch_factor = int(training_cfg.get("prefetch_factor", 2))
 
@@ -320,11 +327,44 @@ def main():
     print("drop_last:", drop_last)
     print("shuffle_batches:", shuffle_batches)
     print("shuffle_within_batch:", shuffle_within_batch)
+    print("max_slice_overread:", max_slice_overread)
     print("persistent_workers:", persistent_workers if num_workers > 0 else False)
     print("prefetch_factor:", prefetch_factor if num_workers > 0 else None)
 
-    # Warning: if batch_sampler is usedm cannot set batch_size, shuffle or drop_last directly on DataLoader (that's why they go inside the sampler)
-    if batch_sampler_mode in {"sorted_block", "sorted_block_batches"}: 
+    if data_loading_mode in {"hdf5_batch", "hdf5_batch_slices"}:
+        print("Using HDF5BatchIterableDataset for train.")
+
+        train_batch_dataset = HDF5BatchIterableDataset(
+            h5_path=dataset_path,
+            indices=train_idx,
+            y_mean=y_mean,
+            y_std=y_std,
+            batch_size=batch_size,
+            drop_last=drop_last,
+            seed=seed,
+            shuffle_batches=shuffle_batches,
+            shuffle_within_batch=shuffle_within_batch,
+            max_slice_overread=max_slice_overread,
+        )
+
+        train_loader_kwargs = dict(
+            batch_size=None,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+        )
+
+        if num_workers > 0:
+            train_loader_kwargs.update(
+                persistent_workers=False,
+                prefetch_factor=prefetch_factor,
+            )
+
+        train_loader = DataLoader(
+            train_batch_dataset,
+            **train_loader_kwargs,
+        )
+
+    elif batch_sampler_mode in {"sorted_block", "sorted_block_batches"}:
         train_batch_sampler = SortedBlockBatchSampler(
             split_indices=train_idx,
             batch_size=batch_size,
@@ -360,8 +400,6 @@ def main():
             drop_last=drop_last,
         )
 
-        # For training we use workers.
-        # For large HDF5 datasets, use moderate prefetching to avoid excessive memory pressure.
         if num_workers > 0:
             train_loader_kwargs.update(
                 persistent_workers=persistent_workers,
@@ -379,23 +417,57 @@ def main():
         training_cfg.get("val_persistent_workers", val_num_workers > 0)
     )
 
-    val_loader_kwargs = dict(
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=val_num_workers,
-        pin_memory=val_pin_memory,
-    )
+    if data_loading_mode in {"hdf5_batch", "hdf5_batch_slices"}:
+        print("Using HDF5BatchIterableDataset for val.")
 
-    if val_num_workers > 0:
-        val_loader_kwargs.update(
-            persistent_workers=val_persistent_workers,
-            prefetch_factor=prefetch_factor,
+        val_batch_dataset = HDF5BatchIterableDataset(
+            h5_path=dataset_path,
+            indices=val_idx,
+            y_mean=y_mean,
+            y_std=y_std,
+            batch_size=batch_size,
+            drop_last=False,
+            seed=seed + 10_000,
+            shuffle_batches=False,
+            shuffle_within_batch=False,
+            max_slice_overread=max_slice_overread,
         )
 
-    val_loader = DataLoader(
-        val_dataset,
-        **val_loader_kwargs,
-    )
+        val_loader_kwargs = dict(
+            batch_size=None,
+            num_workers=val_num_workers,
+            pin_memory=val_pin_memory,
+        )
+
+        if val_num_workers > 0:
+            val_loader_kwargs.update(
+                persistent_workers=False,
+                prefetch_factor=prefetch_factor,
+            )
+
+        val_loader = DataLoader(
+            val_batch_dataset,
+            **val_loader_kwargs,
+        )
+
+    else:
+        val_loader_kwargs = dict(
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=val_num_workers,
+            pin_memory=val_pin_memory,
+        )
+
+        if val_num_workers > 0:
+            val_loader_kwargs.update(
+                persistent_workers=val_persistent_workers,
+                prefetch_factor=prefetch_factor,
+            )
+
+        val_loader = DataLoader(
+            val_dataset,
+            **val_loader_kwargs,
+        )
 
     # Sanity check.
     # Use a deterministic, single-process loader to avoid expensive random HDF5
