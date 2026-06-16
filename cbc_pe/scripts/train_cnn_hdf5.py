@@ -113,6 +113,7 @@ def main():
     from src.models.train import train_model
     from src.models.evaluate import extract_predictions_and_embeddings
     from src.models.utils import set_seed
+    from src.models.samplers import SortedBlockBatchSampler
 
     dataset_cfg = get_required(cfg, "dataset")
     model_cfg = get_required(cfg, "model")
@@ -308,33 +309,92 @@ def main():
     num_workers = int(training_cfg.get("num_workers", 0))
     pin_memory = device.type == "cuda"
 
-    train_loader_kwargs = dict(
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-    )
+    batch_sampler_mode = str(training_cfg.get("batch_sampler", "default"))
+    drop_last = bool(training_cfg.get("drop_last", True))
+    shuffle_batches = bool(training_cfg.get("shuffle_batches", True))
+    shuffle_within_batch = bool(training_cfg.get("shuffle_within_batch", False))
+    persistent_workers = bool(training_cfg.get("persistent_workers", num_workers > 0))
+    prefetch_factor = int(training_cfg.get("prefetch_factor", 2))
 
-    # For training we use workers.
-    # For large HDF5 datasets, use moderate prefetching to avoid excessive memory pressure.
-    if num_workers > 0:
-        train_loader_kwargs.update(
-            persistent_workers=False,
-            prefetch_factor=2,
+    print("batch_sampler:", batch_sampler_mode)
+    print("drop_last:", drop_last)
+    print("shuffle_batches:", shuffle_batches)
+    print("shuffle_within_batch:", shuffle_within_batch)
+    print("persistent_workers:", persistent_workers if num_workers > 0 else False)
+    print("prefetch_factor:", prefetch_factor if num_workers > 0 else None)
+
+    # Warning: if batch_sampler is usedm cannot set batch_size, shuffle or drop_last directly on DataLoader (that's why they go inside the sampler)
+    if batch_sampler_mode in {"sorted_block", "sorted_block_batches"}: 
+        train_batch_sampler = SortedBlockBatchSampler(
+            split_indices=train_idx,
+            batch_size=batch_size,
+            drop_last=drop_last,
+            seed=seed,
+            shuffle_batches=shuffle_batches,
+            shuffle_within_batch=shuffle_within_batch,
         )
 
-    train_loader = DataLoader(
-        train_dataset,
-        **train_loader_kwargs,
+        train_loader_kwargs = dict(
+            batch_sampler=train_batch_sampler,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+        )
+
+        if num_workers > 0:
+            train_loader_kwargs.update(
+                persistent_workers=persistent_workers,
+                prefetch_factor=prefetch_factor,
+            )
+
+        train_loader = DataLoader(
+            train_dataset,
+            **train_loader_kwargs,
+        )
+
+    else:
+        train_loader_kwargs = dict(
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            drop_last=drop_last,
+        )
+
+        # For training we use workers.
+        # For large HDF5 datasets, use moderate prefetching to avoid excessive memory pressure.
+        if num_workers > 0:
+            train_loader_kwargs.update(
+                persistent_workers=persistent_workers,
+                prefetch_factor=prefetch_factor,
+            )
+
+        train_loader = DataLoader(
+            train_dataset,
+            **train_loader_kwargs,
+        )
+
+    val_num_workers = int(training_cfg.get("val_num_workers", 0))
+    val_pin_memory = bool(training_cfg.get("val_pin_memory", pin_memory))
+    val_persistent_workers = bool(
+        training_cfg.get("val_persistent_workers", val_num_workers > 0)
     )
 
-    # Validation: without workers to avoid blocking HDF5.
-    val_loader = DataLoader(
-        val_dataset,
+    val_loader_kwargs = dict(
         batch_size=batch_size,
         shuffle=False,
-        num_workers=0,
-        pin_memory=False,
+        num_workers=val_num_workers,
+        pin_memory=val_pin_memory,
+    )
+
+    if val_num_workers > 0:
+        val_loader_kwargs.update(
+            persistent_workers=val_persistent_workers,
+            prefetch_factor=prefetch_factor,
+        )
+
+    val_loader = DataLoader(
+        val_dataset,
+        **val_loader_kwargs,
     )
 
     # Sanity check.

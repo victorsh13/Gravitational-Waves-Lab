@@ -12,8 +12,8 @@ def train_one_epoch(model, loader, loss_fn, optimizer, device):
     n_samples = 0
 
     for X_batch, y_batch in loader:
-        X_batch = X_batch.to(device) # Mueve los datos a la GPU/CPU
-        y_batch = y_batch.to(device)  
+        X_batch = X_batch.to(device, non_blocking=True) # Mueve los datos a la GPU/CPU
+        y_batch = y_batch.to(device, non_blocking=True)  
 
         optimizer.zero_grad() # Borra los gradientes y los hace cero
 
@@ -42,8 +42,8 @@ def validate_one_epoch(model, loader, loss_fn, device):
     n_samples = 0
 
     for X_batch, y_batch in loader:
-        X_batch = X_batch.to(device)
-        y_batch = y_batch.to(device)
+        X_batch = X_batch.to(device, non_blocking=True)
+        y_batch = y_batch.to(device, non_blocking=True) 
 
         pred = model(X_batch)
         loss = loss_fn(pred, y_batch)
@@ -84,6 +84,9 @@ def train_model(
     history = {
         "train_loss": [],
         "val_loss": [],
+        "train_time": [],
+        "val_time": [],
+        "epoch_time": [],
     }
 
     best_val_loss = float("inf")
@@ -94,8 +97,12 @@ def train_model(
 
     for epoch in range(max_epochs):
 
+        if hasattr(train_loader, "batch_sampler") and hasattr(train_loader.batch_sampler, "set_epoch"):
+            train_loader.batch_sampler.set_epoch(epoch)
+
         epoch_t0 = time.time()
-        print(f"Epoch {epoch:03d} | starting train", flush=True)
+
+        print(f"Epoch {(epoch+1):03d} | starting train", flush=True)
         train_t0 = time.time()
 
         train_loss = train_one_epoch(
@@ -106,13 +113,15 @@ def train_model(
             device=device,
         )
 
+        train_time = time.time() - train_t0
+
         print(
-            f"Epoch {epoch:03d} | train done "
-            f"({time.time() - train_t0:.1f}s) | train_loss = {train_loss:.6f}",
+            f"Epoch {(epoch+1):03d} | train done "
+            f"({train_time:.1f}s) | train_loss = {train_loss:.6f}",
             flush=True,
         )
 
-        print(f"Epoch {epoch:03d} | starting val", flush=True)
+        print(f"Epoch {(epoch+1):03d} | starting val", flush=True)
         val_t0 = time.time()
 
         val_loss = validate_one_epoch(
@@ -122,19 +131,25 @@ def train_model(
             device=device,
         )
 
+        val_time = time.time() - val_t0
+        epoch_time = time.time() - epoch_t0
+
         print(
-            f"Epoch {epoch:03d} | val done "
-            f"({time.time() - val_t0:.1f}s) | val_loss = {val_loss:.6f}",
+            f"Epoch {(epoch+1):03d} | val done "
+            f"({val_time:.1f}s) | val_loss = {val_loss:.6f}",
             flush=True,
         )
 
         print(
-            f"Epoch {epoch:03d} | total epoch time = {time.time() - epoch_t0:.1f}s",
+            f"Epoch {(epoch+1):03d} | total epoch time = {epoch_time:.1f}s",
             flush=True,
         )
 
         history["train_loss"].append(float(train_loss))
         history["val_loss"].append(float(val_loss))
+        history["train_time"].append(float(train_time))
+        history["val_time"].append(float(val_time))
+        history["epoch_time"].append(float(epoch_time))
 
         improved = val_loss < best_val_loss
 
