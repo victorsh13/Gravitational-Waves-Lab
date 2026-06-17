@@ -44,3 +44,5 @@ cbc_pe/figures/
 *.ckpt
 *.log
 nohup.out
+# Generated notebook outputs
+cbc_pe/notebooks/outputs/

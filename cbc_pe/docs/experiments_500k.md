@@ -375,18 +375,27 @@ Two alternative data-loading modes were tested:
 
 Observed debug timings:
 
-| mode | epoch | train_loss | val_loss | train_time_s | val_time_s | epoch_time_s |
+| mode |  batch size | epoch | train_loss | val_loss | train_time_s | val_time_s | epoch_time_s |
 |---|---:|---:|---:|---:|---:|---:|
-| sorted_block | 1 | 0.540163 | 0.381555 | 928.6 | 168.6 | 1097.2 |
-| sorted_block | 2 | 0.354093 | 0.284130 | 891.2 | 166.2 | 1057.4 |
-| sorted_block | 3 | 0.302040 | 0.251019 | 727.6 | 150.1 | 877.7 |
-| hdf5_batch_slices | 1 | 0.518039 | 0.367898 | 779.3 | 169.3 | 948.6 |
-| hdf5_batch_slices | 2 | 0.331414 | 0.282257 | 647.1 | 159.6 | 806.7 |
-| hdf5_batch_slices | 3 | 0.295274 | 0.255147 | 643.5 | 154.7 | 798.2 |
+| sorted_block | 64 | 1 | 0.540163 | 0.381555 | 928.6 | 168.6 | 1097.2 |
+| sorted_block | 64 | 2 | 0.354093 | 0.284130 | 891.2 | 166.2 | 1057.4 |
+| sorted_block | 64 | 3 | 0.302040 | 0.251019 | 727.6 | 150.1 | 877.7 |
+| hdf5_batch_slices |  64 | 1 | 0.518039 | 0.367898 | 779.3 | 169.3 | 948.6 |
+| hdf5_batch_slices |  64 | 2 | 0.331414 | 0.282257 | 647.1 | 159.6 | 806.7 |
+| hdf5_batch_slices |  64 | 3 | 0.295274 | 0.255147 | 643.5 | 154.7 | 798.2 |
+| hdf5_batch_slices | 128 | 1 | 0.563723 | 0.480380 | 755.7 | 131.9 | 887.6 |
+| hdf5_batch_slices | 128 | 2 | 0.415777 | 0.310899 | 632.7 | 96.3 | 729.1 |
+| hdf5_batch_slices | 128 | 3 | 0.318164 | 0.269718 | 560.9 | 94.1 | 655.0 |
+| hdf5_batch_slices | 256 | 1 | 0.590692 | 0.495480 | 491.4 | 90.5 | 581.9 |
+| hdf5_batch_slices | 512 | 1 | 0.654847 | 0.537618 | 467.1 | 91.5 | 558.6 |
 
 The `hdf5_batch_slices` mode reduced epoch time from roughly 35 minutes in the original run to approximately 13-16 minutes in the debug run. The validation loss decreased normally during the debug run, suggesting that the new data-loading mode does not obviously break training dynamics.
 
 GPU usage still oscillates, so data loading and CPU-to-GPU transfer remain relevant bottlenecks. Further optimization may require testing larger batch sizes, for example `batch_size=128`.
+
+Increasing the batch size from 64 to 128 reduced the stable epoch time from approximately 13.3 minutes to 10.9 minutes. The validation loss was slightly higher after three epochs, but batch size 128 performed only half as many optimizer updates per epoch, so epoch-wise losses are not directly comparable.
+
+Best performance is for `batch_size=256`, with a small improvement when doubled to `batch_size=512`.
 
 ## Next steps
 

@@ -25,7 +25,7 @@ def predict_on_loader(model, loader, device):
     targets = []
 
     for X_batch, y_batch in loader:
-        X_batch = X_batch.to(device)
+        X_batch = X_batch.to(device, non_blocking=True)
 
         pred = model(X_batch)
 
@@ -156,7 +156,7 @@ def extract_predictions_and_embeddings(model, loader, device):
     all_y = []
 
     for X_batch, y_batch in loader:
-        X_batch = X_batch.to(device)
+        X_batch = X_batch.to(device, non_blocking=True)
 
         pred, emb = model(X_batch, return_embedding=True)
 

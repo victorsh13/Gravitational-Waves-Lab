@@ -112,7 +112,6 @@ def main():
     from src.models.dataset import HDF5RegressionDataset
     from src.models.hdf5_batch_dataset import HDF5BatchIterableDataset
     from src.models.train import train_model
-    from src.models.evaluate import extract_predictions_and_embeddings
     from src.models.utils import set_seed
     from src.models.samplers import SortedBlockBatchSampler
     
@@ -606,105 +605,6 @@ def main():
         # Fallback if your train_model returns a list or another object.
         np.savez_compressed(history_path, history=np.array(history, dtype=object))
         print("Saved history:", history_path)
-
-    if bool(outputs_cfg.get("save_predictions", False)):
-        print()
-        print("=" * 80)
-        print("Extracting predictions and embeddings")
-        print("=" * 80)
-
-        def predict_split(split_name, dataset):
-            loader = DataLoader(
-                dataset,
-                batch_size=batch_size,
-                shuffle=False,
-                num_workers=num_workers,
-                pin_memory=pin_memory,
-            )
-
-            print(f"Predicting split: {split_name}")
-
-            pred, emb, y_eval = extract_predictions_and_embeddings(
-                model,
-                loader,
-                device,
-            )
-
-            print(f"  pred_{split_name}: {pred.shape}")
-            print(f"  emb_{split_name}:  {emb.shape}")
-            print(f"  y_{split_name}:    {y_eval.shape}")
-
-            return pred, emb, y_eval
-
-        save_payload = {
-            "y_mean": y_mean,
-            "y_std": y_std,
-            "label_names": np.array(label_names),
-
-            "checkpoint_file": checkpoint_file_name,
-            "dataset_path": str(dataset_path),
-            "split_path": str(split_path),
-            "label_stats_path": str(label_stats_path),
-
-            "model_config": np.array(full_model_config, dtype=object),
-        }
-
-        pred_train, emb_train, y_train_eval = predict_split("train", train_dataset)
-        save_payload.update({
-            "pred_train": pred_train,
-            "emb_train": emb_train,
-            "y_train": y_train_eval,
-            "idx_train": train_idx,
-        })
-
-        pred_val, emb_val, y_val_eval = predict_split("val", val_dataset)
-        save_payload.update({
-            "pred_val": pred_val,
-            "emb_val": emb_val,
-            "y_val": y_val_eval,
-            "idx_val": val_idx,
-        })
-
-        if cal_dataset is not None:
-            pred_cal, emb_cal, y_cal_eval = predict_split("cal", cal_dataset)
-            save_payload.update({
-                "pred_cal": pred_cal,
-                "emb_cal": emb_cal,
-                "y_cal": y_cal_eval,
-                "idx_cal": cal_idx,
-            })
-
-        if test_dataset is not None:
-            pred_test, emb_test, y_test_eval = predict_split("test", test_dataset)
-            save_payload.update({
-                "pred_test": pred_test,
-                "emb_test": emb_test,
-                "y_test": y_test_eval,
-                "idx_test": test_idx,
-            })
-
-        available_splits = ["train", "val"]
-
-        if cal_dataset is not None:
-            available_splits.append("cal")
-
-        if test_dataset is not None:
-            available_splits.append("test")
-
-        save_payload["available_splits"] = np.array(available_splits)
-
-        suffix = "_".join(available_splits)
-
-        pred_file_name = checkpoint_file_name.replace(
-            "_checkpoint.pt",
-            f"_{suffix}_predictions_embeddings.npz",
-        )
-
-        pred_path = results_dir / pred_file_name
-
-        np.savez_compressed(pred_path, **save_payload)
-
-        print("Saved predictions/embeddings:", pred_path)
 
     train_dataset.close()
     val_dataset.close()
