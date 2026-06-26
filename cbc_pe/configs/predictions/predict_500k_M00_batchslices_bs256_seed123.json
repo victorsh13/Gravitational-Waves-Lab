@@ -10,8 +10,8 @@
   },
 
   "prediction": {
-    "checkpoint_file": "REPLACE_WITH_FINAL_CHECKPOINT_NAME.pt",
-    "splits": ["train", "val", "cal", "test"],
+    "checkpoint_file": "bbh_processed_4s_seobnrv4opt_snr10-25_n500_000_SimpleCNN_Baseline_batchslices_bs256_MSELoss_seed123_checkpoint.pt",
+    "splits": ["val", "cal", "test"],
     "seed": 123,
     "batch_size": 256,
     "num_workers": 4,
