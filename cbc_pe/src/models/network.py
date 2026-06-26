@@ -1,4 +1,5 @@
 from __future__ import annotations
+import torch
 import torch.nn as nn
 
 
@@ -328,6 +329,127 @@ class SimpleCNN_PoolDeep(nn.Module): # Here we used a deeper embedding layer
 
         return y_pred
     
+
+class SimpleCNN_MultiHead(nn.Module):
+    def __init__(
+        self,
+        n_detectors: int = 3,
+        n_outputs: int = 3,
+        embedding_dim: int = 64,
+        head_hidden_dim: int = 32,
+        dropout_conv: float = 0.05,
+        dropout_dense: float = 0.1,
+        dropout_head: float = 0.0,
+    ):
+        super().__init__()
+
+        if n_outputs != 3:
+            raise ValueError(
+                "SimpleCNN_MultiHead currently expects exactly 3 outputs: "
+                "chirp_mass, total_mass and chi_eff."
+            )
+
+        # Shared convolutional encoder: identical to the baseline.
+        self.block1 = ConvBlock(
+            in_channels=n_detectors,
+            out_channels=16,
+            kernel_size=16,
+            stride=2,
+            dropout=dropout_conv,
+        )
+
+        self.block2 = ConvBlock(
+            in_channels=16,
+            out_channels=32,
+            kernel_size=16,
+            stride=2,
+            dropout=dropout_conv,
+        )
+
+        self.block3 = ConvBlock(
+            in_channels=32,
+            out_channels=64,
+            kernel_size=16,
+            stride=2,
+            dropout=dropout_conv,
+        )
+
+        self.block4 = ConvBlock(
+            in_channels=64,
+            out_channels=128,
+            kernel_size=16,
+            stride=2,
+            dropout=dropout_conv,
+        )
+
+        self.pool = nn.AdaptiveAvgPool1d(1)
+
+        # Shared embedding: identical to the bs256 baseline.
+        self.embedding_layer = nn.Sequential(
+            nn.Linear(128, 64),
+            nn.LeakyReLU(negative_slope=0.1),
+            nn.Dropout(p=dropout_dense),
+            nn.Linear(64, embedding_dim),
+            nn.LeakyReLU(negative_slope=0.1),
+        )
+
+        # Independent nonlinear task-specific heads.
+        self.heads = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(embedding_dim, head_hidden_dim),
+                nn.LeakyReLU(negative_slope=0.1),
+                nn.Dropout(p=dropout_head),
+                nn.Linear(head_hidden_dim, 1),
+            )
+            for _ in range(n_outputs)
+        ])
+
+    def encode(self, x):
+        """
+        Parameters
+        ----------
+        x : torch.Tensor
+            Shape: (batch, n_detectors, time)
+
+        Returns
+        -------
+        torch.Tensor
+            Shared encoder features with shape (batch, 128).
+        """
+        x = self.block1(x)
+        x = self.block2(x)
+        x = self.block3(x)
+        x = self.block4(x)
+
+        x = self.pool(x)
+        x = x.squeeze(-1)
+
+        return x
+
+    def embed(self, x):
+        """
+        Returns the shared embedding used by all task-specific heads.
+        """
+        features = self.encode(x)
+        embedding = self.embedding_layer(features)
+        return embedding
+
+    def forward(self, x, return_embedding: bool = False):
+        embedding = self.embed(x)
+
+        outputs = [
+            head(embedding)
+            for head in self.heads
+        ]
+
+        y_pred = torch.cat(outputs, dim=1)
+
+        if return_embedding:
+            return y_pred, embedding
+
+        return y_pred   # Output order must match y:
+                        # [chirp_mass, total_mass, chi_eff]
+
 
 class WideCNN_Pool(nn.Module):
     """

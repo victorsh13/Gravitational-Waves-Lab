@@ -105,7 +105,7 @@ def train_model(
 
         epoch_t0 = time.time()
 
-        print(f"Epoch {(epoch+1):03d} | starting train", flush=True)
+        # print(f"Epoch {(epoch+1):03d} | starting train", flush=True)
         train_t0 = time.time()
 
         train_loss = train_one_epoch(
@@ -118,13 +118,13 @@ def train_model(
 
         train_time = time.time() - train_t0
 
-        print(
-            f"Epoch {(epoch+1):03d} | train done "
-            f"({train_time:.1f}s) | train_loss = {train_loss:.6f}",
-            flush=True,
-        )
+        # print(
+        #     f"Epoch {(epoch+1):03d} | train done "
+        #     f"({train_time:.1f}s) | train_loss = {train_loss:.6f}",
+        #     flush=True,
+        # )
 
-        print(f"Epoch {(epoch+1):03d} | starting val", flush=True)
+        # print(f"Epoch {(epoch+1):03d} | starting val", flush=True)
         val_t0 = time.time()
 
         val_loss = validate_one_epoch(
@@ -137,16 +137,11 @@ def train_model(
         val_time = time.time() - val_t0
         epoch_time = time.time() - epoch_t0
 
-        print(
-            f"Epoch {(epoch+1):03d} | val done "
-            f"({val_time:.1f}s) | val_loss = {val_loss:.6f}",
-            flush=True,
-        )
-
-        print(
-            f"Epoch {(epoch+1):03d} | total epoch time = {epoch_time:.1f}s",
-            flush=True,
-        )
+        # print(
+        #     f"Epoch {(epoch+1):03d} | val done "
+        #     f"({val_time:.1f}s) | val_loss = {val_loss:.6f}",
+        #     flush=True,
+        # )
 
         history["train_loss"].append(float(train_loss))
         history["val_loss"].append(float(val_loss))
@@ -186,7 +181,8 @@ def train_model(
             f"Epoch {epoch+1:03d} | "
             f"train_loss = {train_loss:.6f} | "
             f"val_loss = {val_loss:.6f} | "
-            f"best_val = {best_val_loss:.6f}"
+            f"best_val = {best_val_loss:.6f} | "
+            f"total epoch time = {epoch_time:.1f}s"
         )
 
         if epochs_without_improvement >= patience:
