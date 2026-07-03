@@ -136,6 +136,7 @@ def train_model(
 
         val_time = time.time() - val_t0
         epoch_time = time.time() - epoch_t0
+        elapsed = time.time() - start_time
 
         # print(
         #     f"Epoch {(epoch+1):03d} | val done "
@@ -178,18 +179,16 @@ def train_model(
             epochs_without_improvement += 1
 
         print(
-            f"Epoch {epoch+1:03d} | "
+            f"Epoch {epoch+1:03d} ({epoch_time:.1f}s) | "
             f"train_loss = {train_loss:.6f} | "
             f"val_loss = {val_loss:.6f} | "
             f"best_val = {best_val_loss:.6f} | "
-            f"total epoch time = {epoch_time:.1f}s"
+            f"Elapsed time = {elapsed:.1f}s "
         )
 
         if epochs_without_improvement >= patience:
             print(f"Early stopping at epoch {epoch+1}")
             break
-
-    elapsed = time.time() - start_time
 
     best_checkpoint["elapsed_seconds"] = elapsed
     best_checkpoint["history"] = history
