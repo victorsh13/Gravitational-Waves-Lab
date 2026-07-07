@@ -52,6 +52,6 @@
   },
 
   "outputs": {
-    "checkpoint_tag": "M08a_resdilated_emb64_d124"
+    "checkpoint_tag": "M08_resdilated_emb64_d124"
   }
 }
