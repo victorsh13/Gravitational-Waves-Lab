@@ -147,6 +147,197 @@ class ResidualDilatedBlock(nn.Module):
         return out    
  
 
+class TemporalAttentionPool1d(nn.Module):
+    """
+    Content-based temporal attention pooling.
+
+    Input
+    -----
+    x : torch.Tensor
+        Shape (batch, channels, time).
+
+    Output
+    ------
+    pooled : torch.Tensor
+        Shape (batch, channels, 1).
+
+    Notes
+    -----
+    The output shape deliberately matches AdaptiveAvgPool1d(1), so it can
+    replace the original M08 pooling layer without changing its forward pass.
+    """
+
+    def __init__(
+        self,
+        channels: int,
+        attention_hidden: int = 64,
+        dropout: float = 0.0,
+    ):
+        super().__init__()
+
+        if channels <= 0:
+            raise ValueError("channels must be positive")
+
+        if attention_hidden <= 0:
+            raise ValueError("attention_hidden must be positive")
+
+        if not 0.0 <= dropout < 1.0:
+            raise ValueError("dropout must be in [0, 1)")
+
+        self.channels = channels
+        self.attention_hidden = attention_hidden
+
+        self.score_network = nn.Sequential(
+            nn.Conv1d(
+                in_channels=channels,
+                out_channels=attention_hidden,
+                kernel_size=1,
+                bias=True,
+            ),
+            nn.Tanh(),
+            nn.Dropout(dropout),
+            nn.Conv1d(
+                in_channels=attention_hidden,
+                out_channels=1,
+                kernel_size=1,
+                bias=False,
+            ),
+        )
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        return_attention: bool = False,
+    ):
+        if x.ndim != 3:
+            raise ValueError(
+                "TemporalAttentionPool1d expects shape "
+                f"(batch, channels, time), received {tuple(x.shape)}"
+            )
+
+        if x.shape[1] != self.channels:
+            raise ValueError(
+                f"Expected {self.channels} channels, "
+                f"received {x.shape[1]}"
+            )
+
+        # (B, 1, T)
+        attention_logits = self.score_network(x)
+
+        # Normalization is performed along the temporal dimension.
+        attention_weights = torch.softmax(
+            attention_logits,
+            dim=-1,
+        )
+
+        # Weighted temporal sum: (B, C, 1)
+        pooled = torch.sum(
+            x * attention_weights,
+            dim=-1,
+            keepdim=True,
+        )
+
+        if return_attention:
+            return pooled, attention_weights
+
+        return pooled
+
+
+class MultiSlotTemporalAttentionPool1d(nn.Module):
+    """
+    Content-based temporal attention pooling with multiple learned slots.
+
+    Input
+    -----
+    x : Tensor
+        Shape (batch, channels, time).
+
+    Output
+    ------
+    pooled : Tensor
+        Shape (batch, channels, n_slots).
+
+    attention_weights : Tensor, optional
+        Shape (batch, n_slots, time).
+    """
+
+    def __init__(
+        self,
+        channels: int,
+        n_slots: int = 4,
+        attention_hidden: int = 64,
+        dropout: float = 0.0,
+    ):
+        super().__init__()
+
+        if channels <= 0:
+            raise ValueError("channels must be positive")
+
+        if n_slots <= 0:
+            raise ValueError("n_slots must be positive")
+
+        if attention_hidden <= 0:
+            raise ValueError("attention_hidden must be positive")
+
+        if not 0.0 <= dropout < 1.0:
+            raise ValueError("dropout must be in [0, 1)")
+
+        self.channels = channels
+        self.n_slots = n_slots
+
+        self.score_network = nn.Sequential(
+            nn.Conv1d(
+                in_channels=channels,
+                out_channels=attention_hidden,
+                kernel_size=1,
+            ),
+            nn.Tanh(),
+            nn.Dropout(dropout),
+            nn.Conv1d(
+                in_channels=attention_hidden,
+                out_channels=n_slots,
+                kernel_size=1,
+                bias=False,
+            ),
+        )
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        return_attention: bool = False,
+    ):
+        if x.ndim != 3:
+            raise ValueError(
+                f"Expected (batch, channels, time), got {tuple(x.shape)}"
+            )
+
+        if x.shape[1] != self.channels:
+            raise ValueError(
+                f"Expected {self.channels} channels, got {x.shape[1]}"
+            )
+
+        # Shape: (B, K, T)
+        logits = self.score_network(x)
+
+        # Each slot defines a probability distribution over time.
+        weights = torch.softmax(logits, dim=-1)
+
+        # x:       (B, C, T)
+        # weights: (B, K, T)
+        # pooled:  (B, C, K)
+        pooled = torch.einsum(
+            "bct,bkt->bck",
+            x,
+            weights,
+        )
+
+        if return_attention:
+            return pooled, weights
+
+        return pooled
+
+
+
 
 class SimpleCNN_Baseline(nn.Module):
     
@@ -704,6 +895,170 @@ class SimpleCNN_ResidualDilated(nn.Module):
             return y_pred, embedding
 
         return y_pred
+
+
+class SimpleCNN_ResidualDilatedMultiAttention(
+    SimpleCNN_ResidualDilated
+):
+    """
+    M09: M08 residual-dilated encoder with multi-slot temporal
+    attention pooling.
+
+    Architecture
+    ------------
+    Encoder output:
+        (B, 128, T)
+
+    Multi-slot attention:
+        (B, 128, T) -> (B, 128, K)
+
+    Shared slot projection:
+        (B, 128, K) -> (B, slot_dim, K)
+
+    Flatten:
+        (B, slot_dim * K)
+
+    By default:
+        K = 4
+        slot_dim = 32
+        slot_dim * K = 128
+
+    Therefore, the inherited M08 embedding layer remains unchanged.
+    """
+
+    def __init__(
+        self,
+        n_detectors: int = 3,
+        n_outputs: int = 3,
+        embedding_dim: int = 64,
+        residual_channels: int = 64,
+        dilations=(1, 2, 4),
+        residual_kernel_size: int = 7,
+        dropout_conv: float = 0.05,
+        dropout_dense: float = 0.1,
+        num_groups: int = 8,
+        attention_slots: int = 4,
+        attention_hidden: int = 64,
+        attention_dropout: float = 0.0,
+        slot_dim: int = 32,
+    ):
+        super().__init__(
+            n_detectors=n_detectors,
+            n_outputs=n_outputs,
+            embedding_dim=embedding_dim,
+            residual_channels=residual_channels,
+            dilations=dilations,
+            residual_kernel_size=residual_kernel_size,
+            dropout_conv=dropout_conv,
+            dropout_dense=dropout_dense,
+            num_groups=num_groups,
+        )
+
+        if attention_slots <= 0:
+            raise ValueError(
+                f"attention_slots must be positive, got {attention_slots}"
+            )
+
+        if slot_dim <= 0:
+            raise ValueError(
+                f"slot_dim must be positive, got {slot_dim}"
+            )
+
+        temporal_channels = 128
+        flattened_dim = attention_slots * slot_dim
+
+        # Keep the input dimension to the inherited M08 embedding fixed.
+        if flattened_dim != temporal_channels:
+            raise ValueError(
+                "For a controlled comparison with M08, "
+                "attention_slots * slot_dim must equal 128. "
+                f"Received {attention_slots} * {slot_dim} "
+                f"= {flattened_dim}."
+            )
+
+        self.attention_slots = attention_slots
+        self.slot_dim = slot_dim
+        self.temporal_channels = temporal_channels
+
+        self.pool = MultiSlotTemporalAttentionPool1d(
+            channels=temporal_channels,
+            n_slots=attention_slots,
+            attention_hidden=attention_hidden,
+            dropout=attention_dropout,
+        )
+
+        # This Conv1d is applied to the K-slot representation.
+        # It mixes the original 128 feature channels independently
+        # at each attention slot.
+        self.slot_projection = nn.Sequential(
+            nn.Conv1d(
+                in_channels=temporal_channels,
+                out_channels=slot_dim,
+                kernel_size=1,
+                stride=1,
+                bias=True,
+            ),
+            nn.GroupNorm(
+                num_groups=min(num_groups, slot_dim),
+                num_channels=slot_dim,
+            ),
+            nn.LeakyReLU(negative_slope=0.01),
+        )
+
+    def encode(
+        self,
+        x: torch.Tensor,
+        return_attention: bool = False,
+    ):
+        # Initial M08 encoder.
+        x = self.block1(x)
+        x = self.block2(x)
+        x = self.block3(x)
+
+        # Residual dilated processing: d = [1, 2, 4].
+        x = self.residual_blocks(x)
+
+        # (B, 64, T) -> (B, 128, T)
+        x = self.projection(x)
+
+        # (B, 128, T) -> (B, 128, K)
+        if return_attention:
+            x, attention_weights = self.pool(
+                x,
+                return_attention=True,
+            )
+        else:
+            x = self.pool(x)
+
+        # (B, 128, K) -> (B, slot_dim, K)
+        x = self.slot_projection(x)
+
+        # With K=4 and slot_dim=32:
+        # (B, 32, 4) -> (B, 128)
+        x = torch.flatten(x, start_dim=1)
+
+        if return_attention:
+            return x, attention_weights
+
+        return x
+
+    def get_attention_weights(self, x: torch.Tensor):
+        """
+        Return the K temporal attention maps without running the
+        embedding and regression head.
+
+        Returns
+        -------
+        features : torch.Tensor
+            Shape (B, 128).
+
+        attention_weights : torch.Tensor
+            Shape (B, K, T_encoder).
+        """
+        return self.encode(
+            x,
+            return_attention=True,
+        )
 
 
 
