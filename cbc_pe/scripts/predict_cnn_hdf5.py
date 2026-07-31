@@ -197,6 +197,13 @@ def main():
 
     model_config = checkpoint["model_config"]
 
+    input_normalization_cfg = prediction_cfg.get(
+        "input_normalization",
+        model_config.get("input_normalization", {"enabled": False}),
+    )
+
+    print("input_normalization:", input_normalization_cfg)
+
     class_name = model_config["class_name"]
     model_kwargs = dict(model_config["model_kwargs"])
 
@@ -248,6 +255,7 @@ def main():
         "split_path": str(split_path),
         "label_stats_path": str(label_stats_path),
         "model_config": np.array(model_config, dtype=object),
+        "input_normalization": np.array(input_normalization_cfg, dtype=object),
         "available_splits": np.array(requested_splits),
     }
 
@@ -266,6 +274,7 @@ def main():
                 indices=indices,
                 y_mean=y_mean,
                 y_std=y_std,
+                input_normalization=input_normalization_cfg,
                 batch_size=batch_size,
                 drop_last=False,
                 seed=seed,
@@ -297,6 +306,7 @@ def main():
                 indices=indices,
                 y_mean=y_mean,
                 y_std=y_std,
+                input_normalization=input_normalization_cfg,
             )
 
             loader_kwargs = {

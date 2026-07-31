@@ -120,6 +120,16 @@ def main():
     model_cfg = get_required(cfg, "model")
     training_cfg = get_required(cfg, "training")
     outputs_cfg = cfg.get("outputs", {})
+    input_normalization_cfg = cfg.get(
+        "input_normalization",
+        {"enabled": False},
+    )
+
+    print()
+    print("=" * 80)
+    print("Input normalization")
+    print("=" * 80)
+    print(input_normalization_cfg)
 
     dataset_id = get_required(dataset_cfg, "dataset_id")
 
@@ -278,6 +288,7 @@ def main():
         indices=train_idx,
         y_mean=y_mean,
         y_std=y_std,
+        input_normalization=input_normalization_cfg,
     )
 
     val_dataset = HDF5RegressionDataset(
@@ -285,6 +296,7 @@ def main():
         indices=val_idx,
         y_mean=y_mean,
         y_std=y_std,
+        input_normalization=input_normalization_cfg,
     )
 
     cal_dataset = None
@@ -296,6 +308,7 @@ def main():
             indices=cal_idx,
             y_mean=y_mean,
             y_std=y_std,
+            input_normalization=input_normalization_cfg,
         )
 
     if test_idx is not None:
@@ -304,6 +317,7 @@ def main():
             indices=test_idx,
             y_mean=y_mean,
             y_std=y_std,
+            input_normalization=input_normalization_cfg,
         )
 
     batch_size = int(training_cfg.get("batch_size", 64))
@@ -338,6 +352,7 @@ def main():
             indices=train_idx,
             y_mean=y_mean,
             y_std=y_std,
+            input_normalization=input_normalization_cfg,
             batch_size=batch_size,
             drop_last=drop_last,
             seed=seed,
@@ -424,6 +439,7 @@ def main():
             indices=val_idx,
             y_mean=y_mean,
             y_std=y_std,
+            input_normalization=input_normalization_cfg,
             batch_size=batch_size,
             drop_last=False,
             seed=seed + 10_000,
@@ -488,6 +504,39 @@ def main():
     print("y batch mean:", y_batch.mean(dim=0))
     print("y batch std:", y_batch.std(dim=0))
 
+    ## Sanity C
+    X_channel_means = X_batch.mean(dim=2)
+    X_channel_stds = X_batch.std(dim=2, unbiased=False)
+
+    print("X per-sample/channel mean, first 5:")
+    print(X_channel_means[:5])
+
+    print("X per-sample/channel std, first 5:")
+    print(X_channel_stds[:5])
+
+    print("mean abs X channel mean:", X_channel_means.abs().mean().item())
+    print("mean X channel std:", X_channel_stds.mean().item())
+
+    if input_normalization_cfg.get("enabled", False):
+        if not torch.allclose(
+            X_channel_means,
+            torch.zeros_like(X_channel_means),
+            atol=1e-4,
+            rtol=0.0,
+        ):
+            raise ValueError("Input z-score sanity check failed: channel means are not ~0.")
+
+        if not torch.allclose(
+            X_channel_stds,
+            torch.ones_like(X_channel_stds),
+            atol=1e-4,
+            rtol=0.0,
+        ):
+            raise ValueError("Input z-score sanity check failed: channel stds are not ~1.")
+
+    ###
+
+
     if X_batch.shape[1] != n_detectors:
         raise ValueError(
             f"Batch n_detectors mismatch: {X_batch.shape[1]} vs {n_detectors}"
@@ -535,6 +584,7 @@ def main():
         "label_names": label_names,
         "model_kwargs": model_kwargs,
         "normalization": "GroupNorm",
+        "input_normalization": input_normalization_cfg,
         "loss": training_cfg.get("loss", "MSELoss"),
         "train_size": len(train_idx),
         "val_size": len(val_idx),

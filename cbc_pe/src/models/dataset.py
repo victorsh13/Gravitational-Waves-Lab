@@ -44,12 +44,15 @@ class HDF5RegressionDataset(Dataset):
         indices: np.ndarray,
         y_mean: np.ndarray | None = None,
         y_std: np.ndarray | None = None,
+        input_normalization: dict | None = None,
     ):
         self.h5_path = str(h5_path)
         self.indices = np.asarray(indices, dtype=np.int64)
 
         self.y_mean = None if y_mean is None else np.asarray(y_mean, dtype=np.float32)
         self.y_std = None if y_std is None else np.asarray(y_std, dtype=np.float32)
+
+        self.input_normalization = input_normalization
 
         if self.y_mean is not None and self.y_std is None:
             raise ValueError("If y_mean is provided, y_std must also be provided.")
@@ -94,6 +97,9 @@ class HDF5RegressionDataset(Dataset):
         X = f["X"][real_idx].astype(np.float32)
         y = f["y"][real_idx].astype(np.float32)
 
+
+        X = apply_input_normalization(X, self.input_normalization)
+
         if self.y_mean is not None and self.y_std is not None:
             y = (y - self.y_mean) / (self.y_std + 1e-8)
 
@@ -103,3 +109,47 @@ class HDF5RegressionDataset(Dataset):
         if self._file is not None:
             self._file.close()
             self._file = None
+
+
+def normalize_input_per_sample_per_detector_zscore(
+    X: np.ndarray,
+    eps: float = 1e-6,
+) -> np.ndarray:
+    """
+    Normalize one input sample per detector/channel.
+
+    Expected shape:
+        X: (C, T)
+
+    Output:
+        Each detector channel has approximately mean 0 and std 1.
+    """
+    if X.ndim != 2:
+        raise ValueError(f"Expected X shape (C, T), got {X.shape}")
+
+    mean = X.mean(axis=1, keepdims=True)
+    std = X.std(axis=1, keepdims=True)
+
+    return ((X - mean) / (std + eps)).astype(np.float32)
+
+
+def apply_input_normalization(
+    X: np.ndarray,
+    input_normalization: dict | None,
+) -> np.ndarray:
+    """
+    Apply configured input normalization to one sample.
+    """
+    if input_normalization is None:
+        return X
+
+    if not input_normalization.get("enabled", False):
+        return X
+
+    mode = input_normalization.get("mode", "none")
+    eps = float(input_normalization.get("eps", 1e-6))
+
+    if mode == "per_sample_per_detector_zscore":
+        return normalize_input_per_sample_per_detector_zscore(X, eps=eps)
+
+    raise ValueError(f"Unknown input_normalization mode: {mode}")
