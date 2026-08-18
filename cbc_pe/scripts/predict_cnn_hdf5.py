@@ -13,10 +13,46 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
+SCRIPT_PROJECT_ROOT = (
+    Path(__file__).resolve().parents[1]
+)
+
+if str(SCRIPT_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(
+        0,
+        str(SCRIPT_PROJECT_ROOT),
+    )
+
+from src.paths import (
+    resolve_data_root,
+    resolve_processed_artifact,
+    resolve_project_root,
+)
 
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Extract predictions and embeddings from a trained HDF5 CNN checkpoint."
+    )
+
+    parser.add_argument(
+        "--project-root",
+        type=Path,
+        default=None,
+        help=(
+            "Optional repository-root override. "
+            "Otherwise use the config value if valid, "
+            "then auto-detect the repository root."
+        ),
+    )
+
+    parser.add_argument(
+        "--data-root",
+        type=Path,
+        default=None,
+        help=(
+            "Optional external data-root override. "
+            "Precedence: CLI, CBC_PE_DATA_ROOT, config."
+        ),
     )
 
     parser.add_argument(
@@ -75,8 +111,19 @@ def main():
     args = parse_args()
     cfg = load_json(args.config)
 
-    project_root = Path(get_required(cfg, "project_root"))
-    data_root = Path(get_required(cfg, "data_root"))
+    project_root = resolve_project_root(
+        cli_project_root=args.project_root,
+        config_project_root=cfg.get(
+            "project_root"
+        ),
+    )
+
+    data_root = resolve_data_root(
+        cli_data_root=args.data_root,
+        config_data_root=cfg.get(
+            "data_root"
+        ),
+    )
 
     if not project_root.exists():
         raise FileNotFoundError(f"project_root does not exist: {project_root}")
@@ -96,27 +143,65 @@ def main():
     output_cfg = cfg.get("output", {})
 
     data_processed = data_root / "processed"
-    checkpoints_dir = data_root / "models" / "checkpoints"
-    results_dir = data_root / "results"
+    checkpoints_root = data_root / "models" / "checkpoints"
+    results_root = data_root / "results"
+
+    dataset_id = get_required(dataset_cfg, "dataset_id")
+
+    checkpoints_dir = (checkpoints_root / dataset_id)
+    results_dir = (results_root / dataset_id)
 
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    dataset_path = resolve_path(
-        data_processed,
-        get_required(dataset_cfg, "dataset_file"),
+    dataset_path = resolve_processed_artifact(
+        data_root=data_root,
+        dataset_id=dataset_id,
+        file_name=get_required(
+            dataset_cfg,
+            "dataset_file",
+        ),
     )
-    split_path = resolve_path(
-        data_processed,
-        get_required(dataset_cfg, "split_file"),
+
+    split_path = resolve_processed_artifact(
+        data_root=data_root,
+        dataset_id=dataset_id,
+        file_name=get_required(
+            dataset_cfg,
+            "split_file",
+        ),
     )
-    label_stats_path = resolve_path(
-        data_processed,
-        get_required(dataset_cfg, "label_stats_file"),
+
+    label_stats_path = resolve_processed_artifact(
+        data_root=data_root,
+        dataset_id=dataset_id,
+        file_name=get_required(
+            dataset_cfg,
+            "label_stats_file",
+        ),
     )
+
+    checkpoint_file = get_required(
+        prediction_cfg,
+        "checkpoint_file",
+    )
+
     checkpoint_path = resolve_path(
         checkpoints_dir,
-        get_required(prediction_cfg, "checkpoint_file"),
+        checkpoint_file,
     )
+
+    if not checkpoint_path.exists():
+        legacy_checkpoint_path = (
+            resolve_path(
+                checkpoints_root,
+                checkpoint_file,
+            )
+        )
+
+        if legacy_checkpoint_path.exists():
+            checkpoint_path = (
+                legacy_checkpoint_path
+            )
 
     for name, path in {
         "dataset": dataset_path,

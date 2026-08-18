@@ -1,522 +1,829 @@
 # Mondrian conformal workflow
 
-This document describes the Mondrian conformal prediction workflow used in the `cbc_pe` project.
+This document describes the Mondrian conformal prediction workflow used by the closed **M10-500k** CBC parameter-estimation baseline.
 
-The goal is to build calibrated prediction intervals for CNN-based BBH parameter estimation.
+The objective is to construct calibrated prediction intervals around CNN point estimates while allowing interval widths to adapt to different regions of the regression problem.
 
-The current implementation is used to analyze CNN prediction errors and construct Mondrian conformal intervals conditioned on different grouping scores.
-
-## Current status
-
-Mondrian analysis is currently notebook-based.
-
-The main notebook is:
+The conformal implementation is located under:
 
 ```text
-cbc_pe/notebooks/04_mondrian_hdf5_demo.ipynb
+src/conformal/
 ```
 
-A future script should be added:
+The final M10 analysis is performed in:
 
 ```text
-cbc_pe/scripts/run_mondrian.py
+notebooks/11_mondrian_m10_inputzscore_500k_final.ipynb
 ```
 
-The current notebook can be used in two modes:
+## 1. Statistical objective
+
+For a target miscoverage level:
 
 ```text
-debug mode: pseudo calibration/test split created from validation predictions
-final mode: real calibration/test splits loaded from saved prediction files
+alpha
 ```
 
-Debug mode is useful for checking that the pipeline runs, but it must not be reported as final conformal performance.
-
-## Required inputs
-
-Mondrian conformal analysis needs saved CNN outputs, typically produced by:
+the desired prediction interval satisfies approximately:
 
 ```text
-cbc_pe/scripts/train_cnn_hdf5.py
+P(
+    y_true ∈ [lower, upper]
+) = 1 - alpha
 ```
 
-The expected prediction file is usually stored under:
+For the closed M10 analysis:
 
 ```text
-<data_root>/results/
+confidence level = 0.90
+alpha            = 0.10
 ```
 
-Typical filename pattern:
+Conformal intervals are frequentist prediction intervals.
+
+They are not Bayesian posterior credible intervals.
+
+## 2. Calibration and test separation
+
+The closed synthetic split is:
 
 ```text
-*_predictions_embeddings.npz
+train: 400000
+val:    40000
+cal:    30000
+test:   30000
 ```
 
-The file should contain arrays such as:
+Roles:
 
 ```text
-pred_train
-y_train
-emb_train
-idx_train
-
-pred_val
-y_val
-emb_val
-idx_val
-
-pred_cal
-y_cal
-emb_cal
-idx_cal
-
-pred_test
-y_test
-emb_test
-idx_test
-
-y_mean
-y_std
-label_names
-available_splits
+train → fit CNN parameters
+val   → training diagnostics / model selection
+cal   → fit conformal calibration quantities
+test  → evaluate conformal performance
 ```
 
-For the current 80/20 architecture-selection split, only `train` and `val` may exist.
+The test set must not be used to fit conformal quantiles.
 
-For final conformal evaluation, `cal` and `test` must exist.
+The calibration set must remain independent of CNN training.
 
-## Split requirements
+## 3. Required CNN outputs
 
-### Current architecture-selection setup
-
-The current architecture-selection setup is:
+The closed M10 prediction artifact is:
 
 ```text
-train = 80000
-validation = 20000
-calibration = 0
-test = 0
+m10_inputzscore_500k_cal_test_predictions_embeddings.npz
 ```
 
-This split is acceptable for CNN model comparison.
-
-It is not sufficient for final conformal reporting.
-
-If Mondrian is run using a pseudo split of validation predictions, those results should be marked as debugging results only.
-
-### Final conformal setup
-
-After selecting the CNN architecture, use a split such as:
+stored under:
 
 ```text
-train = 70%
-validation = 10%
-calibration = 10%
-test = 10%
+<data_root>/results/<dataset_id>/
 ```
 
-The intended role of each split is:
-
-- `train`: fit CNN weights
-- `validation`: model selection and early stopping
-- `calibration`: compute conformal quantiles
-- `test`: evaluate final interval coverage and width
-
-The calibration set must not be used to train the CNN.
-
-The test set must not be used to choose the CNN architecture, tune Mondrian settings, or select the final configuration.
-
-## Basic conformal idea
-
-The CNN produces point predictions:
+The conformal pipeline uses:
 
 ```text
-y_pred
+calibration predictions
+calibration targets
+calibration embeddings
+
+test predictions
+test targets
+test embeddings
 ```
 
-For each target label, the residual is:
+Embeddings are required only for taxonomy modes based on learned representation-space difficulty.
+
+## 4. Basic conformal regression
+
+Let:
 
 ```text
-residual = y_true - y_pred
+y_hat
 ```
 
-Conformal calibration uses residuals on the calibration set to construct intervals around future predictions.
-
-For a target confidence level such as:
+be the CNN point prediction and:
 
 ```text
-confidence_level = 0.90
+y
 ```
 
-the desired marginal coverage is approximately:
+the true target.
+
+A residual can be defined as:
 
 ```text
-P(y_true in prediction interval) ≈ 0.90
+r = y - y_hat
 ```
 
-## Mondrian conformal idea
+or equivalently under the opposite sign convention if used consistently.
 
-Standard conformal prediction computes one global residual quantile.
+Conformal calibration estimates empirical residual quantiles on the calibration set.
 
-Mondrian conformal prediction instead splits the calibration data into bins and computes a separate conformal interval per bin.
+These quantiles are then applied to future predictions without access to target truth.
 
-The goal is to obtain more locally adaptive intervals.
+## 5. Mondrian conformal prediction
 
-The generic flow is:
+Standard split conformal regression uses one global calibration distribution.
+
+Mondrian conformal prediction partitions samples into groups and calibrates separate interval corrections within each group.
+
+Generic procedure:
 
 ```text
-1. Compute a score for each calibration sample.
-2. Bin calibration samples according to that score.
-3. Compute residual quantiles inside each bin.
-4. For a test sample, compute its score.
-5. Assign the test sample to a bin.
-6. Use the interval calibrated for that bin.
-7. Evaluate empirical coverage and interval width.
+1. compute a taxonomy score for calibration samples
+2. partition calibration scores into bins
+3. compute conformal residual quantiles within each bin
+4. compute the taxonomy score for a target sample
+5. assign the sample to the corresponding bin
+6. apply the bin-specific conformal correction
 ```
 
-## Taxonomy modes
+The objective is to adapt interval width to local prediction difficulty while preserving adequate calibration support in every bin.
 
-The project currently supports two main taxonomy modes.
+## 6. Taxonomy modes
 
-### Prediction-based Mondrian
+The closed M10 implementation supports two principal taxonomy modes.
 
-Prediction-based Mondrian uses the CNN prediction itself as the binning score.
+### Prediction taxonomy
 
-Example interpretation:
+The taxonomy score is based on the CNN point prediction itself.
+
+Conceptually:
 
 ```text
-bin samples by predicted chirp_mass
-bin samples by predicted total_mass
-bin samples by predicted chi_eff
+score = y_hat
 ```
 
-This can adapt intervals to regions where the target value itself changes the difficulty of the problem.
+Samples are therefore grouped according to their predicted physical value.
 
-This mode is simple, interpretable, and useful as a baseline.
-
-Potential weakness:
+Examples:
 
 ```text
-prediction-based bins may miss uncertainty structure that is not directly captured by the predicted value.
+low predicted chirp mass
+intermediate predicted chirp mass
+high predicted chirp mass
 ```
 
-### Difficulty-based Mondrian
+Advantages:
 
-Difficulty-based Mondrian uses a difficulty score estimated from model embeddings and calibration residuals.
+- simple;
+- interpretable;
+- inexpensive;
+- applicable without embeddings.
 
-The idea is:
+Limitations:
+
+- prediction value may not capture all sources of local model difficulty.
+
+### Difficulty taxonomy
+
+Difficulty-based Mondrian uses the CNN embedding space and calibration residual information.
+
+The central idea is:
 
 ```text
-samples close in embedding space may have similar prediction difficulty
+nearby samples in embedding space
+may have similar regression difficulty
 ```
 
-The typical procedure is:
+For a target embedding, local calibration neighbors are identified and their residual behavior is used to estimate a difficulty score.
+
+Conceptually:
 
 ```text
-1. Extract embeddings from the trained CNN.
-2. For each sample, find nearby calibration samples in embedding space.
-3. Estimate difficulty from neighboring calibration residuals.
-4. Use this difficulty score for binning.
+embedding
+→ local calibration neighbors
+→ local residual scale
+→ difficulty score
 ```
 
-This can produce intervals that are more directly related to local model uncertainty.
+The resulting difficulty score is then used for Mondrian binning.
 
-Potential weakness:
+Advantages:
+
+- can adapt directly to local error structure;
+- can capture difficulty not explained only by the predicted target value.
+
+Limitations:
+
+- depends on embedding quality;
+- depends on calibration-neighbor structure;
+- requires target embeddings at application time.
+
+## 7. Prediction-time truth independence
+
+A fitted conformal calibrator must be applicable without target truth.
+
+This requirement is explicitly protected in the current implementation.
+
+For a new real event, the application stage may use:
 
 ```text
-difficulty scores depend on embedding quality and the KNN/difficulty estimator.
+CNN point prediction
+CNN embedding
+fitted calibration objects
 ```
 
-If embeddings are poor, difficulty-based Mondrian may not improve over simpler prediction-based binning.
+but it must not require:
 
-## Interval modes
+```text
+true event parameter
+target residual
+```
 
-The project supports two interval modes.
+This separation is important because real-event truth is unavailable.
+
+## 8. Fit, apply, and evaluate stages
+
+The reusable conformal pipeline explicitly separates:
+
+```text
+fit
+apply
+evaluate
+```
+
+### Fit
+
+Calibration data are used to construct:
+
+- taxonomy bins;
+- bin thresholds;
+- residual quantiles;
+- difficulty estimators where required.
+
+### Apply
+
+A fitted calibrator receives new predictions and, for difficulty-based taxonomies, embeddings.
+
+It returns prediction intervals without requiring true labels.
+
+### Evaluate
+
+When true labels are available, such as on the synthetic test set, interval outputs are evaluated for coverage and efficiency.
+
+This design avoids coupling real-event inference to synthetic test labels.
+
+## 9. Interval modes
+
+Two interval modes are supported.
 
 ### Symmetric intervals
 
-Symmetric intervals use absolute residuals.
+Symmetric intervals use absolute residual magnitude.
 
-For each bin, compute a quantile of:
+For a bin-specific conformal quantile:
 
 ```text
-abs(y_true - y_pred)
+q
 ```
 
-The interval is:
+the interval is:
 
 ```text
-[y_pred - q, y_pred + q]
+[y_hat - q, y_hat + q]
 ```
 
 Advantages:
 
-- simple
-- stable
-- easy to interpret
+- simple;
+- stable;
+- robust when residual asymmetry is weak.
 
-Potential weakness:
+Limitations:
 
-- cannot represent asymmetric errors
+- cannot explicitly capture asymmetric residual structure.
 
 ### Asymmetric intervals
 
-Asymmetric intervals use signed residuals and estimate lower and upper errors separately.
+Asymmetric intervals estimate lower and upper residual corrections separately.
 
-The interval is:
+Conceptually:
 
 ```text
-[y_pred + q_lower, y_pred + q_upper]
+[y_hat + q_lower, y_hat + q_upper]
 ```
-
-where `q_lower` and `q_upper` are calibrated from signed residuals.
 
 Advantages:
 
-- can capture biased or asymmetric residuals
-- may be more efficient if errors are asymmetric
+- can represent asymmetric residuals;
+- can compensate for systematic direction-dependent errors;
+- may provide more efficient intervals.
 
-Potential weakness:
+Limitations:
 
-- can be noisier than symmetric intervals
-- needs enough calibration samples per bin
+- requires stable calibration in both residual tails;
+- can be more sensitive to finite calibration counts.
 
-## Binning
+## 10. Quantile binning
 
-The current Mondrian implementation uses quantile binning.
+Mondrian taxonomy scores are partitioned using quantile-based bins.
 
-For a chosen number of bins:
+The objective is to obtain approximately balanced calibration counts across bins.
 
-```text
-n_bins
-```
+Increasing the number of bins produces more local adaptivity but reduces the number of calibration samples available in each group.
 
-the calibration scores are split into approximately equal-count bins.
-
-Typical values to test are:
+This produces a fundamental trade-off:
 
 ```text
-n_bins = 3
-n_bins = 6
-n_bins = 12
-n_bins = 24
-n_bins = 36
+few bins
+→ stable calibration
+→ weak local adaptivity
+
+many bins
+→ stronger local adaptivity
+→ noisier calibration quantiles
 ```
 
-Too few bins produce intervals that may be too global.
+Therefore, the largest possible number of bins is not automatically the best configuration.
 
-Too many bins produce unstable quantiles because each bin has fewer calibration samples.
+## 11. Minimum bin support
 
-## Minimum samples per bin
+Every Mondrian bin must contain enough calibration samples for meaningful quantile estimation.
 
-Every bin must contain enough calibration samples.
+Configurations with very small calibration counts per bin can produce:
 
-If a bin has too few samples, the conformal quantile becomes unstable.
+- unstable interval widths;
+- noisy local coverage;
+- extreme tail behavior;
+- misleading apparent adaptivity.
 
-A configuration should be treated with caution or rejected if:
+Minimum bin count is therefore part of the configuration-selection criteria.
+
+## 12. Finite-sample quantiles
+
+Conformal calibration uses empirical finite-sample quantiles rather than an asymptotic population quantile.
+
+The exact quantile convention is part of the implementation and should remain unchanged for a closed baseline.
+
+Changes to quantile indexing or interpolation can alter coverage behavior and therefore constitute a methodological change.
+
+## 13. Closed M10 jitter behavior
+
+The closed M10 Mondrian pipeline uses the existing quantile-binning jitter behavior.
+
+A very small random perturbation may be applied to break exact score ties during bin construction.
+
+This jitter is numerically negligible relative to the physical taxonomy scores and is intended only as a tie-breaking mechanism.
+
+Its behavior is part of the closed M10 implementation and should not be silently changed during repository cleanup.
+
+Any future change to deterministic tie handling should be introduced as a new methodological variant and validated separately.
+
+## 14. Coverage
+
+Global empirical coverage is:
 
 ```text
-min_count_per_bin is too small
+coverage =
+    number of covered test targets
+    / total number of test targets
 ```
 
-For final analysis, the acceptable minimum count depends on the calibration set size and the number of bins.
-
-With small calibration sets, aggressive binning is usually a bad idea.
-
-## Metrics to report
-
-For each Mondrian configuration, report at least:
-
-- global empirical coverage
-- average interval width
-- median interval width
-- coverage per bin
-- width per bin
-- sample count per bin
-- undercoverage per bin
-- worst-bin coverage
-- maximum undercoverage gap
-- number of bad bins
-- comparison with target confidence level
-
-For a target confidence level of 0.90, the empirical coverage should be close to:
+For 90% nominal intervals, the target is approximately:
 
 ```text
 0.90
 ```
 
-But global coverage is not enough.
+However, global coverage alone is not sufficient.
 
-A configuration with good global coverage can still be locally bad if some bins under-cover strongly.
+A configuration can achieve nominal global coverage while under-covering significantly in specific regions of parameter space.
 
-## Bin-wise coverage
+This is the main motivation for local Mondrian diagnostics.
 
-For each bin:
+## 15. Coverage per bin
+
+For each Mondrian test bin:
 
 ```text
-coverage_bin = number of covered samples in bin / number of test samples in bin
+coverage_bin =
+    covered samples in bin
+    / samples in bin
 ```
 
-Coverage should be checked per bin.
+This provides a local calibration diagnostic.
 
-Useful diagnostics:
+Important quantities include:
 
 ```text
-coverage per bin
-target coverage line
-binomial uncertainty bands
-sample count per bin
-interval width per bin
+coverage_per_bin
+counts_per_bin
+min_coverage_per_bin
 ```
 
-A bin with low coverage and low count should be interpreted carefully.
+A configuration with acceptable global coverage but poor minimum-bin coverage should be treated cautiously.
 
-A bin with low coverage and high count is a serious warning sign.
+## 16. Binomial coverage uncertainty
 
-## Interval width
+Observed coverage fluctuates statistically around the nominal target.
 
-Coverage alone is not sufficient.
-
-A trivial method can get high coverage by making intervals too wide.
-
-For each configuration, compare:
+For a bin containing:
 
 ```text
-coverage
-width
+n
 ```
 
-A good configuration should achieve coverage close to the target with intervals that are not unnecessarily wide.
-
-Useful width metrics:
+test samples and nominal coverage:
 
 ```text
-mean width
+p
+```
+
+a simple binomial standard deviation is approximately:
+
+```text
+sigma =
+    sqrt(
+        p * (1 - p) / n
+    )
+```
+
+Local coverage diagnostics can therefore be compared against one- or two-sigma tolerance bands.
+
+The closed analysis records quantities such as:
+
+```text
+n_bins_under_2sigma
+n_bins_outside_2sigma
+```
+
+to identify locally problematic configurations.
+
+These are diagnostics, not independent conformal guarantees.
+
+## 17. Undercoverage diagnostics
+
+A particularly important quantity is the maximum local deficit relative to the nominal target.
+
+Conceptually:
+
+```text
+undercoverage_gap_bin =
+    max(
+        0,
+        target_coverage - coverage_bin
+    )
+```
+
+and:
+
+```text
+max_undercoverage_gap =
+    maximum undercoverage gap across bins
+```
+
+This captures the severity of the worst local undercoverage.
+
+A configuration with a small average interval width but a large worst-bin undercoverage gap may be scientifically undesirable.
+
+## 18. Interval width
+
+Coverage should always be interpreted jointly with interval efficiency.
+
+For each sample:
+
+```text
+width = upper - lower
+```
+
+Useful summaries include:
+
+```text
 median width
+mean width
+90th percentile width
+95th percentile width
 width per bin
-width per label
 ```
 
-## Configuration comparison
+Narrow intervals are desirable only when adequate coverage is preserved.
 
-When comparing Mondrian configurations, do not choose only by global coverage.
+## 19. Tail-miss behavior
 
-A better comparison includes:
+For asymmetric intervals, it is useful to distinguish misses below and above the interval.
 
-- global coverage close to target
-- low average width
-- stable bin-wise coverage
-- no severe undercoverage bins
-- reasonable minimum bin count
-- no pathological width spikes
-- robustness across labels
-- robustness across taxonomy modes
-- robustness across interval modes
-
-A configuration is suspicious if it has:
-
-- good global coverage but poor bin-wise coverage
-- low width but severe undercoverage
-- extremely wide intervals in a few bins
-- many bins with too few samples
-- unstable behavior across labels
-
-## Recommended configuration grid
-
-During development, test combinations such as:
+For example:
 
 ```text
-taxonomy_mode:
-  prediction
-  difficulty
+lower misses:
+    y_true < lower
 
-interval_mode:
-  symmetric
-  asymmetric
-
-n_bins:
-  3
-  6
-  12
-  24
-  36
-
-confidence_level:
-  0.90
+upper misses:
+    y_true > upper
 ```
 
-Start with fewer bins.
+Strong imbalance can indicate:
 
-Only increase `n_bins` if the calibration set is large enough.
+- asymmetric regression bias;
+- imperfect tail calibration;
+- parameter-boundary effects.
 
-## Current debug workflow
+The closed M10 diagnostics include tail-miss imbalance as one of the interval-quality indicators.
 
-While only train/validation predictions are available, the notebook may use:
+## 20. Candidate configuration grid
+
+The final M10 notebook evaluates combinations of:
 
 ```text
-debug_split_val = True
+target label
+taxonomy mode
+interval mode
+number of bins
 ```
 
-This creates pseudo calibration and pseudo test sets from validation predictions.
+This creates a grid of possible conformal configurations.
 
-This is useful for:
-
-- checking that the pipeline works
-- comparing rough behavior of taxonomy modes
-- debugging plots and metrics
-- validating code paths before final splits exist
-
-It is not valid for final reporting.
-
-Any result produced with a pseudo split should be clearly marked as debug.
-
-## Final workflow
-
-The final Mondrian workflow should be:
+The objective is not simply to select the configuration with:
 
 ```text
-1. Select CNN architecture using train/validation results.
-2. Create or use a 70/10/10/10 split.
-3. Train the selected CNN architecture.
-4. Save predictions and embeddings for train, validation, calibration, and test.
-5. Calibrate conformal intervals using the calibration split.
-6. Evaluate coverage and width using the test split.
-7. Compare Mondrian configurations.
-8. Report only results based on real calibration/test splits.
+largest n_bins
 ```
 
-## Recommended reporting table
-
-A useful reporting table should contain:
+or:
 
 ```text
-model_id
-dataset_id
-split_id
-taxonomy_mode
-interval_mode
-label
-n_bins
-confidence_level
-global_coverage
-mean_width
-median_width
-min_bin_count
-worst_bin_coverage
-max_undercoverage_gap
-n_bad_bins
-notes
+smallest width
 ```
 
-## Important warnings
+but to balance local validity and interval efficiency.
 
-Do not use the test set for selecting the CNN architecture.
+## 21. Selection module
 
-Do not use the test set for selecting the Mondrian configuration.
+Reusable configuration-selection logic is implemented in:
 
-Do not report validation pseudo-split results as final conformal results.
+```text
+src/conformal/selection.py
+```
 
-Do not trust global coverage alone.
+Selection is performed independently for each target label.
 
-Do not increase the number of bins without checking bin counts.
+The repository currently exposes two selection policies:
 
-Do not compare interval widths without also checking coverage.
+```text
+conservative
+efficient
+```
+
+These policies are designed to provide two scientifically interpretable operating points rather than one opaque "best" configuration.
+
+## 22. Conservative policy
+
+The conservative policy prioritizes local calibration robustness.
+
+Its ranking favors configurations with:
+
+```text
+acceptable global coverage
+good local-bin coverage
+small undercoverage deficits
+stable calibration support
+```
+
+before prioritizing interval width or a larger number of bins.
+
+The conservative policy should therefore be interpreted as the safer conformal operating point when local validity matters more than maximal interval efficiency.
+
+## 23. Efficient policy
+
+The efficient policy searches among configurations that satisfy predefined validity limits and prioritizes narrower intervals.
+
+Its objective is to obtain a more compact interval while remaining within acceptable local-calibration constraints.
+
+If no candidate satisfies the efficient-policy requirements, the implementation falls back to the conservative selection rather than returning an invalid configuration.
+
+This fallback behavior is regression-tested.
+
+## 24. Selected configurations
+
+The exact selected configurations are generated from the closed M10 analysis rather than hard-coded into conceptual documentation.
+
+The authoritative selections are those produced by:
+
+```text
+notebooks/11_mondrian_m10_inputzscore_500k_final.ipynb
+```
+
+and the associated saved selection artifact.
+
+The current closed M10 selections include one configuration per:
+
+```text
+policy
+× target label
+```
+
+for:
+
+```text
+conservative
+efficient
+```
+
+and:
+
+```text
+chirp_mass
+total_mass
+chi_eff
+```
+
+The exact taxonomy, interval mode, and number of bins should be read from the saved closed selection table.
+
+This avoids duplicating experiment-specific numerical results across multiple documentation files.
+
+## 25. Reusable selected calibrators
+
+Selected rows are converted into fitted reusable calibrators using:
+
+```text
+src/conformal/selected_calibrators.py
+```
+
+A selected calibrator records the association between:
+
+```text
+policy
+target label
+fitted Mondrian model
+```
+
+The application stage validates:
+
+- label-index consistency;
+- prediction shapes;
+- embedding requirements;
+- duplicate policy/label definitions.
+
+This protects real-event inference against silent configuration mismatches.
+
+## 26. Real-event application
+
+For a real event:
+
+```text
+processed H1/L1/V1 strain
+→ M10 CNN
+→ point predictions
+→ embeddings
+→ selected fitted Mondrian calibrators
+→ prediction intervals
+```
+
+No target truth is required.
+
+For prediction-based taxonomies:
+
+```text
+point prediction
+```
+
+is sufficient.
+
+For difficulty-based taxonomies:
+
+```text
+point prediction
++ target embedding
+```
+
+are required.
+
+## 27. Synthetic versus real-data interpretation
+
+The synthetic test set is drawn from the same experimental generation framework as the calibration set.
+
+Under that setting, conformal coverage can be evaluated directly.
+
+Real GWOSC data represent a domain-shifted application.
+
+Potential differences include:
+
+```text
+real detector noise
+non-stationarity
+non-Gaussian transients
+glitches
+PSD mismatch
+waveform mismatch
+selection effects
+```
+
+Therefore, the nominal synthetic conformal coverage should not be interpreted as a formal real-data coverage guarantee.
+
+Real-event intervals are an empirical transfer application of the synthetic calibration.
+
+## 28. Relationship to LVK intervals
+
+The M10 Mondrian interval and an LVK posterior interval have different statistical meanings.
+
+Mondrian conformal interval:
+
+```text
+frequentist prediction interval
+calibrated from held-out synthetic residuals
+```
+
+LVK interval:
+
+```text
+posterior credible interval
+derived from Bayesian parameter estimation
+```
+
+Direct comparison is still informative, but agreement should be described in terms of:
+
+```text
+central-value consistency
+interval overlap
+relative width
+systematic discrepancy
+```
+
+rather than assuming the intervals are statistically equivalent.
+
+## 29. Physical clipping
+
+Mass prediction intervals can mathematically extend below physical lower bounds.
+
+For plots, physically clipped versions may be created.
+
+However:
+
+```text
+original conformal bounds
+```
+
+must be retained for scientific coverage and overlap calculations.
+
+Plotting transformations must not alter the reported conformal statistics.
+
+## 30. Historical Mondrian analyses
+
+Earlier Mondrian development notebooks are retained under:
+
+```text
+notebooks/_archive/m08_baseline/
+notebooks/_archive/m10_development/
+notebooks/_archive/architecture_search/
+```
+
+The lightweight reusable demo is:
+
+```text
+notebooks/demos/04_mondrian_hdf5_demo.ipynb
+```
+
+The authoritative closed M10 conformal analysis is:
+
+```text
+notebooks/11_mondrian_m10_inputzscore_500k_final.ipynb
+```
+
+## 31. Reproducibility contract
+
+A reported Mondrian result should preserve:
+
+- CNN checkpoint;
+- calibration/test prediction artifact;
+- target label;
+- taxonomy mode;
+- interval mode;
+- number of bins;
+- confidence level;
+- binning behavior;
+- difficulty-estimation configuration;
+- selection policy;
+- fitted calibration state.
+
+Changing any of these can change interval behavior.
+
+Methodological changes should therefore be introduced under a new experimental identifier rather than silently modifying the closed M10 baseline.
+
+## 32. Main interpretation principle
+
+Mondrian conformal prediction is useful only if increased local adaptivity does not destroy calibration stability.
+
+The relevant optimization problem is therefore:
+
+```text
+local validity
++ sufficient calibration support
++ acceptable interval width
+```
+
+not:
+
+```text
+maximize number of bins
+```
+
+and not:
+
+```text
+minimize interval width at any cost
+```
+
+The conservative and efficient policies are intended to expose that trade-off explicitly.

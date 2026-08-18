@@ -98,9 +98,45 @@ INJECTION_KEYS = {
     "is_partially_clipped": "bool",
 }
 
+SCRIPT_PROJECT_ROOT = (
+    Path(__file__).resolve().parents[1]
+)
+
+if str(SCRIPT_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(
+        0,
+        str(SCRIPT_PROJECT_ROOT),
+    )
+
+from src.paths import (
+    resolve_data_root,
+    resolve_project_root,
+)
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Generate CBC BBH dataset directly into HDF5."
+    )
+
+    parser.add_argument(
+        "--project-root",
+        type=Path,
+        default=None,
+        help=(
+            "Optional repository-root override. "
+            "Otherwise use the config value if valid, "
+            "then auto-detect the repository root."
+        ),
+    )
+
+    parser.add_argument(
+        "--data-root",
+        type=Path,
+        default=None,
+        help=(
+            "Optional external data-root override. "
+            "Precedence: CLI, CBC_PE_DATA_ROOT, config."
+        ),
     )
 
     parser.add_argument(
@@ -613,8 +649,19 @@ def main():
     args = parse_args()
     cfg = load_json(args.config)
 
-    project_root = Path(get_required(cfg, "project_root"))
-    data_root = Path(get_required(cfg, "data_root"))
+    project_root = resolve_project_root(
+        cli_project_root=args.project_root,
+        config_project_root=cfg.get(
+            "project_root"
+        ),
+    )
+
+    data_root = resolve_data_root(
+        cli_data_root=args.data_root,
+        config_data_root=cfg.get(
+            "data_root"
+        ),
+    )
 
     if not project_root.exists():
         raise FileNotFoundError(f"project_root does not exist: {project_root}")
@@ -632,7 +679,30 @@ def main():
     label_transformer_cfg = cfg.get("label_transformer", {})
     parameter_sampler_cfg = cfg.get("parameter_sampler", {})
 
-    output_file = resolve_path(data_root / "processed", get_required(output_cfg, "file_name"))
+    output_file_name = get_required(
+        output_cfg,
+        "file_name",
+    )
+
+    dataset_id = Path(
+        output_file_name
+    ).stem
+
+    dataset_dir = (
+        data_root
+        / "processed"
+        / dataset_id
+    )
+
+    dataset_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    output_file = (
+        dataset_dir
+        / output_file_name
+    )
 
     # CLI overrides config.
     overwrite = bool(args.overwrite or output_cfg.get("overwrite", False))

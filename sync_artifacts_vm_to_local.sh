@@ -5,7 +5,7 @@ REMOTE_USER="vserrano"
 REMOTE_HOST="pcaecuda2.ciemat.es"
 REMOTE_PORT="822"
 
-REMOTE_DIR="/data/vserrano/cbc_pe/data/"
+REMOTE_DIR="/data/vserrano/cbc_pe_data/"
 LOCAL_DIR="/data/vserrano/cbc_pe_data/"
 
 RSYNC_ARGS=(

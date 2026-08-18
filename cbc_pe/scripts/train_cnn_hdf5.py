@@ -13,10 +13,46 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 
+SCRIPT_PROJECT_ROOT = (
+    Path(__file__).resolve().parents[1]
+)
+
+if str(SCRIPT_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(
+        0,
+        str(SCRIPT_PROJECT_ROOT),
+    )
+
+from src.paths import (
+    resolve_data_root,
+    resolve_processed_artifact,
+    resolve_project_root,
+)
 
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Train CNN baseline for CBC parameter regression from HDF5."
+    )
+
+    parser.add_argument(
+        "--project-root",
+        type=Path,
+        default=None,
+        help=(
+            "Optional repository-root override. "
+            "Otherwise use the config value if valid, "
+            "then auto-detect the repository root."
+        ),
+    )
+
+    parser.add_argument(
+        "--data-root",
+        type=Path,
+        default=None,
+        help=(
+            "Optional external data-root override. "
+            "Precedence: CLI, CBC_PE_DATA_ROOT, config."
+        ),
     )
 
     parser.add_argument(
@@ -97,8 +133,19 @@ def main():
     args = parse_args()
     cfg = load_json(args.config)
 
-    project_root = Path(get_required(cfg, "project_root"))
-    data_root = Path(get_required(cfg, "data_root"))
+    project_root = resolve_project_root(
+        cli_project_root=args.project_root,
+        config_project_root=cfg.get(
+            "project_root"
+        ),
+    )
+
+    data_root = resolve_data_root(
+        cli_data_root=args.data_root,
+        config_data_root=cfg.get(
+            "data_root"
+        ),
+    )
 
     if not project_root.exists():
         raise FileNotFoundError(f"project_root does not exist: {project_root}")
@@ -133,17 +180,50 @@ def main():
 
     dataset_id = get_required(dataset_cfg, "dataset_id")
 
-    data_processed = data_root / "processed"
     models_dir = data_root / "models"
-    results_dir = data_root / "results"
-    checkpoints_dir = models_dir / "checkpoints"
 
-    for path in [data_processed, models_dir, results_dir, checkpoints_dir]:
+    results_root = data_root / "results"
+    checkpoints_root = models_dir / "checkpoints"
+
+    results_dir = (results_root / dataset_id)
+
+    checkpoints_dir = (checkpoints_root / dataset_id)
+
+    for path in [
+        models_dir,
+        results_root,
+        checkpoints_root,
+        results_dir,
+        checkpoints_dir,
+    ]:
         path.mkdir(parents=True, exist_ok=True)
 
-    dataset_path = resolve_path(data_processed, get_required(dataset_cfg, "dataset_file"))
-    split_path = resolve_path(data_processed, get_required(dataset_cfg, "split_file"))
-    label_stats_path = resolve_path(data_processed, get_required(dataset_cfg, "label_stats_file"))
+    dataset_path = resolve_processed_artifact(
+        data_root=data_root,
+        dataset_id=dataset_id,
+        file_name=get_required(
+            dataset_cfg,
+            "dataset_file",
+        ),
+    )
+
+    split_path = resolve_processed_artifact(
+        data_root=data_root,
+        dataset_id=dataset_id,
+        file_name=get_required(
+            dataset_cfg,
+            "split_file",
+        ),
+    )
+
+    label_stats_path = resolve_processed_artifact(
+        data_root=data_root,
+        dataset_id=dataset_id,
+        file_name=get_required(
+            dataset_cfg,
+            "label_stats_file",
+        ),
+    )
 
     if dataset_path is None or not dataset_path.exists():
         raise FileNotFoundError(f"Dataset file not found: {dataset_path}")

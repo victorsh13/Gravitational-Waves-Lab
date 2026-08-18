@@ -1,6 +1,18 @@
 # 500k M00 baseline experiment
 
-This document tracks the first large-scale 500k training run for the CBC parameter-estimation CNN baseline.
+> **Historical experiment**
+>
+> This document records the M00 500k scaling experiment that preceded the later M08 and M10 baselines.
+>
+> It is preserved for scientific traceability and should not be interpreted as the current `cbc_pe` reference workflow.
+>
+> Paths, storage conventions, model-selection status, and next-step statements in this document reflect the project state at the time the experiment was performed. In particular, historical `/scratch/...` paths are intentionally retained as part of the experiment record.
+>
+> The current closed reference baseline is documented in:
+>
+> ```text
+> docs/experiments/M10_closed_baseline.md
+> ```
 
 ## Goal
 

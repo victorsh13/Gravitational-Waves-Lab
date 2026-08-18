@@ -1,6 +1,6 @@
 {
   "project_root": "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe",
-  "data_root": "/scratch/vserrano/cbc_pe_data",
+  "data_root": "/data/vserrano/cbc_pe_data",
 
   "dataset": {
     "dataset_id": "bbh_processed_4s_seobnrv4opt_snr10-25_n500_000",

@@ -13,10 +13,48 @@ import h5py
 
 DEFAULT_LABEL_NAMES = ["chirp_mass", "total_mass", "chi_eff"]
 
+SCRIPT_PROJECT_ROOT = (
+    Path(__file__).resolve().parents[1]
+)
+
+if str(SCRIPT_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(
+        0,
+        str(SCRIPT_PROJECT_ROOT),
+    )
+
+from src.paths import (
+    dataset_processed_dir,
+    resolve_data_root,
+    resolve_processed_artifact,
+    resolve_project_root,
+)
 
 def parse_args():
+
     parser = argparse.ArgumentParser(
         description="Create reproducible train/val/cal/test splits for an HDF5 CBC dataset."
+    )
+
+    parser.add_argument(
+        "--project-root",
+        type=Path,
+        default=None,
+        help=(
+            "Optional repository-root override. "
+            "Otherwise use the config value if valid, "
+            "then auto-detect the repository root."
+        ),
+    )
+
+    parser.add_argument(
+        "--data-root",
+        type=Path,
+        default=None,
+        help=(
+            "Optional external data-root override. "
+            "Precedence: CLI, CBC_PE_DATA_ROOT, config."
+        ),
     )
 
     parser.add_argument(
@@ -105,8 +143,19 @@ def main():
     args = parse_args()
     cfg = load_json(args.config)
 
-    project_root = Path(get_required(cfg, "project_root"))
-    data_root = Path(get_required(cfg, "data_root"))
+    project_root = resolve_project_root(
+        cli_project_root=args.project_root,
+        config_project_root=cfg.get(
+            "project_root"
+        ),
+    )
+
+    data_root = resolve_data_root(
+        cli_data_root=args.data_root,
+        config_data_root=cfg.get(
+            "data_root"
+        ),
+    )
 
     if not project_root.exists():
         raise FileNotFoundError(f"project_root does not exist: {project_root}")
@@ -123,9 +172,11 @@ def main():
     dataset_id = get_required(dataset_cfg, "dataset_id")
     dataset_file = get_required(dataset_cfg, "dataset_file")
 
-    data_processed = data_root / "processed"
-
-    dataset_path = resolve_path(data_processed, dataset_file)
+    dataset_path = resolve_processed_artifact(
+        data_root=data_root,
+        dataset_id=dataset_id,
+        file_name=dataset_file,
+    )
 
     if not dataset_path.exists():
         raise FileNotFoundError(f"HDF5 dataset file not found: {dataset_path}")
@@ -141,7 +192,7 @@ def main():
     overwrite = bool(args.overwrite or output_cfg.get("overwrite", False))
 
     output_dir_cfg = output_cfg.get("output_dir", "processed")
-    output_dir = resolve_path(data_root, output_dir_cfg)
+    output_dir = dataset_processed_dir(data_root,dataset_id,)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     prefix = output_cfg.get("prefix", dataset_id)

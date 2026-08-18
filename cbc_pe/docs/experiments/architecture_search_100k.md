@@ -1,5 +1,25 @@
 # CNN architecture search
 
+> **Historical experiment**
+>
+> This document records the early 100k CNN architecture-search phase.
+>
+> It is preserved to document the sequence of model comparisons that preceded the 500k M00, M08, and M10 baselines.
+>
+> Statements such as "current phase", pending runs, or planned final splits reflect the project state at the time this architecture search was active and should not be interpreted as the current repository status.
+>
+> The current closed reference baseline is:
+>
+> ```text
+> M10-500k
+> ```
+>
+> and is documented in:
+>
+> ```text
+> docs/experiments/M10_closed_baseline.md
+> ```
+
 Current phase: architecture selection on 100k samples using an 80/20 train/validation split.
 
 Final conformal evaluation will use a separate 70/10/10/10 split after selecting the architecture.

@@ -46,3 +46,9 @@ cbc_pe/figures/
 nohup.out
 # Generated notebook outputs
 cbc_pe/notebooks/outputs/
+
+# Downloaded GWOSC strain cache
+cbc_pe/notebooks/gwosc_cache/
+
+# Local real-data / external-data caches
+cbc_pe/data/cache/
