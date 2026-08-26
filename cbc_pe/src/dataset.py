@@ -176,6 +176,7 @@ class DatasetBuilder:
         geocentric_coalescence_time: float | None = None,
         placement_policy: str = "random_contained",
         strain_mode: str = "in_noise",
+        signal_context_mode: str = "m10_windowed",
     ) -> DatasetSample:
         """
         Build one simulated dataset sample.
@@ -271,11 +272,22 @@ class DatasetBuilder:
                 for detector_name in self.detector_names
             }
 
-        # Important: inject the windowed projected network, not the full projection.
-        # This injection happens in the longer processing-context segment.
+        # Inject either the M10 windowed signal or the full projected waveform,
+        # including the physical GW contribution inside the processing context.
+        if signal_context_mode == "m10_windowed":
+            context_signals = final_network.windowed.strains
+
+        elif signal_context_mode == "full_projection":
+            context_signals = final_network.projection.strains
+
+        else:
+            raise ValueError(
+                "signal_context_mode must be 'm10_windowed' or 'full_projection'."
+            )
+
         injected_results = self.signal_injector.inject_network(
             noises=noises,
-            signals=final_network.windowed.strains,
+            signals=context_signals,
         )
 
         psds = {
