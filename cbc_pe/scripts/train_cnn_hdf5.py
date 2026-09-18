@@ -597,7 +597,19 @@ def main():
     print("mean abs X channel mean:", X_channel_means.abs().mean().item())
     print("mean X channel std:", X_channel_stds.mean().item())
 
-    if input_normalization_cfg.get("enabled", False):
+
+    expect_zscore = (
+        input_normalization_cfg.get(
+            "enabled",
+            False,
+        )
+        or input_normalization_cfg.get(
+            "already_normalized",
+            False,
+        )
+    )
+
+    if expect_zscore:
         if not torch.allclose(
             X_channel_means,
             torch.zeros_like(X_channel_means),
