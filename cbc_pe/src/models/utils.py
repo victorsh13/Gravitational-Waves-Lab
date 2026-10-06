@@ -14,7 +14,7 @@ def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-    # Más reproducible, aunque puede reducir algo el rendimiento.
+    # Más reproducible, aunque puede reducir algo el rendimiento (if deterministic=True and benchmark=False)
     torch.backends.cudnn.deterministic = False
     torch.backends.cudnn.benchmark = True
 
