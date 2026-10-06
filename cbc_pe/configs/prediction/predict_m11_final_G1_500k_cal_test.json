@@ -1,0 +1,37 @@
+{
+  "project_root": "/data/vserrano/gw/Gravitational-Waves-Lab/cbc_pe",
+  "data_root": "/data/vserrano/cbc_pe_data",
+
+  "dataset": {
+    "dataset_id": "M11_final_G1_500k",
+    "dataset_file": "m11_final_G1_500k_trainio.h5",
+    "split_file": "M11_final_G1_500k_splits_train400000_val40000_cal30000_test30000_seed123.npz",
+    "label_stats_file": "M11_final_G1_500k_label_stats_train_only_train400000_val40000_cal30000_test30000_seed123.npz"
+  },
+
+  "prediction": {
+    "checkpoint_file": "M11_final_G1_500k_SimpleCNN_ResidualDilated_M11_final_G1_inputzscore_resdilated_emb64_d124_train400k_MSELoss_seed123_checkpoint.pt",
+
+    "splits": ["cal", "test"],
+
+    "seed": 123,
+    "batch_size": 512,
+    "num_workers": 4,
+    "pin_memory": true,
+    "prefetch_factor": 2,
+    "max_slice_overread": 4.0,
+    "data_loading_mode": "hdf5_batch_slices",
+
+    "input_normalization": {
+      "enabled": false,
+      "already_normalized": true,
+      "mode": "per_sample_per_detector_zscore",
+      "eps": 1e-6
+    }
+  },
+
+  "output": {
+    "file_name": "m11_final_G1_500k_cal_test_predictions_embeddings.npz",
+    "overwrite": false
+  }
+}
