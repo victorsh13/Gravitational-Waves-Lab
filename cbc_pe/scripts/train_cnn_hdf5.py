@@ -172,12 +172,6 @@ def main():
         {"enabled": False},
     )
 
-    print()
-    print("=" * 80)
-    print("Input normalization")
-    print("=" * 80)
-    print(input_normalization_cfg)
-
     dataset_id = get_required(dataset_cfg, "dataset_id")
 
     models_dir = data_root / "models"
@@ -239,34 +233,27 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    print()
     print("=" * 80)
     print("Environment")
     print("=" * 80)
-    print("hostname:", os.uname().nodename)
-    print("project_root:", project_root)
-    print("data_root:", data_root)
-    print("cwd:", Path.cwd())
+    print("host:", os.uname().nodename)
     print("python:", sys.executable)
     print("torch:", torch.__version__)
     print("device:", device)
 
     if torch.cuda.is_available():
-        print("cuda version:", torch.version.cuda)
-        print("n GPUs visible:", torch.cuda.device_count())
-        print("GPU 0:", torch.cuda.get_device_name(0))
+        print("gpu:", torch.cuda.get_device_name(0))
+        print("cuda:", torch.version.cuda)
 
     print()
     print("=" * 80)
-    print("Input files")
+    print("Dataset")
     print("=" * 80)
-    print("dataset_path:", dataset_path)
-    print("split_path:", split_path)
-    print("label_stats_path:", label_stats_path)
 
-    print()
-    print("=" * 80)
-    print("Inspecting HDF5 dataset")
-    print("=" * 80)
+    print("dataset:", dataset_path)
+    print("splits:", split_path)
+    print("label stats:", label_stats_path)
 
     with h5py.File(dataset_path, "r") as f:
         if "X" not in f:
@@ -282,14 +269,22 @@ def main():
         signal_length = X_shape[2]
         n_outputs = y_shape[1]
 
-        print("X shape:", X_shape)
-        print("X dtype:", f["X"].dtype)
-        print("y shape:", y_shape)
-        print("y dtype:", f["y"].dtype)
+        print("X:", X_shape, f["X"].dtype)
+        print("y:", y_shape, f["y"].dtype)
 
-        print("attrs:")
-        for key in f.attrs.keys():
-            print(f"  {key}: {f.attrs[key]}")
+        important_attrs = [
+            "experiment_id",
+            "domain",
+            "signal_context_mode",
+            "input_normalization",
+            "waveform_approximant",
+            "snr_low_frequency_cutoff",
+            "snr_high_frequency_cutoff",
+        ]
+
+        for key in important_attrs:
+            if key in f.attrs:
+                print(f"{key}:", f.attrs[key])
 
         num_written = int(f.attrs.get("num_written", n_samples))
         if num_written != n_samples:
@@ -300,11 +295,13 @@ def main():
 
         status = f.attrs.get("dataset_status", None)
         if status is not None and status != "complete":
-            raise ValueError(f"HDF5 dataset status is not complete: {status}")
+            raise ValueError(
+                f"HDF5 dataset status is not complete: {status}"
+            )
 
     print()
     print("=" * 80)
-    print("Loading splits and label stats")
+    print("Splits and label scaling")
     print("=" * 80)
 
     splits = np.load(split_path)
@@ -324,14 +321,16 @@ def main():
     else:
         label_names = ["chirp_mass", "total_mass", "chi_eff"]
 
-    
-    print("train size:", len(train_idx))
-    print("val size:", len(val_idx))
-    print("cal size:", 0 if cal_idx is None else len(cal_idx))
-    print("test size:", 0 if test_idx is None else len(test_idx))
-    print("label_names:", label_names)
-    print("y_mean:", y_mean)
-    print("y_std:", y_std)
+    print(
+        f"train={len(train_idx)} | "
+        f"val={len(val_idx)} | "
+        f"cal={0 if cal_idx is None else len(cal_idx)} | "
+        f"test={0 if test_idx is None else len(test_idx)}"
+    )
+
+    print("labels:", label_names)
+    print("train y_mean:", y_mean)
+    print("train y_std:", y_std)
 
     if np.any(y_std <= 0):
         raise ValueError(f"Invalid y_std values: {y_std}")
@@ -360,7 +359,7 @@ def main():
 
     print()
     print("=" * 80)
-    print("Creating datasets/loaders")
+    print("Data loading")
     print("=" * 80)
 
     train_dataset = HDF5RegressionDataset(
@@ -402,11 +401,17 @@ def main():
 
     batch_size = int(training_cfg.get("batch_size", 64))
     num_workers = int(training_cfg.get("num_workers", 0))
+    val_num_workers = int(training_cfg.get("val_num_workers", 0))
     pin_memory = device.type == "cuda"
 
     data_loading_mode = str(training_cfg.get("data_loading_mode", "sample"))
 
-    print("data_loading_mode:", data_loading_mode)
+    print(
+        f"mode={data_loading_mode} | "
+        f"batch_size={batch_size} | "
+        f"workers={num_workers} | "
+        f"val_workers={val_num_workers}"
+    )
 
     batch_sampler_mode = str(training_cfg.get("batch_sampler", "default"))
     drop_last = bool(training_cfg.get("drop_last", True))
@@ -416,16 +421,12 @@ def main():
     persistent_workers = bool(training_cfg.get("persistent_workers", num_workers > 0))
     prefetch_factor = int(training_cfg.get("prefetch_factor", 2))
 
-    print("batch_sampler:", batch_sampler_mode)
-    print("drop_last:", drop_last)
-    print("shuffle_batches:", shuffle_batches)
-    print("shuffle_within_batch:", shuffle_within_batch)
-    print("max_slice_overread:", max_slice_overread)
-    print("persistent_workers:", persistent_workers if num_workers > 0 else False)
-    print("prefetch_factor:", prefetch_factor if num_workers > 0 else None)
+    print(
+        f"shuffle_batches={shuffle_batches} | "
+        f"drop_last={drop_last}"
+    )
 
     if data_loading_mode in {"hdf5_batch", "hdf5_batch_slices"}:
-        print("Using HDF5BatchIterableDataset for train.")
 
         train_batch_dataset = HDF5BatchIterableDataset(
             h5_path=dataset_path,
@@ -505,14 +506,12 @@ def main():
             **train_loader_kwargs,
         )
 
-    val_num_workers = int(training_cfg.get("val_num_workers", 0))
     val_pin_memory = bool(training_cfg.get("val_pin_memory", pin_memory))
     val_persistent_workers = bool(
         training_cfg.get("val_persistent_workers", val_num_workers > 0)
     )
 
     if data_loading_mode in {"hdf5_batch", "hdf5_batch_slices"}:
-        print("Using HDF5BatchIterableDataset for val.")
 
         val_batch_dataset = HDF5BatchIterableDataset(
             h5_path=dataset_path,
@@ -577,26 +576,34 @@ def main():
 
     X_batch, y_batch = next(iter(sanity_loader))
 
-    print("X_batch:", X_batch.shape, X_batch.dtype)
-    print("y_batch:", y_batch.shape, y_batch.dtype)
-    print("X finite:", torch.isfinite(X_batch).all().item())
-    print("y finite:", torch.isfinite(y_batch).all().item())
-    print("y batch mean:", y_batch.mean(dim=0))
-    print("y batch std:", y_batch.std(dim=0))
 
     ## Sanity C
     X_channel_means = X_batch.mean(dim=2)
     X_channel_stds = X_batch.std(dim=2, unbiased=False)
 
-    print("X per-sample/channel mean, first 5:")
-    print(X_channel_means[:5])
+    x_finite = torch.isfinite(X_batch).all().item()
+    y_finite = torch.isfinite(y_batch).all().item()
 
-    print("X per-sample/channel std, first 5:")
-    print(X_channel_stds[:5])
+    print()
+    print("=" * 80)
+    print("Sanity checks")
+    print("=" * 80)
 
-    print("mean abs X channel mean:", X_channel_means.abs().mean().item())
-    print("mean X channel std:", X_channel_stds.mean().item())
+    print(
+        f"batch: X={tuple(X_batch.shape)}, "
+        f"y={tuple(y_batch.shape)}"
+    )
 
+    print(
+        f"finite: X={'PASS' if x_finite else 'FAIL'} | "
+        f"y={'PASS' if y_finite else 'FAIL'}"
+    )
+
+    print(
+        "input z-score: "
+        f"max|mean|={X_channel_means.abs().max().item():.3e}, "
+        f"mean std={X_channel_stds.mean().item():.6f}"
+    )
 
     expect_zscore = (
         input_normalization_cfg.get(
@@ -626,6 +633,9 @@ def main():
         ):
             raise ValueError("Input z-score sanity check failed: channel stds are not ~1.")
 
+    if expect_zscore:
+        print("z-score sanity: PASS")
+
     ###
 
 
@@ -641,7 +651,7 @@ def main():
 
     print()
     print("=" * 80)
-    print("Building model")
+    print("Model")
     print("=" * 80)
 
     class_name = get_required(model_cfg, "class_name")
@@ -654,10 +664,19 @@ def main():
 
     model_class = import_model_class(class_name)
 
-    print("model class:", class_name)
-    print("model kwargs:")
-    for key, value in model_kwargs.items():
-        print(f"  {key}: {value}")
+    print("class:", class_name)
+    print(
+        f"embedding={model_kwargs.get('embedding_dim')} | "
+        f"channels={model_kwargs.get('residual_channels')} | "
+        f"dilations={model_kwargs.get('dilations')} | "
+        f"kernel={model_kwargs.get('residual_kernel_size')}"
+    )
+
+    print(
+        f"dropout_conv={model_kwargs.get('dropout_conv')} | "
+        f"dropout_dense={model_kwargs.get('dropout_dense')} | "
+        f"groups={model_kwargs.get('num_groups')}"
+    )
 
     model = model_class(**model_kwargs).to(device)
 
@@ -687,14 +706,22 @@ def main():
     }
 
     print()
-    print("Full model config:")
-    for key, value in full_model_config.items():
-        print(f"{key}: {value}")
-
-    print()
     print("=" * 80)
     print("Training")
     print("=" * 80)
+
+    print(
+        f"batch_size={batch_size} | "
+        f"max_epochs={int(training_cfg.get('max_epochs', 200))} | "
+        f"patience={int(training_cfg.get('patience', 40))}"
+    )
+
+    print(
+        f"lr={float(training_cfg.get('learning_rate', 3e-4)):.2e} | "
+        f"weight_decay={float(training_cfg.get('weight_decay', 3e-4)):.2e} | "
+        f"loss={training_cfg.get('loss', 'MSELoss')} | "
+        f"seed={seed}"
+    )
 
     best_checkpoint, history = train_model(
         model=model,
@@ -708,6 +735,7 @@ def main():
         batch_size=batch_size,
         max_epochs=int(training_cfg.get("max_epochs", 200)),
         patience=int(training_cfg.get("patience", 40)),
+        min_epochs_before_early_stopping=int(training_cfg.get("min_epochs_before_early_stopping", 0)),
         learning_rate=float(training_cfg.get("learning_rate", 3e-4)),
         weight_decay=float(training_cfg.get("weight_decay", 3e-4)),
     )

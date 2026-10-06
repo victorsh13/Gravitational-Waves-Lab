@@ -69,6 +69,7 @@ def train_model(
     batch_size: int | None = None,
     max_epochs: int = 100,
     patience: int = 15,
+    min_epochs_before_early_stopping: int = 0,
     learning_rate: float = 3e-4,
     weight_decay: float = 1e-4,
 ):
@@ -170,6 +171,7 @@ def train_model(
                     "batch_size": batch_size,
                     "max_epochs": max_epochs,
                     "patience": patience,
+                    "min_epochs_before_early_stopping": min_epochs_before_early_stopping,
                     "learning_rate": learning_rate,
                     "weight_decay": weight_decay,
                 },
@@ -186,8 +188,13 @@ def train_model(
             f"Elapsed time = {elapsed:.1f}s "
         )
 
-        if epochs_without_improvement >= patience:
-            print(f"Early stopping at epoch {epoch+1}")
+        current_epoch = epoch + 1
+
+        if (
+            current_epoch >= min_epochs_before_early_stopping
+            and epochs_without_improvement >= patience
+        ):
+            print(f"Early stopping at epoch {current_epoch}")
             break
 
     best_checkpoint["elapsed_seconds"] = elapsed

@@ -187,7 +187,14 @@ def main():
     test_size = int(splits_cfg.get("test_size", 0))
 
     seed = int(splits_cfg.get("seed", 123))
-    shuffle = bool(splits_cfg.get("shuffle", True))
+    split_source = str(splits_cfg.get("source", "random"))
+    if split_source not in {"random", "hdf5"}:
+        raise ValueError(f"Unknown splits.source: {split_source}")
+    shuffle = bool(splits_cfg.get("shuffle", split_source == "random"))
+    if split_source == "hdf5" and shuffle:
+        raise ValueError("Frozen HDF5 splits cannot be shuffled or reassigned.")
+    if split_source == "hdf5" and (train_size <= 0 or min(val_size, cal_size, test_size) < 0):
+        raise ValueError("HDF5 split counts require positive train_size and nonnegative sizes.")
 
     overwrite = bool(args.overwrite or output_cfg.get("overwrite", False))
 
@@ -254,15 +261,23 @@ def main():
         print("num_written:", num_written)
         print("dataset_status:", dataset_status)
 
-        if num_written != n_samples:
-            raise ValueError(
-                f"Dataset incomplete: num_written={num_written}, num_samples={n_samples}"
-            )
+        if "status" in f:
+            if f["status"].shape != (n_samples,):
+                raise ValueError("Per-row status must have shape (num_samples,).")
+            if not np.all(f["status"][:] == 1):
+                raise ValueError("Dataset incomplete: every row must have status == 1.")
+            completeness_source = "per_row_status"
+        else:
+            completeness_source = "legacy_attributes"
+            if num_written != n_samples:
+                raise ValueError(
+                    f"Dataset incomplete: num_written={num_written}, num_samples={n_samples}"
+                )
 
-        if dataset_status != "complete":
-            raise ValueError(
-                f"Dataset status is not complete: dataset_status={dataset_status}"
-            )
+            if dataset_status != "complete":
+                raise ValueError(
+                    f"Dataset status is not complete: dataset_status={dataset_status}"
+                )
 
         label_names = decode_attr_json(
             f.attrs.get("label_names", None),
@@ -283,25 +298,42 @@ def main():
                 f"dataset size {n_samples}. Unused samples: {n_samples - requested}"
             )
 
-        rng = np.random.default_rng(seed)
-        indices = np.arange(n_samples, dtype=np.int64)
+        if split_source == "hdf5":
+            if requested != n_samples:
+                raise ValueError("Frozen HDF5 split counts must cover the entire dataset.")
+            if "split" not in f or f["split"].shape != (n_samples,):
+                raise ValueError("Expected HDF5 dataset 'split' with shape (num_samples,).")
+            split_labels = f["split"].asstr()[:]
+            names = ("train", "val", "cal", "test")
+            if not np.isin(split_labels, names).all():
+                raise ValueError("Unknown labels in frozen HDF5 split dataset.")
+            frozen_indices = []
+            for name, expected in zip(names, (train_size, val_size, cal_size, test_size)):
+                idx = np.flatnonzero(split_labels == name).astype(np.int64)
+                if len(idx) != expected:
+                    raise ValueError(f"Frozen {name} count: {len(idx)}; expected {expected}.")
+                frozen_indices.append(idx)
+            train_idx, val_idx, cal_idx, test_idx = frozen_indices
+        else:
+            rng = np.random.default_rng(seed)
+            indices = np.arange(n_samples, dtype=np.int64)
 
-        if shuffle:
-            rng.shuffle(indices)
+            if shuffle:
+                rng.shuffle(indices)
 
-        start = 0
+            start = 0
 
-        train_idx = indices[start:start + train_size]
-        start += train_size
+            train_idx = indices[start:start + train_size]
+            start += train_size
 
-        val_idx = indices[start:start + val_size]
-        start += val_size
+            val_idx = indices[start:start + val_size]
+            start += val_size
 
-        cal_idx = indices[start:start + cal_size]
-        start += cal_size
+            cal_idx = indices[start:start + cal_size]
+            start += cal_size
 
-        test_idx = indices[start:start + test_size]
-        start += test_size
+            test_idx = indices[start:start + test_size]
+            start += test_size
 
         # Sanity checks
         split_arrays = [train_idx, val_idx]
@@ -319,6 +351,11 @@ def main():
 
         if np.any(all_used < 0) or np.any(all_used >= n_samples):
             raise ValueError("Some split indices are outside dataset range.")
+
+        if split_source == "hdf5" and not np.array_equal(
+            np.sort(all_used), np.arange(n_samples, dtype=np.int64)
+        ):
+            raise ValueError("Frozen HDF5 splits do not provide total coverage.")
 
         # HDF5 fancy indexing is safer with sorted indices.
         # For mean/std, order does not matter.
@@ -351,6 +388,8 @@ def main():
         "dataset_path": np.array(str(dataset_path)),
         "dataset_id": np.array(dataset_id),
         "label_names": np.array(label_names),
+        "split_source": np.array(split_source),
+        "split_dataset": np.array("split" if split_source == "hdf5" else ""),
     }
 
     if cal_size > 0:
@@ -366,6 +405,8 @@ def main():
         y_mean=y_mean,
         y_std=y_std,
         label_names=np.array(label_names),
+        split_source=np.array(split_source),
+        split_dataset=np.array("split" if split_source == "hdf5" else ""),
         train_idx=train_idx.astype(np.int64),
         seed=np.array(seed),
         shuffle=np.array(shuffle),
@@ -375,6 +416,10 @@ def main():
 
     metadata_payload = {
         "split_config_file": str(args.config),
+        "split_source": split_source,
+        "split_dataset": "split" if split_source == "hdf5" else None,
+        "frozen_hdf5_assignment": split_source == "hdf5",
+        "completeness_source": completeness_source,
         "dataset_id": dataset_id,
         "dataset_path": str(dataset_path),
         "dataset_num_samples": int(n_samples),

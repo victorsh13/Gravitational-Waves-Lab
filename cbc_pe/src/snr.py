@@ -86,7 +86,7 @@ def compute_detector_optimal_snr(
         htilde=signal_fs,
         psd=psd,
         low_frequency_cutoff=config.low_frequency_cutoff,
-        high_frequency_cutoff=None,
+        high_frequency_cutoff=config.snr_high_frequency_cutoff,
     )
 
     return float(snr)

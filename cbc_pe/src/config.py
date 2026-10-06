@@ -21,6 +21,9 @@ class SimulationConfig:
     low_frequency_cutoff : float
         Low-frequency cutoff used for waveform generation and, unless explicitly
         overridden elsewhere, for SNR/PSD-related computations.
+    snr_high_frequency_cutoff : float
+        High-frequency cuttof used to define the upper limit in frequencies when 
+        calculation the SNR.
     waveform_approximant : str
         PyCBC/LAL waveform approximant.
     target_network_snr_range : tuple[float, float] | None
@@ -58,6 +61,7 @@ class SimulationConfig:
     target_network_snr_range: tuple[float, float] | None = (10.0, 25.0)
     snr_relative_tolerance: float = 0.05
     snr_on_truncated_signal: bool = True
+    snr_high_frequency_cutoff: float | None = None
 
     # Long-waveform handling
     truncation_policy: Literal["none", "keep_full_if_possible", "keep_last_segment"] = (
@@ -165,6 +169,20 @@ class SimulationConfig:
             if low > high:
                 raise ValueError(
                     "target_network_snr_range must be ordered as (min_snr, max_snr)."
+                )
+
+        if self.snr_high_frequency_cutoff is not None:
+            if self.snr_high_frequency_cutoff <= self.low_frequency_cutoff:
+                raise ValueError(
+                    "snr_high_frequency_cutoff must be greater than "
+                    "low_frequency_cutoff."
+                )
+
+            nyquist = self.sampling_frequency / 2.0
+
+            if self.snr_high_frequency_cutoff > nyquist:
+                raise ValueError(
+                    "snr_high_frequency_cutoff cannot exceed Nyquist frequency."
                 )
 
         if self.required_final_duration <= 0:
