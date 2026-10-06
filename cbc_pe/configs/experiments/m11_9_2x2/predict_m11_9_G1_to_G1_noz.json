@@ -1,0 +1,26 @@
+{
+  "data_root": "/data/vserrano/cbc_pe_data",
+  "dataset": {
+    "dataset_id": "m11_9_noz_domains",
+    "dataset_file": "m11_9_G1_noz_26k.h5",
+    "split_file": "/data/vserrano/cbc_pe_data/processed/m11_6_domains/m11_6_splits.npz",
+    "label_stats_file": "/data/vserrano/cbc_pe_data/processed/m11_6_domains/m11_6_label_stats_train_only.npz"
+  },
+  "prediction": {
+    "checkpoint_file": "/data/vserrano/cbc_pe_data/models/checkpoints/m11_9_noz_domains/m11_9_noz_domains_SimpleCNN_ResidualDilated_M11_9_G1_NOZ_MSELoss_seed123_checkpoint.pt",
+    "seed": 123,
+    "splits": [
+      "test"
+    ],
+    "batch_size": 256,
+    "num_workers": 4,
+    "pin_memory": true,
+    "prefetch_factor": 2,
+    "data_loading_mode": "hdf5_batch_slices",
+    "max_slice_overread": 4.0
+  },
+  "output": {
+    "file_name": "m11_9_G1_to_G1_noz_test_predictions_embeddings.npz",
+    "overwrite": false
+  }
+}
