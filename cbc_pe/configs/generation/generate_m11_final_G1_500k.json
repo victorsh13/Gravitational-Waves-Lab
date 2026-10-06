@@ -1,0 +1,102 @@
+{
+  "experiment_id": "M11_final_G1_500k",
+  "stage": "manifest_only",
+  "data_root": "/data/vserrano/cbc_pe_data",
+  "output": {
+    "dataset_id": "M11_final_G1_500k",
+    "manifest_file": "m11_final_G1_500k_manifest.csv",
+    "source_id_prefix": "M11FINAL_G1_SRC_"
+  },
+  "bank": {
+    "dataset_id": "m11_6_manifests",
+    "files": {
+      "groups": "m11_6_file_groups.csv",
+      "blocks": "m11_6_real_noise_blocks.csv",
+      "crops": "m11_6_real_noise_crops.csv"
+    },
+    "sha256": {
+      "groups": "60cb3073134a0e5294184cab6c62c3938ca6f70e3b673244d8fc5750815f87e1",
+      "blocks": "4423deda5bd987cdec6a4525eb1bfbb28ab5e52c952b899951de2eaded3f787c",
+      "crops": "452bcee1ff07f7bdef7703e640f367d907d16f62cf9d35773a18fa89df69b314"
+    },
+    "environment_count": 29,
+    "block_count": 292,
+    "crop_count": 4380,
+    "split_policy": "reuse_accepted_M11_6_environment_disjoint_splits",
+    "assignment_policy": "uniform_environment_then_block_then_crop"
+  },
+  "generation": {
+    "num_samples": 500000,
+    "split_counts": {"train": 400000, "val": 40000, "cal": 30000, "test": 30000},
+    "seeds": {
+      "sources": 110001,
+      "snr_targets": 110002,
+      "environment_assignment": 110003,
+      "placement_base": 11000000,
+      "gaussian_base": 21000000
+    },
+    "rng": "numpy.default_rng/PCG64",
+    "generation_seed_policy": "base_plus_source_index; gaussian_rng draws H1,L1,V1 integers in [0,2**32-1)",
+    "domain": "G1",
+    "noise_model": "empirical_psd_gaussian",
+    "injection_mode": "full_projection",
+    "placement_policy": "random_contained",
+    "geocentric_time_policy": "M11.6: project at final_center, select window, choose random_contained placement; actual GPS = final_center + final_start - abstract_segment_start; reproject at actual GPS",
+    "target_network_snr_distribution": "uniform",
+    "target_network_snr_range": [10.0, 25.0],
+    "rescale_every_source": true,
+    "label_scaler": "deferred_train_only"
+  },
+  "parameter_sampler": {
+    "regime": "BBH",
+    "component_mass_range": [5.0, 90.0],
+    "distance_range": [200.0, 5000.0],
+    "spin_1z_range": [-1.0, 1.0],
+    "spin_2z_range": [-1.0, 1.0],
+    "fixed": {"distance": 1000.0}
+  },
+  "detectors": ["H1", "L1", "V1"],
+  "simulation": {
+    "simulation_regime": "BBH",
+    "waveform_family": "IMR",
+    "waveform_approximant": "SEOBNRv4_opt",
+    "sampling_frequency": 4096,
+    "duration": 4.0,
+    "processing_context_start_samples": 1664,
+    "processing_context_end_samples": 1664,
+    "low_frequency_cutoff": 30.0,
+    "snr_high_frequency_cutoff": 512.0,
+    "snr_on_truncated_signal": true,
+    "snr_relative_tolerance": 0.05,
+    "truncation_policy": "keep_last_segment",
+    "required_final_duration": 1.0,
+    "safe_margin_start": 0.0,
+    "safe_margin_end": 0.0
+  },
+  "empirical_psd": {
+    "snr": true,
+    "whitening": true,
+    "reference_duration_s": 128.0,
+    "welch_segment_duration_s": 8.0,
+    "method": "M11.6 estimate_raw_offsource_psd; interpolate to signal delta_f"
+  },
+  "signal_processor": {
+    "whitening_method": "psd",
+    "apply_highpass": true,
+    "apply_lowpass": true,
+    "apply_standardization": false,
+    "output_mode": "crop_to_config",
+    "whitening_low_frequency_cutoff": 30.0,
+    "whitening_max_filter_duration": 0.5,
+    "whitening_trunc_method": "hann",
+    "highpass_frequency": 30.0,
+    "lowpass_frequency": 512.0,
+    "fir_order": 256,
+    "fir_beta": 5.0,
+    "remove_corrupted": true
+  },
+  "final_input_normalization": {
+    "mode": "per_sample_per_detector_zscore",
+    "epsilon": 1e-6
+  }
+}

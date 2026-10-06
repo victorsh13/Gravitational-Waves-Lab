@@ -1,0 +1,20 @@
+{
+  "data_root": "/data/vserrano/cbc_pe_data",
+  "dataset": {
+    "dataset_id": "M11_final_G1_500k",
+    "dataset_file": "m11_final_G1_500k.h5"
+  },
+  "splits": {
+    "source": "hdf5",
+    "train_size": 400000,
+    "val_size": 40000,
+    "cal_size": 30000,
+    "test_size": 30000,
+    "seed": 123,
+    "shuffle": false
+  },
+  "output": {
+    "prefix": "M11_final_G1_500k",
+    "overwrite": false
+  }
+}
