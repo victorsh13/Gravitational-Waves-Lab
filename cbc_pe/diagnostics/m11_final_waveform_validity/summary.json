@@ -1,0 +1,40 @@
+{
+  "complete": true,
+  "manifest": "/data/vserrano/cbc_pe_data/processed/M11_final_G1_500k/m11_final_G1_500k_manifest.csv",
+  "manifest_sha256": "ec9291eeb09019601a4e5a33802cd882f416f78a93c826410702c6fd257ee0d0",
+  "config": "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/configs/generation/generate_m11_final_G1_500k.json",
+  "config_sha256": "cf9562725bb88ee68b325beb3e44b41bfb5327a6d1a946cd1d9577bab6bd9467",
+  "software_versions": {
+    "numpy": "2.2.6",
+    "pycbc": "2.9.0",
+    "lalsuite": "7.26.11"
+  },
+  "selection": "total_mass < 20 Msun",
+  "manifest_rows": 500000,
+  "tested": 3517,
+  "successes": 3513,
+  "failures": 4,
+  "fraction_of_manifest_failed": 8e-06,
+  "failure_ranges": {
+    "total_mass": {
+      "min": 10.138455996665892,
+      "max": 11.271689179137418
+    },
+    "spin_1z": {
+      "min": 0.5015429363632469,
+      "max": 0.9537957419275369
+    },
+    "spin_2z": {
+      "min": 0.42346161089910384,
+      "max": 0.9832492124413112
+    }
+  },
+  "all_failures_both_spins_above_0_8": false,
+  "failed_source_ids": [
+    "M11FINAL_G1_SRC_005830",
+    "M11FINAL_G1_SRC_014431",
+    "M11FINAL_G1_SRC_025600",
+    "M11FINAL_G1_SRC_193848"
+  ],
+  "scope_note": "Sources with total_mass >= 20 were not tested."
+}
