@@ -11,7 +11,7 @@ if [[ "${1:-}" == "--dry-run" ]]; then
     EXTRA_ARGS+=(--dry-run)
 fi
 
-rsync -av --progress --delete "${EXTRA_ARGS[@]}" \
+rsync -av --progress "${EXTRA_ARGS[@]}" \
   --exclude "data/" \
   --exclude ".ipynb_checkpoints/" \
   --exclude "**/__pycache__/" \
