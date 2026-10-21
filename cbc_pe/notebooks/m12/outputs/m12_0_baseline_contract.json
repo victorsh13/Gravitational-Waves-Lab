@@ -1,0 +1,3126 @@
+{
+  "schema_version": 1,
+  "experiment": "M12.0",
+  "model": "frozen M11",
+  "dataset_id": "M11_final_G1_500k",
+  "split": "test",
+  "labels": [
+    "chirp_mass",
+    "total_mass",
+    "chi_eff"
+  ],
+  "units": {
+    "chirp_mass": "Msun",
+    "total_mass": "Msun",
+    "chi_eff": "dimensionless"
+  },
+  "provenance": {
+    "saved": {
+      "checkpoint_file": "/data/vserrano/cbc_pe_data/models/checkpoints/M11_final_G1_500k/M11_final_G1_500k_SimpleCNN_ResidualDilated_M11_final_G1_inputzscore_resdilated_emb64_d124_train400k_MSELoss_seed123_checkpoint.pt",
+      "dataset_path": "/data/vserrano/cbc_pe_data/processed/M11_final_G1_500k/m11_final_G1_500k_trainio.h5",
+      "split_path": "/data/vserrano/cbc_pe_data/processed/M11_final_G1_500k/M11_final_G1_500k_splits_train400000_val40000_cal30000_test30000_seed123.npz",
+      "label_stats_path": "/data/vserrano/cbc_pe_data/processed/M11_final_G1_500k/M11_final_G1_500k_label_stats_train_only_train400000_val40000_cal30000_test30000_seed123.npz",
+      "model_config": {
+        "architecture": "SimpleCNN_ResidualDilated",
+        "class_name": "SimpleCNN_ResidualDilated",
+        "dataset_id": "M11_final_G1_500k",
+        "dataset_format": "hdf5",
+        "dataset_path": "/data/vserrano/cbc_pe_data/processed/M11_final_G1_500k/m11_final_G1_500k_trainio.h5",
+        "split_path": "/data/vserrano/cbc_pe_data/processed/M11_final_G1_500k/M11_final_G1_500k_splits_train400000_val40000_cal30000_test30000_seed123.npz",
+        "label_stats_path": "/data/vserrano/cbc_pe_data/processed/M11_final_G1_500k/M11_final_G1_500k_label_stats_train_only_train400000_val40000_cal30000_test30000_seed123.npz",
+        "n_samples": 500000,
+        "n_detectors": 3,
+        "signal_length": 16384,
+        "n_outputs": 3,
+        "label_names": [
+          "chirp_mass",
+          "total_mass",
+          "chi_eff"
+        ],
+        "model_kwargs": {
+          "n_detectors": 3,
+          "n_outputs": 3,
+          "embedding_dim": 64,
+          "residual_channels": 64,
+          "dilations": [
+            1,
+            2,
+            4
+          ],
+          "residual_kernel_size": 7,
+          "dropout_conv": 0.05,
+          "dropout_dense": 0.1,
+          "num_groups": 8
+        },
+        "normalization": "GroupNorm",
+        "input_normalization": {
+          "enabled": false,
+          "already_normalized": true,
+          "mode": "per_sample_per_detector_zscore",
+          "eps": 1e-06
+        },
+        "loss": "MSELoss",
+        "train_size": 400000,
+        "val_size": 40000,
+        "cal_size": 30000,
+        "test_size": 30000,
+        "training_seed": 123,
+        "split_seed": 123
+      },
+      "input_normalization": {
+        "enabled": false,
+        "already_normalized": true,
+        "mode": "per_sample_per_detector_zscore",
+        "eps": 1e-06
+      }
+    },
+    "config": {
+      "path": "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/configs/experiments/train_m11_final_G1_500k.json",
+      "status": "present",
+      "size": 1635,
+      "mtime_ns": 1790873285000000001,
+      "sha256": "a38c43fe2c91b7bef27ae27d932d1eff4c652b5ee5489ef8a79ceb13d9dfd5e7"
+    },
+    "prediction_file": {
+      "path": "/data/vserrano/cbc_pe_data/results/M11_final_G1_500k/m11_final_G1_500k_cal_test_predictions_embeddings.npz",
+      "status": "present",
+      "size": 15729924,
+      "mtime_ns": 1791196478720798398
+    },
+    "numeric_sha256": {
+      "idx_test": "2fe0ce45b95acd2a290877369da8502ae20428ad8d005669c3a81cbce14d2df9",
+      "y_test": "aad4e51df9d210516dbb95d8dfdc56592a2bd4e692148d2a8af5e8c639a1dbbf",
+      "pred_test": "d7d1d1d753ea7d65d640f5f42f9b586b3edfa7dbbf2e90da20fcc871658640bd",
+      "y_mean": "13443437d165e681db0860c4044ee06132971b1d49ae51fdb76cc48e208af100",
+      "y_std": "4796f9cd701c7347e142d2323b15409df33d730a81f7959b7d9da89b8e3b0468"
+    },
+    "local_artifacts": {
+      "dataset_file": {
+        "path": "/data/vserrano/cbc_pe_data/processed/M11_final_G1_500k/m11_final_G1_500k_trainio.h5",
+        "status": "present",
+        "size": 98687856184,
+        "mtime_ns": 1790873275639179929
+      },
+      "split_file": {
+        "path": "/data/vserrano/cbc_pe_data/processed/M11_final_G1_500k/M11_final_G1_500k_splits_train400000_val40000_cal30000_test30000_seed123.npz",
+        "status": "present",
+        "size": 4003307,
+        "mtime_ns": 1790860193188182773,
+        "sha256": "1abf607c44cc4c55ca196de046874137e274c88cf221143cd936d645e97b97d2"
+      },
+      "label_stats_file": {
+        "path": "/data/vserrano/cbc_pe_data/processed/M11_final_G1_500k/M11_final_G1_500k_label_stats_train_only_train400000_val40000_cal30000_test30000_seed123.npz",
+        "status": "present",
+        "size": 3203077,
+        "mtime_ns": 1790860193198182373,
+        "sha256": "d0891bf1c130186fb4e7af442e74952a03e4d7d5e0cc240f78d8772e4421855f"
+      }
+    }
+  },
+  "split_counts": {
+    "train": 400000,
+    "val": 40000,
+    "cal": 30000,
+    "test": 30000
+  },
+  "definitions": {
+    "residual": "prediction - truth",
+    "slope": "OLS prediction against truth with intercept",
+    "R2": "1 - SSE/SST",
+    "tails": "evaluation true-label linear Q10/Q90; <= Q10, >= Q90; diagnostic only",
+    "conditional_min_count": 30,
+    "percentile_bins": "left inclusive; final upper inclusive",
+    "snr": "HDF5 final_network_snr, optimal final network SNR 30\u2013512 Hz",
+    "snr_edges": [
+      10.0,
+      12.5,
+      15.0,
+      17.5,
+      20.0,
+      22.5,
+      25.0
+    ],
+    "historical_mahalanobis_mapping": "test-based; not reused"
+  },
+  "geometry": {
+    "reference": "M11 physical train labels only",
+    "n_train": 400000,
+    "mean": [
+      37.46325732787728,
+      94.98603060803413,
+      -0.00021921468027161694
+    ],
+    "std_ddof0": [
+      16.50896973685147,
+      34.705111595264945,
+      0.44036661159201596
+    ],
+    "covariance_ddof1": [
+      [
+        272.54676313918316,
+        549.1919192179106,
+        0.001887341071219175
+      ],
+      [
+        549.1919192179106,
+        1204.4477819592112,
+        -0.001515326930317048
+      ],
+      [
+        0.001887341071219175,
+        -0.001515326930317048,
+        0.19392323741312212
+      ]
+    ],
+    "scaled_covariance": [
+      [
+        1.0000025000062414,
+        0.9585410616876704,
+        0.0002596067832515892
+      ],
+      [
+        0.9585410616876704,
+        1.0000025000062192,
+        -9.915132284754372e-05
+      ],
+      [
+        0.0002596067832515892,
+        -9.915132284754372e-05,
+        1.000002500006225
+      ]
+    ],
+    "precision": [
+      [
+        12.314709146662532,
+        -11.80412530246019,
+        -0.004367365748599515
+      ],
+      [
+        -11.804125302460191,
+        12.314708437773838,
+        0.004285439917330998
+      ],
+      [
+        -0.0043673657485995155,
+        0.004285439917330999,
+        0.9999990587009385
+      ]
+    ],
+    "rank": 3,
+    "condition_number": 47.237790727006725,
+    "pinv_rcond": null,
+    "percentile_mapping": "100 * searchsorted(sorted train distances, d, side=right) / n_train",
+    "reference_distance_sha256": "3138c01f911a4b96687b7cb59c8d65cdec91b05ce5d9781ff9eca60909fbbab2",
+    "train_indices_sha256": "973c14c35b80f20e6634046cfd5ce51c9ab435cc4dfdeac645bc26532f3589f6",
+    "edges": [
+      0.0,
+      20.0,
+      40.0,
+      60.0,
+      80.0,
+      100.0
+    ]
+  },
+  "baseline": [
+    {
+      "label": "chirp_mass",
+      "RMSE": 5.768809529964275,
+      "MAE": 3.924969222132365,
+      "R2": 0.8776638517073767,
+      "bias": 0.1544176560719808,
+      "n": 30000,
+      "unit": "Msun",
+      "slope": 0.8365334607972083,
+      "intercept": 6.278150104686804,
+      "slope_distance_from_1": 0.16346653920279175,
+      "lower_threshold": 16.4257604598999,
+      "lower_n": 3000,
+      "lower_bias": 2.7809376481374106,
+      "lower_MAE": 2.819797642389933,
+      "upper_threshold": 60.92214279174805,
+      "upper_n": 3000,
+      "upper_bias": -5.1067181453704835,
+      "upper_MAE": 5.636004402796427,
+      "peripheral_n": 6021,
+      "peripheral_RMSE": 6.942170006658314,
+      "peripheral_MAE": 4.4351960242220265
+    },
+    {
+      "label": "total_mass",
+      "RMSE": 10.408431885637656,
+      "MAE": 7.403433042144775,
+      "R2": 0.9094139465336569,
+      "bias": 0.333934797668457,
+      "n": 30000,
+      "unit": "Msun",
+      "slope": 0.863670704413982,
+      "intercept": 13.293931964599674,
+      "slope_distance_from_1": 0.13632929558601803,
+      "lower_threshold": 48.027045059204106,
+      "lower_n": 3000,
+      "lower_bias": 7.3691950340271,
+      "lower_MAE": 7.852885512034098,
+      "upper_threshold": 141.83415832519532,
+      "upper_n": 3000,
+      "upper_bias": -9.533415234883627,
+      "upper_MAE": 10.80368095143636,
+      "peripheral_n": 6021,
+      "peripheral_RMSE": 12.65843175999006,
+      "peripheral_MAE": 9.130486320289062
+    },
+    {
+      "label": "chi_eff",
+      "RMSE": 0.19009768497644214,
+      "MAE": 0.14267968861208985,
+      "R2": 0.813688223409436,
+      "bias": -0.004617099680374668,
+      "n": 30000,
+      "unit": "dimensionless",
+      "slope": 0.7821030526983969,
+      "intercept": -0.005465034625708517,
+      "slope_distance_from_1": 0.21789694730160314,
+      "lower_threshold": -0.6009985148906708,
+      "lower_n": 3000,
+      "lower_bias": 0.19259660592776587,
+      "lower_MAE": 0.20213143355749102,
+      "upper_threshold": 0.5973518431186676,
+      "upper_n": 3000,
+      "upper_bias": -0.16676773461687844,
+      "upper_MAE": 0.1728341542580553,
+      "peripheral_n": 6021,
+      "peripheral_RMSE": 0.2414225928412661,
+      "peripheral_MAE": 0.18143820256262913
+    }
+  ],
+  "conditional_mahalanobis": [
+    {
+      "label": "chirp_mass",
+      "dimension": "train_mahalanobis_percentile",
+      "bin": 0,
+      "lower": 0.0,
+      "upper": 20.0,
+      "upper_inclusive": false,
+      "n": 5947,
+      "sufficient_count": true,
+      "RMSE": 4.818541518446371,
+      "MAE": 3.544325227354161,
+      "bias": 0.14254254061614083
+    },
+    {
+      "label": "total_mass",
+      "dimension": "train_mahalanobis_percentile",
+      "bin": 0,
+      "lower": 0.0,
+      "upper": 20.0,
+      "upper_inclusive": false,
+      "n": 5947,
+      "sufficient_count": true,
+      "RMSE": 8.448100165061822,
+      "MAE": 6.161172823523481,
+      "bias": 0.4432281807167742
+    },
+    {
+      "label": "chi_eff",
+      "dimension": "train_mahalanobis_percentile",
+      "bin": 0,
+      "lower": 0.0,
+      "upper": 20.0,
+      "upper_inclusive": false,
+      "n": 5947,
+      "sufficient_count": true,
+      "RMSE": 0.15221712018056024,
+      "MAE": 0.11719501387180192,
+      "bias": -0.018903112786087393
+    },
+    {
+      "label": "chirp_mass",
+      "dimension": "train_mahalanobis_percentile",
+      "bin": 1,
+      "lower": 20.0,
+      "upper": 40.0,
+      "upper_inclusive": false,
+      "n": 6015,
+      "sufficient_count": true,
+      "RMSE": 5.445516737740821,
+      "MAE": 3.841219925345328,
+      "bias": -0.19732832872956768
+    },
+    {
+      "label": "total_mass",
+      "dimension": "train_mahalanobis_percentile",
+      "bin": 1,
+      "lower": 20.0,
+      "upper": 40.0,
+      "upper_inclusive": false,
+      "n": 6015,
+      "sufficient_count": true,
+      "RMSE": 9.539108006490066,
+      "MAE": 6.750256147884074,
+      "bias": 0.21489787177056544
+    },
+    {
+      "label": "chi_eff",
+      "dimension": "train_mahalanobis_percentile",
+      "bin": 1,
+      "lower": 20.0,
+      "upper": 40.0,
+      "upper_inclusive": false,
+      "n": 6015,
+      "sufficient_count": true,
+      "RMSE": 0.16214663725537995,
+      "MAE": 0.12471552049298035,
+      "bias": -0.003630420815036845
+    },
+    {
+      "label": "chirp_mass",
+      "dimension": "train_mahalanobis_percentile",
+      "bin": 2,
+      "lower": 40.0,
+      "upper": 60.0,
+      "upper_inclusive": false,
+      "n": 6034,
+      "sufficient_count": true,
+      "RMSE": 5.503491212083578,
+      "MAE": 3.7846527545310664,
+      "bias": -0.3538951149909829
+    },
+    {
+      "label": "total_mass",
+      "dimension": "train_mahalanobis_percentile",
+      "bin": 2,
+      "lower": 40.0,
+      "upper": 60.0,
+      "upper_inclusive": false,
+      "n": 6034,
+      "sufficient_count": true,
+      "RMSE": 9.99211500256771,
+      "MAE": 7.062957877467949,
+      "bias": 0.03687239720562969
+    },
+    {
+      "label": "chi_eff",
+      "dimension": "train_mahalanobis_percentile",
+      "bin": 2,
+      "lower": 40.0,
+      "upper": 60.0,
+      "upper_inclusive": false,
+      "n": 6034,
+      "sufficient_count": true,
+      "RMSE": 0.1805769429217298,
+      "MAE": 0.1365251749558092,
+      "bias": -0.003655605943183927
+    },
+    {
+      "label": "chirp_mass",
+      "dimension": "train_mahalanobis_percentile",
+      "bin": 3,
+      "lower": 60.0,
+      "upper": 80.0,
+      "upper_inclusive": false,
+      "n": 5983,
+      "sufficient_count": true,
+      "RMSE": 5.910270974968786,
+      "MAE": 4.0155652186632675,
+      "bias": -0.22028767271582228
+    },
+    {
+      "label": "total_mass",
+      "dimension": "train_mahalanobis_percentile",
+      "bin": 3,
+      "lower": 60.0,
+      "upper": 80.0,
+      "upper_inclusive": false,
+      "n": 5983,
+      "sufficient_count": true,
+      "RMSE": 10.901702772102054,
+      "MAE": 7.9002439890062455,
+      "bias": 0.21086302637236984
+    },
+    {
+      "label": "chi_eff",
+      "dimension": "train_mahalanobis_percentile",
+      "bin": 3,
+      "lower": 60.0,
+      "upper": 80.0,
+      "upper_inclusive": false,
+      "n": 5983,
+      "sufficient_count": true,
+      "RMSE": 0.20048744445242156,
+      "MAE": 0.1532735637287097,
+      "bias": -0.0017104397933459204
+    },
+    {
+      "label": "chirp_mass",
+      "dimension": "train_mahalanobis_percentile",
+      "bin": 4,
+      "lower": 80.0,
+      "upper": 100.0,
+      "upper_inclusive": true,
+      "n": 6021,
+      "sufficient_count": true,
+      "RMSE": 6.942170006658314,
+      "MAE": 4.4351960242220265,
+      "bias": 1.399293034402581
+    },
+    {
+      "label": "total_mass",
+      "dimension": "train_mahalanobis_percentile",
+      "bin": 4,
+      "lower": 80.0,
+      "upper": 100.0,
+      "upper_inclusive": true,
+      "n": 6021,
+      "sufficient_count": true,
+      "RMSE": 12.65843175999006,
+      "MAE": 9.130486320289062,
+      "bias": 0.7649017952344204
+    },
+    {
+      "label": "chi_eff",
+      "dimension": "train_mahalanobis_percentile",
+      "bin": 4,
+      "lower": 80.0,
+      "upper": 100.0,
+      "upper_inclusive": true,
+      "n": 6021,
+      "sufficient_count": true,
+      "RMSE": 0.2414225928412661,
+      "MAE": 0.18143820256262913,
+      "bias": 0.004655753209571297
+    }
+  ],
+  "conditional_snr": [
+    {
+      "label": "chirp_mass",
+      "dimension": "final_network_snr",
+      "bin": 0,
+      "lower": 10.0,
+      "upper": 12.5,
+      "upper_inclusive": false,
+      "n": 5034,
+      "sufficient_count": true,
+      "RMSE": 7.920882196144908,
+      "MAE": 5.534133057107422,
+      "bias": -0.007536847580980582
+    },
+    {
+      "label": "total_mass",
+      "dimension": "final_network_snr",
+      "bin": 0,
+      "lower": 10.0,
+      "upper": 12.5,
+      "upper_inclusive": false,
+      "n": 5034,
+      "sufficient_count": true,
+      "RMSE": 14.658758824475097,
+      "MAE": 10.682008794057829,
+      "bias": -0.2347820162252154
+    },
+    {
+      "label": "chi_eff",
+      "dimension": "final_network_snr",
+      "bin": 0,
+      "lower": 10.0,
+      "upper": 12.5,
+      "upper_inclusive": false,
+      "n": 5034,
+      "sufficient_count": true,
+      "RMSE": 0.25362038755089267,
+      "MAE": 0.197697705905752,
+      "bias": -0.01393429748160107
+    },
+    {
+      "label": "chirp_mass",
+      "dimension": "final_network_snr",
+      "bin": 1,
+      "lower": 12.5,
+      "upper": 15.0,
+      "upper_inclusive": false,
+      "n": 5034,
+      "sufficient_count": true,
+      "RMSE": 6.6099824792108235,
+      "MAE": 4.610422085901078,
+      "bias": 0.19761694315931935
+    },
+    {
+      "label": "total_mass",
+      "dimension": "final_network_snr",
+      "bin": 1,
+      "lower": 12.5,
+      "upper": 15.0,
+      "upper_inclusive": false,
+      "n": 5034,
+      "sufficient_count": true,
+      "RMSE": 11.941546233475611,
+      "MAE": 8.775706354473904,
+      "bias": 0.31853719339230535
+    },
+    {
+      "label": "chi_eff",
+      "dimension": "final_network_snr",
+      "bin": 1,
+      "lower": 12.5,
+      "upper": 15.0,
+      "upper_inclusive": false,
+      "n": 5034,
+      "sufficient_count": true,
+      "RMSE": 0.21897599173270338,
+      "MAE": 0.1673960894028737,
+      "bias": -0.009307414885838895
+    },
+    {
+      "label": "chirp_mass",
+      "dimension": "final_network_snr",
+      "bin": 2,
+      "lower": 15.0,
+      "upper": 17.5,
+      "upper_inclusive": false,
+      "n": 4978,
+      "sufficient_count": true,
+      "RMSE": 5.713510566906083,
+      "MAE": 3.9885089421377646,
+      "bias": 0.24711370448981868
+    },
+    {
+      "label": "total_mass",
+      "dimension": "final_network_snr",
+      "bin": 2,
+      "lower": 15.0,
+      "upper": 17.5,
+      "upper_inclusive": false,
+      "n": 4978,
+      "sufficient_count": true,
+      "RMSE": 9.96188650466466,
+      "MAE": 7.370761509638994,
+      "bias": 0.44419757234566465
+    },
+    {
+      "label": "chi_eff",
+      "dimension": "final_network_snr",
+      "bin": 2,
+      "lower": 15.0,
+      "upper": 17.5,
+      "upper_inclusive": false,
+      "n": 4978,
+      "sufficient_count": true,
+      "RMSE": 0.18810529362144757,
+      "MAE": 0.14461159578586807,
+      "bias": -0.005574907374760937
+    },
+    {
+      "label": "chirp_mass",
+      "dimension": "final_network_snr",
+      "bin": 3,
+      "lower": 17.5,
+      "upper": 20.0,
+      "upper_inclusive": false,
+      "n": 4939,
+      "sufficient_count": true,
+      "RMSE": 5.12012187096965,
+      "MAE": 3.5380020913963834,
+      "bias": 0.1473271535412699
+    },
+    {
+      "label": "total_mass",
+      "dimension": "final_network_snr",
+      "bin": 3,
+      "lower": 17.5,
+      "upper": 20.0,
+      "upper_inclusive": false,
+      "n": 4939,
+      "sufficient_count": true,
+      "RMSE": 9.00865389144358,
+      "MAE": 6.506021476849102,
+      "bias": 0.38663278298958226
+    },
+    {
+      "label": "chi_eff",
+      "dimension": "final_network_snr",
+      "bin": 3,
+      "lower": 17.5,
+      "upper": 20.0,
+      "upper_inclusive": false,
+      "n": 4939,
+      "sufficient_count": true,
+      "RMSE": 0.16992714126569328,
+      "MAE": 0.12917250280005113,
+      "bias": -0.004063208057352506
+    },
+    {
+      "label": "chirp_mass",
+      "dimension": "final_network_snr",
+      "bin": 4,
+      "lower": 20.0,
+      "upper": 22.5,
+      "upper_inclusive": false,
+      "n": 5064,
+      "sufficient_count": true,
+      "RMSE": 4.265831212324672,
+      "MAE": 3.0533444802343,
+      "bias": 0.1671722157494905
+    },
+    {
+      "label": "total_mass",
+      "dimension": "final_network_snr",
+      "bin": 4,
+      "lower": 20.0,
+      "upper": 22.5,
+      "upper_inclusive": false,
+      "n": 5064,
+      "sufficient_count": true,
+      "RMSE": 7.671554891429361,
+      "MAE": 5.727599994454527,
+      "bias": 0.47572842593441644
+    },
+    {
+      "label": "chi_eff",
+      "dimension": "final_network_snr",
+      "bin": 4,
+      "lower": 20.0,
+      "upper": 22.5,
+      "upper_inclusive": false,
+      "n": 5064,
+      "sufficient_count": true,
+      "RMSE": 0.1469379006259497,
+      "MAE": 0.11281875095724356,
+      "bias": 0.0009018635267958843
+    },
+    {
+      "label": "chirp_mass",
+      "dimension": "final_network_snr",
+      "bin": 5,
+      "lower": 22.5,
+      "upper": 25.0,
+      "upper_inclusive": true,
+      "n": 4951,
+      "sufficient_count": true,
+      "RMSE": 3.980914224117638,
+      "MAE": 2.805546310400149,
+      "bias": 0.17598980977014686
+    },
+    {
+      "label": "total_mass",
+      "dimension": "final_network_snr",
+      "bin": 5,
+      "lower": 22.5,
+      "upper": 25.0,
+      "upper_inclusive": true,
+      "n": 4951,
+      "sufficient_count": true,
+      "RMSE": 7.2137197960219925,
+      "MAE": 5.316783673111729,
+      "bias": 0.6193772548859684
+    },
+    {
+      "label": "chi_eff",
+      "dimension": "final_network_snr",
+      "bin": 5,
+      "lower": 22.5,
+      "upper": 25.0,
+      "upper_inclusive": true,
+      "n": 4951,
+      "sufficient_count": true,
+      "RMSE": 0.13545242004995534,
+      "MAE": 0.10368305852960794,
+      "bias": 0.004390795042129342
+    }
+  ],
+  "snr_outside": [
+    {
+      "label": "chirp_mass",
+      "region": "below_10",
+      "n": 0,
+      "sufficient_count": false,
+      "RMSE": null,
+      "MAE": null,
+      "bias": null
+    },
+    {
+      "label": "total_mass",
+      "region": "below_10",
+      "n": 0,
+      "sufficient_count": false,
+      "RMSE": null,
+      "MAE": null,
+      "bias": null
+    },
+    {
+      "label": "chi_eff",
+      "region": "below_10",
+      "n": 0,
+      "sufficient_count": false,
+      "RMSE": null,
+      "MAE": null,
+      "bias": null
+    },
+    {
+      "label": "chirp_mass",
+      "region": "above_25",
+      "n": 0,
+      "sufficient_count": false,
+      "RMSE": null,
+      "MAE": null,
+      "bias": null
+    },
+    {
+      "label": "total_mass",
+      "region": "above_25",
+      "n": 0,
+      "sufficient_count": false,
+      "RMSE": null,
+      "MAE": null,
+      "bias": null
+    },
+    {
+      "label": "chi_eff",
+      "region": "above_25",
+      "n": 0,
+      "sufficient_count": false,
+      "RMSE": null,
+      "MAE": null,
+      "bias": null
+    }
+  ],
+  "snr_status": "available",
+  "acceptance": {
+    "status": "provisional_not_evaluable",
+    "baseline": "M11_final_G1_500k",
+    "candidate_minus_baseline": true,
+    "labels": [
+      "chirp_mass",
+      "total_mass",
+      "chi_eff"
+    ],
+    "target_labels": null,
+    "minimum_improvements": null,
+    "degradation_tolerances": {
+      "chirp_mass": {
+        "global_RMSE": null,
+        "global_MAE": null,
+        "lower_tail_MAE": null,
+        "upper_tail_MAE": null,
+        "peripheral_RMSE": null,
+        "peripheral_MAE": null,
+        "snr_conditional_error": null
+      },
+      "total_mass": {
+        "global_RMSE": null,
+        "global_MAE": null,
+        "lower_tail_MAE": null,
+        "upper_tail_MAE": null,
+        "peripheral_RMSE": null,
+        "peripheral_MAE": null,
+        "snr_conditional_error": null
+      },
+      "chi_eff": {
+        "global_RMSE": null,
+        "global_MAE": null,
+        "lower_tail_MAE": null,
+        "upper_tail_MAE": null,
+        "peripheral_RMSE": null,
+        "peripheral_MAE": null,
+        "snr_conditional_error": null
+      }
+    },
+    "primary_diagnostics": [
+      "slope_distance_from_1",
+      "abs(lower_bias)",
+      "abs(upper_bias)",
+      "peripheral_RMSE",
+      "peripheral_MAE"
+    ],
+    "peripheral_definition": "train_mahalanobis_percentile >= 80",
+    "uncertainty_status": "not assessed",
+    "automatic_decision": null,
+    "real_events_role": "separate final descriptive audit; prohibited for optimization"
+  },
+  "historical_real": {
+    "status": "loaded_saved_only",
+    "files": {
+      "event_status": {
+        "path": "/data/vserrano/cbc_pe_data/results/M11_final_G1_500k/real_events/multi_event/event_status.csv",
+        "status": "present",
+        "size": 6294,
+        "mtime_ns": 1791277426452913359,
+        "sha256": "2d07a37ffbeb635832b1861686fbd8aef7365fe2cf35d37855efc69d8e758c8a"
+      },
+      "event_predictions": {
+        "path": "/data/vserrano/cbc_pe_data/results/M11_final_G1_500k/real_events/multi_event/event_predictions.csv",
+        "status": "present",
+        "size": 3255,
+        "mtime_ns": 1791277426440913831,
+        "sha256": "2b93d84723a037b65c2246ff88faad889e974b307469d0ffd71434a943d6adf0"
+      },
+      "per_event_comparison": {
+        "path": "/data/vserrano/cbc_pe_data/results/M11_final_G1_500k/real_events/multi_event/per_event_comparison.csv",
+        "status": "present",
+        "size": 8902,
+        "mtime_ns": 1791277438489440189,
+        "sha256": "3f2e2822c5c557b9cd2a897f257d220070f4242470cf2cac503f7f46560f925d"
+      },
+      "aggregate_summary": {
+        "path": "/data/vserrano/cbc_pe_data/results/M11_final_G1_500k/real_events/multi_event/aggregate_summary.csv",
+        "status": "present",
+        "size": 879,
+        "mtime_ns": 1791277438487440268,
+        "sha256": "a4a7c59be6560d08f56f805199e48873bfe361ec7381ad1c5dda5ff7b773752f"
+      }
+    },
+    "manifest": {
+      "path": "/data/vserrano/cbc_pe_data/results/M11_final_G1_500k/real_events/multi_event/provenance.json",
+      "status": "present",
+      "size": 37345,
+      "mtime_ns": 1791277426454913281,
+      "sha256": "f9a01a0e27f4657ed6d05b9373f65d8f165eb2e59329eae2b26a767e679faa0f"
+    },
+    "cohort": [
+      "GW200202_154313",
+      "GW200316_215756",
+      "GW191215_223052",
+      "GW200129_065458",
+      "GW200311_115853",
+      "GW200208_130117",
+      "GW200224_222234",
+      "GW200219_094415",
+      "GW191230_180458"
+    ],
+    "manifest_content": {
+      "cohort_path": "/data/vserrano/cbc_pe_data/results/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000/real_events_m10_500k_lvk_comparison/multi_event_all_catalog_candidates.csv",
+      "cohort_sha256": "bec1555569b9370a5eee8ba05aa044c5cc70f820d61622a2e9971edbea7ec8c6",
+      "lvk_path": "/data/vserrano/cbc_pe_data/lvk_references/GWTC-3-confident_detector_frame_reference_error_propagated.csv",
+      "lvk_sha256": "3d6570a7f895a38d65571a54e232ff058933bc80b7ad751cc6ac7ed06a9e1488",
+      "nominal_policy": {
+        "psd_window": [
+          -1024.0,
+          -640.0
+        ],
+        "center_offset": 0.0,
+        "psd_segment_duration": 8.0,
+        "fallback_windows": [],
+        "zscore_eps": 1e-06
+      },
+      "preprocessing": {
+        "whitening_method": "psd",
+        "apply_lowpass": true,
+        "apply_highpass": true,
+        "apply_standardization": false,
+        "lowpass_frequency": 512.0,
+        "highpass_frequency": 30.0,
+        "whitening_low_frequency_cutoff": 30.0,
+        "whitening_max_filter_duration": 0.5,
+        "whitening_trunc_method": "hann",
+        "fir_order": 256,
+        "fir_beta": 5.0,
+        "remove_corrupted": true,
+        "processing_preset": "psd_hp30_lp512_fir256_beta5_crop_to_config_crop",
+        "corrupted_margin_samples_per_side": 1536,
+        "corrupted_margin_seconds_per_side": 0.375,
+        "recommended_safe_margin_start": 0.4,
+        "recommended_safe_margin_end": 0.4,
+        "usable_duration_after_processing_margins": 3.2,
+        "uses_processing_context": true,
+        "output_mode": "crop_to_config",
+        "output_length": 16384,
+        "output_duration": 4.0,
+        "processing_input_length": 19712,
+        "processing_input_duration": 4.8125,
+        "processing_context_start_samples": 1664,
+        "processing_context_end_samples": 1664,
+        "processing_context_start_seconds": 0.40625,
+        "processing_context_end_seconds": 0.40625
+      },
+      "models": {
+        "M10": {
+          "bundle_path": "/data/vserrano/cbc_pe_data/results/mondrian_M10_final_baseline/selected_calibrators_frozen.pkl",
+          "recorded_sha256": "028da9c7c3f2bedf02fad79954627ee0e35c410452bbd899ce053cc22264e2df",
+          "metadata": {
+            "model": "M10",
+            "label_names": [
+              "chirp_mass",
+              "total_mass",
+              "chi_eff"
+            ],
+            "y_mean": [
+              37.45262145996094,
+              94.97396850585938,
+              0.0010226952144876122
+            ],
+            "y_std": [
+              16.484722137451172,
+              34.65016555786133,
+              0.4408551752567291
+            ],
+            "calibration_space": "standardized",
+            "fit_split": "cal",
+            "selection_split": "test",
+            "evaluation_split": "test",
+            "confidence_level": 0.9,
+            "n_neighbors": 5,
+            "min_samples_per_bin": 20,
+            "apply_jitter": true,
+            "jitter_variation": 1e-10,
+            "jitter_seed": null,
+            "reconstruction": "one cal-only fit per frozen selection; no grid, reselection or retry",
+            "checkpoint_sha256": "81b9dfa35f7d2d4384afd7cb917a3c545016798cb9d885a1c2cd0bec8f7c24aa",
+            "checkpoint_path": "/data/vserrano/cbc_pe_data/models/checkpoints/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000_SimpleCNN_ResidualDilated_M10_inputzscore_resdilated_emb64_d124_train400k_MSELoss_seed123_checkpoint.pt",
+            "selection_sha256": "8c71f4e2dd2d38a432067a36b2fc911ce9f98db4035f5c687bce6d49758676d2",
+            "selection_path": "/data/vserrano/cbc_pe_data/results/mondrian_M10_final_baseline/selected_configurations.csv",
+            "predictions_path": "/data/vserrano/cbc_pe_data/results/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000/m10_inputzscore_500k_cal_test_predictions_embeddings.npz",
+            "predictions_sha256": "85c1a12d1e97f397aad97ca2f45f0c834896c23ceed3ab056e9d56f374616569",
+            "cal_split_path": "/data/vserrano/cbc_pe_data/processed/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000_splits_train400000_val40000_cal30000_test30000_seed123.npz",
+            "cal_split_sha256": "95729dd43e448f7704c695e3ae91e0b541541b1b40ea4e9689fb78a325b1386f",
+            "idx_cal_sha256": "b806a1bd2a9cfa9915e3ea3c7c6dd2f36d96e96e3ab6e108b409ee9b543ab871",
+            "idx_test_sha256": "d94812a2be8afc616c947ce700a398655fb996408dd898da76922a364cb69f02",
+            "array_order": "unaltered prediction NPZ order; split membership verified independently",
+            "original_prediction_provenance": {
+              "checkpoint_file": "/data/vserrano/cbc_pe/data/models/checkpoints/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000_SimpleCNN_ResidualDilated_M10_inputzscore_resdilated_emb64_d124_train400k_MSELoss_seed123_checkpoint.pt",
+              "dataset_path": "/data/vserrano/cbc_pe/data/processed/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000.h5",
+              "split_path": "/data/vserrano/cbc_pe/data/processed/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000_splits_train400000_val40000_cal30000_test30000_seed123.npz",
+              "label_stats_path": "/data/vserrano/cbc_pe/data/processed/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000_label_stats_train_only_train400000_val40000_cal30000_test30000_seed123.npz",
+              "model_config": {
+                "architecture": "SimpleCNN_ResidualDilated",
+                "class_name": "SimpleCNN_ResidualDilated",
+                "dataset_id": "bbh_processed_4s_seobnrv4opt_snr10-25_n500_000",
+                "dataset_format": "hdf5",
+                "dataset_path": "/data/vserrano/cbc_pe/data/processed/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000.h5",
+                "split_path": "/data/vserrano/cbc_pe/data/processed/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000_splits_train400000_val40000_cal30000_test30000_seed123.npz",
+                "label_stats_path": "/data/vserrano/cbc_pe/data/processed/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000_label_stats_train_only_train400000_val40000_cal30000_test30000_seed123.npz",
+                "n_samples": 500000,
+                "n_detectors": 3,
+                "signal_length": 16384,
+                "n_outputs": 3,
+                "label_names": [
+                  "chirp_mass",
+                  "total_mass",
+                  "chi_eff"
+                ],
+                "model_kwargs": {
+                  "n_detectors": 3,
+                  "n_outputs": 3,
+                  "embedding_dim": 64,
+                  "residual_channels": 64,
+                  "dilations": [
+                    1,
+                    2,
+                    4
+                  ],
+                  "residual_kernel_size": 7,
+                  "dropout_conv": 0.05,
+                  "dropout_dense": 0.1,
+                  "num_groups": 8
+                },
+                "normalization": "GroupNorm",
+                "input_normalization": {
+                  "enabled": true,
+                  "mode": "per_sample_per_detector_zscore",
+                  "eps": 1e-06
+                },
+                "loss": "MSELoss",
+                "train_size": 400000,
+                "val_size": 40000,
+                "cal_size": 30000,
+                "test_size": 30000,
+                "training_seed": 123,
+                "split_seed": 123
+              }
+            },
+            "source_sha256": {
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/configs/experiments/train_500k_M10_inputzscore_resdilated_emb64_d124_bs256_seed123.json": "9da50accd25f5b2483dace51e6ab0e9fd1adc9f705ed97567ea8ad336a084ae0",
+              "/data/vserrano/cbc_pe_data/results/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000/m10_inputzscore_500k_cal_test_predictions_embeddings.npz": "85c1a12d1e97f397aad97ca2f45f0c834896c23ceed3ab056e9d56f374616569",
+              "/data/vserrano/cbc_pe_data/results/mondrian_M10_final_baseline/selected_configurations.csv": "8c71f4e2dd2d38a432067a36b2fc911ce9f98db4035f5c687bce6d49758676d2",
+              "/data/vserrano/cbc_pe_data/models/checkpoints/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000_SimpleCNN_ResidualDilated_M10_inputzscore_resdilated_emb64_d124_train400k_MSELoss_seed123_checkpoint.pt": "81b9dfa35f7d2d4384afd7cb917a3c545016798cb9d885a1c2cd0bec8f7c24aa",
+              "/data/vserrano/cbc_pe_data/processed/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000_splits_train400000_val40000_cal30000_test30000_seed123.npz": "95729dd43e448f7704c695e3ae91e0b541541b1b40ea4e9689fb78a325b1386f",
+              "/data/vserrano/cbc_pe_data/processed/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000_label_stats_train_only_train400000_val40000_cal30000_test30000_seed123.npz": "b65259f9034468ead400feb31ac2b9f6eeac379892e33ecdf74eb39b2a736975",
+              "/data/vserrano/cbc_pe_data/results/mondrian_M10_final_baseline/selected_systems_summary.csv": "f99b5586fdc32aa2a19a7fa7f18ecfabf3b5adbf618d1e1c31bebf9d964c45ea",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/scripts/freeze_selected_mondrian.py": "626b6dd435bd2f3cefb6ce7724f6040f7a1aff41d225a257321f5ed802ec6d3c",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/src/conformal/apply.py": "ab3d9e1e1850eb776e9e6e6300d4ade316c619dcb283b2b6d8fac40b4e4b4240",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/src/conformal/binning.py": "a89c734bed6f43cc2956ea9f263fa6e38010181fca74ea8bdf190799d5cfd906",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/src/conformal/calibration.py": "dcbc5a0803bd36e5edd029ea32afde9d0a20284e93129507f9e19b8bcfeed0b2",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/src/conformal/difficulty.py": "59a412676bb2d2735ca6eaf315cd3c5c47213c7f73fa35625822e2956f0b00ac",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/src/conformal/hybrid.py": "228a541c71a6ddff98a96d9818663c7e2a6aab43d25114aeef10576f3eb11598",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/src/conformal/metrics.py": "504bfe146e0a40c29d9ee57b297c696e1ba21fe37c691972fb3086f17148da12",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/src/conformal/pipeline.py": "8bb9c9f366faf458022e2f9639f7aa6bb410875ed9dc43c07b8c5c0421a91a2e",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/src/conformal/selected_calibrators.py": "d9c12fe843728888c4681b0cfd55323043bd715008b9f944d86f4db4ab69419d",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/src/conformal/selection.py": "81d0c6925ed6e864977c1e28efef0508f1da282031a6525debd2b7916de9bc90",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/src/conformal/taxonomy.py": "a15444d651faec3f48c6e5d8feb0a12c63e1cbaf8bac4d9ae9b72be3c996b80b"
+            },
+            "created_utc": "2026-10-05T16:03:02.141317+00:00",
+            "versions": {
+              "python": "3.10.0",
+              "numpy": "2.2.6",
+              "scipy": "1.15.3",
+              "scikit-learn": "1.7.2",
+              "pandas": "2.3.3"
+            },
+            "historical_tolerance": {
+              "rtol": 1e-09,
+              "atol": 1e-10
+            },
+            "round_trip_tolerance": "exact array equality",
+            "intended_destination": "/data/vserrano/cbc_pe_data/results/mondrian_M10_final_baseline/selected_calibrators_frozen.pkl",
+            "selection_status": [
+              {
+                "final_policy": "conservative",
+                "label": "chirp_mass"
+              },
+              {
+                "final_policy": "efficient",
+                "label": "chirp_mass"
+              },
+              {
+                "final_policy": "conservative",
+                "label": "total_mass"
+              },
+              {
+                "final_policy": "efficient",
+                "label": "total_mass"
+              },
+              {
+                "final_policy": "conservative",
+                "label": "chi_eff"
+              },
+              {
+                "final_policy": "efficient",
+                "label": "chi_eff"
+              }
+            ]
+          },
+          "validation_manifest": "/data/vserrano/cbc_pe_data/results/mondrian_M10_final_baseline/selected_calibrators_frozen_provenance.json"
+        },
+        "M11": {
+          "bundle_path": "/data/vserrano/cbc_pe_data/results/M11_final_G1_500k/mondrian_m11_selected_calibrators_frozen.pkl",
+          "recorded_sha256": "8227675ca9166772fac45aaee13e8cc979e0f34a1db00bcc74b04d90e78df390",
+          "metadata": {
+            "model": "M11",
+            "label_names": [
+              "chirp_mass",
+              "total_mass",
+              "chi_eff"
+            ],
+            "y_mean": [
+              37.46354675292969,
+              94.98597717285156,
+              -0.00021921665756963193
+            ],
+            "y_std": [
+              16.508060455322266,
+              34.70329284667969,
+              0.44033849239349365
+            ],
+            "calibration_space": "standardized",
+            "fit_split": "cal",
+            "selection_split": "val",
+            "evaluation_split": "test",
+            "confidence_level": 0.9,
+            "n_neighbors": 5,
+            "min_samples_per_bin": 20,
+            "apply_jitter": true,
+            "jitter_variation": 1e-10,
+            "jitter_seed": null,
+            "reconstruction": "one cal-only fit per frozen selection; no grid, reselection or retry",
+            "checkpoint_sha256": "3670f0dbe985cf4b3405ee47b970eedd56f573d0cd5741804a0626e336ccd4dd",
+            "checkpoint_path": "/data/vserrano/cbc_pe_data/models/checkpoints/M11_final_G1_500k/M11_final_G1_500k_SimpleCNN_ResidualDilated_M11_final_G1_inputzscore_resdilated_emb64_d124_train400k_MSELoss_seed123_checkpoint.pt",
+            "selection_sha256": "8ee429fd57ab118a001cb3a04fec017de9997a55f35dc2400a4cda5eb0a9d241",
+            "selection_path": "/data/vserrano/cbc_pe_data/results/M11_final_G1_500k/mondrian_m11_selected_from_val.csv",
+            "predictions_path": "/data/vserrano/cbc_pe_data/results/M11_final_G1_500k/m11_final_G1_500k_cal_test_predictions_embeddings.npz",
+            "predictions_sha256": "dc01b6ce7c3e0abffcee61c79724141402694adf1b6b39ebfcf552d75bdb201e",
+            "cal_split_path": "/data/vserrano/cbc_pe_data/processed/M11_final_G1_500k/M11_final_G1_500k_splits_train400000_val40000_cal30000_test30000_seed123.npz",
+            "cal_split_sha256": "1abf607c44cc4c55ca196de046874137e274c88cf221143cd936d645e97b97d2",
+            "idx_cal_sha256": "08debee00176b16ddd3e24f7fb3d636efaf21714e77f3d9901d0b188063bf55c",
+            "idx_test_sha256": "0ece6b2813b0241f967fbbb6f69874a011af45ef0883ea8facc6782f61e39d3f",
+            "array_order": "unaltered prediction NPZ order; split membership verified independently",
+            "original_prediction_provenance": {
+              "checkpoint_file": "/data/vserrano/cbc_pe_data/models/checkpoints/M11_final_G1_500k/M11_final_G1_500k_SimpleCNN_ResidualDilated_M11_final_G1_inputzscore_resdilated_emb64_d124_train400k_MSELoss_seed123_checkpoint.pt",
+              "dataset_path": "/data/vserrano/cbc_pe_data/processed/M11_final_G1_500k/m11_final_G1_500k_trainio.h5",
+              "split_path": "/data/vserrano/cbc_pe_data/processed/M11_final_G1_500k/M11_final_G1_500k_splits_train400000_val40000_cal30000_test30000_seed123.npz",
+              "label_stats_path": "/data/vserrano/cbc_pe_data/processed/M11_final_G1_500k/M11_final_G1_500k_label_stats_train_only_train400000_val40000_cal30000_test30000_seed123.npz",
+              "model_config": {
+                "architecture": "SimpleCNN_ResidualDilated",
+                "class_name": "SimpleCNN_ResidualDilated",
+                "dataset_id": "M11_final_G1_500k",
+                "dataset_format": "hdf5",
+                "dataset_path": "/data/vserrano/cbc_pe_data/processed/M11_final_G1_500k/m11_final_G1_500k_trainio.h5",
+                "split_path": "/data/vserrano/cbc_pe_data/processed/M11_final_G1_500k/M11_final_G1_500k_splits_train400000_val40000_cal30000_test30000_seed123.npz",
+                "label_stats_path": "/data/vserrano/cbc_pe_data/processed/M11_final_G1_500k/M11_final_G1_500k_label_stats_train_only_train400000_val40000_cal30000_test30000_seed123.npz",
+                "n_samples": 500000,
+                "n_detectors": 3,
+                "signal_length": 16384,
+                "n_outputs": 3,
+                "label_names": [
+                  "chirp_mass",
+                  "total_mass",
+                  "chi_eff"
+                ],
+                "model_kwargs": {
+                  "n_detectors": 3,
+                  "n_outputs": 3,
+                  "embedding_dim": 64,
+                  "residual_channels": 64,
+                  "dilations": [
+                    1,
+                    2,
+                    4
+                  ],
+                  "residual_kernel_size": 7,
+                  "dropout_conv": 0.05,
+                  "dropout_dense": 0.1,
+                  "num_groups": 8
+                },
+                "normalization": "GroupNorm",
+                "input_normalization": {
+                  "enabled": false,
+                  "already_normalized": true,
+                  "mode": "per_sample_per_detector_zscore",
+                  "eps": 1e-06
+                },
+                "loss": "MSELoss",
+                "train_size": 400000,
+                "val_size": 40000,
+                "cal_size": 30000,
+                "test_size": 30000,
+                "training_seed": 123,
+                "split_seed": 123
+              }
+            },
+            "source_sha256": {
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/configs/experiments/train_m11_final_G1_500k.json": "a38c43fe2c91b7bef27ae27d932d1eff4c652b5ee5489ef8a79ceb13d9dfd5e7",
+              "/data/vserrano/cbc_pe_data/results/M11_final_G1_500k/m11_final_G1_500k_cal_test_predictions_embeddings.npz": "dc01b6ce7c3e0abffcee61c79724141402694adf1b6b39ebfcf552d75bdb201e",
+              "/data/vserrano/cbc_pe_data/results/M11_final_G1_500k/mondrian_m11_selected_from_val.csv": "8ee429fd57ab118a001cb3a04fec017de9997a55f35dc2400a4cda5eb0a9d241",
+              "/data/vserrano/cbc_pe_data/models/checkpoints/M11_final_G1_500k/M11_final_G1_500k_SimpleCNN_ResidualDilated_M11_final_G1_inputzscore_resdilated_emb64_d124_train400k_MSELoss_seed123_checkpoint.pt": "3670f0dbe985cf4b3405ee47b970eedd56f573d0cd5741804a0626e336ccd4dd",
+              "/data/vserrano/cbc_pe_data/processed/M11_final_G1_500k/M11_final_G1_500k_splits_train400000_val40000_cal30000_test30000_seed123.npz": "1abf607c44cc4c55ca196de046874137e274c88cf221143cd936d645e97b97d2",
+              "/data/vserrano/cbc_pe_data/processed/M11_final_G1_500k/M11_final_G1_500k_label_stats_train_only_train400000_val40000_cal30000_test30000_seed123.npz": "d0891bf1c130186fb4e7af442e74952a03e4d7d5e0cc240f78d8772e4421855f",
+              "/data/vserrano/cbc_pe_data/results/M11_final_G1_500k/mondrian_m11_final_test_evaluation.csv": "09dc079e84b9211bd865d2c6c4fa14a86d9b883efe50b4567177cb72b448327b",
+              "/data/vserrano/cbc_pe_data/results/M11_final_G1_500k/mondrian_m11_test_selected_systems.csv": "82c4c2d487274e2723ffaafe13181d5775a566d1487cd008efdc71180c7adba5",
+              "/data/vserrano/cbc_pe_data/results/M11_final_G1_500k/mondrian_m11_cal_val_test_provenance.json": "279cffa3a9eb26cf96d292b87d0872a1ee800879543df8471ba136cc37c518a8",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/scripts/freeze_selected_mondrian.py": "626b6dd435bd2f3cefb6ce7724f6040f7a1aff41d225a257321f5ed802ec6d3c",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/src/conformal/apply.py": "ab3d9e1e1850eb776e9e6e6300d4ade316c619dcb283b2b6d8fac40b4e4b4240",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/src/conformal/binning.py": "a89c734bed6f43cc2956ea9f263fa6e38010181fca74ea8bdf190799d5cfd906",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/src/conformal/calibration.py": "dcbc5a0803bd36e5edd029ea32afde9d0a20284e93129507f9e19b8bcfeed0b2",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/src/conformal/difficulty.py": "59a412676bb2d2735ca6eaf315cd3c5c47213c7f73fa35625822e2956f0b00ac",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/src/conformal/hybrid.py": "228a541c71a6ddff98a96d9818663c7e2a6aab43d25114aeef10576f3eb11598",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/src/conformal/metrics.py": "504bfe146e0a40c29d9ee57b297c696e1ba21fe37c691972fb3086f17148da12",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/src/conformal/pipeline.py": "8bb9c9f366faf458022e2f9639f7aa6bb410875ed9dc43c07b8c5c0421a91a2e",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/src/conformal/selected_calibrators.py": "d9c12fe843728888c4681b0cfd55323043bd715008b9f944d86f4db4ab69419d",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/src/conformal/selection.py": "81d0c6925ed6e864977c1e28efef0508f1da282031a6525debd2b7916de9bc90",
+              "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/src/conformal/taxonomy.py": "a15444d651faec3f48c6e5d8feb0a12c63e1cbaf8bac4d9ae9b72be3c996b80b"
+            },
+            "created_utc": "2026-10-05T16:04:31.049842+00:00",
+            "versions": {
+              "python": "3.10.0",
+              "numpy": "2.2.6",
+              "scipy": "1.15.3",
+              "scikit-learn": "1.7.2",
+              "pandas": "2.3.3"
+            },
+            "historical_tolerance": {
+              "rtol": 1e-09,
+              "atol": 1e-10
+            },
+            "round_trip_tolerance": "exact array equality",
+            "intended_destination": "/data/vserrano/cbc_pe_data/results/M11_final_G1_500k/mondrian_m11_selected_calibrators_frozen.pkl",
+            "selection_status": [
+              {
+                "final_policy": "conservative",
+                "label": "chirp_mass",
+                "selection_status": "selected"
+              },
+              {
+                "final_policy": "efficient",
+                "label": "chirp_mass",
+                "selection_status": "selected"
+              },
+              {
+                "final_policy": "conservative",
+                "label": "total_mass",
+                "selection_status": "selected"
+              },
+              {
+                "final_policy": "efficient",
+                "label": "total_mass",
+                "selection_status": "selected"
+              },
+              {
+                "final_policy": "conservative",
+                "label": "chi_eff",
+                "selection_status": "selected"
+              },
+              {
+                "final_policy": "efficient",
+                "label": "chi_eff",
+                "selection_status": "selected"
+              }
+            ]
+          },
+          "validation_manifest": "/data/vserrano/cbc_pe_data/results/M11_final_G1_500k/mondrian_m11_selected_calibrators_frozen_provenance.json"
+        }
+      },
+      "checkpoints": {
+        "M10": "/data/vserrano/cbc_pe_data/models/checkpoints/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000/bbh_processed_4s_seobnrv4opt_snr10-25_n500_000_SimpleCNN_ResidualDilated_M10_inputzscore_resdilated_emb64_d124_train400k_MSELoss_seed123_checkpoint.pt",
+        "M11": "/data/vserrano/cbc_pe_data/models/checkpoints/M11_final_G1_500k/M11_final_G1_500k_SimpleCNN_ResidualDilated_M11_final_G1_inputzscore_resdilated_emb64_d124_train400k_MSELoss_seed123_checkpoint.pt"
+      },
+      "primary_policy": "conservative",
+      "frame": "detector-frame masses Msun; chi_eff dimensionless",
+      "events": [
+        {
+          "event": "GW200202_154313",
+          "gps": 1264693411.5,
+          "sources": [
+            {
+              "detector": "H1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200202_154313/v1/H-H1_GWOSC_4KHZ_R1-1264691364-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/H-H1_GWOSC_4KHZ_R1-1264691364-4096.hdf5"
+            },
+            {
+              "detector": "L1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200202_154313/v1/L-L1_GWOSC_4KHZ_R1-1264691364-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/L-L1_GWOSC_4KHZ_R1-1264691364-4096.hdf5"
+            },
+            {
+              "detector": "V1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200202_154313/v1/V-V1_GWOSC_4KHZ_R1-1264691364-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/V-V1_GWOSC_4KHZ_R1-1264691364-4096.hdf5"
+            }
+          ],
+          "psd_window": [
+            -1024.0,
+            -640.0
+          ],
+          "center_offset": 0.0,
+          "zscore_count": 1,
+          "processing": {
+            "center_time": 1264693411.5,
+            "output_start": 1264693409.5,
+            "output_end": 1264693413.5,
+            "processing_start": 1264693409.09375,
+            "processing_end": 1264693413.90625,
+            "psd_start_offset": -1024.0,
+            "psd_end_offset": -640.0,
+            "psd_segment_duration": 8.0
+          }
+        },
+        {
+          "event": "GW200316_215756",
+          "gps": 1268431094.1,
+          "sources": [
+            {
+              "detector": "H1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200316_215756/v1/H-H1_GWOSC_4KHZ_R1-1268429047-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/H-H1_GWOSC_4KHZ_R1-1268429047-4096.hdf5"
+            },
+            {
+              "detector": "L1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200316_215756/v1/L-L1_GWOSC_4KHZ_R1-1268429047-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/L-L1_GWOSC_4KHZ_R1-1268429047-4096.hdf5"
+            },
+            {
+              "detector": "V1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200316_215756/v1/V-V1_GWOSC_4KHZ_R1-1268429047-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/V-V1_GWOSC_4KHZ_R1-1268429047-4096.hdf5"
+            }
+          ],
+          "psd_window": [
+            -1024.0,
+            -640.0
+          ],
+          "center_offset": 0.0,
+          "zscore_count": 1,
+          "processing": {
+            "center_time": 1268431094.1,
+            "output_start": 1268431092.1,
+            "output_end": 1268431096.1,
+            "processing_start": 1268431091.69375,
+            "processing_end": 1268431096.50625,
+            "psd_start_offset": -1024.0,
+            "psd_end_offset": -640.0,
+            "psd_segment_duration": 8.0
+          }
+        },
+        {
+          "event": "GW191215_223052",
+          "gps": 1260484270.3,
+          "sources": [
+            {
+              "detector": "H1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW191215_223052/v1/H-H1_GWOSC_4KHZ_R1-1260482223-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/H-H1_GWOSC_4KHZ_R1-1260482223-4096.hdf5"
+            },
+            {
+              "detector": "L1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW191215_223052/v1/L-L1_GWOSC_4KHZ_R1-1260482223-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/L-L1_GWOSC_4KHZ_R1-1260482223-4096.hdf5"
+            },
+            {
+              "detector": "V1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW191215_223052/v1/V-V1_GWOSC_4KHZ_R1-1260482223-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/V-V1_GWOSC_4KHZ_R1-1260482223-4096.hdf5"
+            }
+          ],
+          "psd_window": [
+            -1024.0,
+            -640.0
+          ],
+          "center_offset": 0.0,
+          "zscore_count": 1,
+          "processing": {
+            "center_time": 1260484270.3,
+            "output_start": 1260484268.3,
+            "output_end": 1260484272.3,
+            "processing_start": 1260484267.89375,
+            "processing_end": 1260484272.70625,
+            "psd_start_offset": -1024.0,
+            "psd_end_offset": -640.0,
+            "psd_segment_duration": 8.0
+          }
+        },
+        {
+          "event": "GW200129_065458",
+          "gps": 1264316116.4,
+          "sources": [
+            {
+              "detector": "H1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200129_065458/v1/H-H1_GWOSC_4KHZ_R1-1264314069-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/H-H1_GWOSC_4KHZ_R1-1264314069-4096.hdf5"
+            },
+            {
+              "detector": "L1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200129_065458/v1/L-L1_GWOSC_4KHZ_R1-1264314069-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/L-L1_GWOSC_4KHZ_R1-1264314069-4096.hdf5"
+            },
+            {
+              "detector": "V1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200129_065458/v1/V-V1_GWOSC_4KHZ_R1-1264314069-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/V-V1_GWOSC_4KHZ_R1-1264314069-4096.hdf5"
+            }
+          ],
+          "psd_window": [
+            -1024.0,
+            -640.0
+          ],
+          "center_offset": 0.0,
+          "zscore_count": 1,
+          "processing": {
+            "center_time": 1264316116.4,
+            "output_start": 1264316114.4,
+            "output_end": 1264316118.4,
+            "processing_start": 1264316113.99375,
+            "processing_end": 1264316118.80625,
+            "psd_start_offset": -1024.0,
+            "psd_end_offset": -640.0,
+            "psd_segment_duration": 8.0
+          }
+        },
+        {
+          "event": "GW200311_115853",
+          "gps": 1267963151.3,
+          "sources": [
+            {
+              "detector": "H1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200311_115853/v1/H-H1_GWOSC_4KHZ_R1-1267961104-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/H-H1_GWOSC_4KHZ_R1-1267961104-4096.hdf5"
+            },
+            {
+              "detector": "L1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200311_115853/v1/L-L1_GWOSC_4KHZ_R1-1267961104-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/L-L1_GWOSC_4KHZ_R1-1267961104-4096.hdf5"
+            },
+            {
+              "detector": "V1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200311_115853/v1/V-V1_GWOSC_4KHZ_R1-1267961104-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/V-V1_GWOSC_4KHZ_R1-1267961104-4096.hdf5"
+            }
+          ],
+          "psd_window": [
+            -1024.0,
+            -640.0
+          ],
+          "center_offset": 0.0,
+          "zscore_count": 1,
+          "processing": {
+            "center_time": 1267963151.3,
+            "output_start": 1267963149.3,
+            "output_end": 1267963153.3,
+            "processing_start": 1267963148.89375,
+            "processing_end": 1267963153.70625,
+            "psd_start_offset": -1024.0,
+            "psd_end_offset": -640.0,
+            "psd_segment_duration": 8.0
+          }
+        },
+        {
+          "event": "GW200208_130117",
+          "gps": 1265202095.9,
+          "sources": [
+            {
+              "detector": "H1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200208_130117/v1/H-H1_GWOSC_4KHZ_R1-1265200048-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/H-H1_GWOSC_4KHZ_R1-1265200048-4096.hdf5"
+            },
+            {
+              "detector": "L1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200208_130117/v1/L-L1_GWOSC_4KHZ_R1-1265200048-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/L-L1_GWOSC_4KHZ_R1-1265200048-4096.hdf5"
+            },
+            {
+              "detector": "V1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200208_130117/v1/V-V1_GWOSC_4KHZ_R1-1265200048-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/V-V1_GWOSC_4KHZ_R1-1265200048-4096.hdf5"
+            }
+          ],
+          "psd_window": [
+            -1024.0,
+            -640.0
+          ],
+          "center_offset": 0.0,
+          "zscore_count": 1,
+          "processing": {
+            "center_time": 1265202095.9,
+            "output_start": 1265202093.9,
+            "output_end": 1265202097.9,
+            "processing_start": 1265202093.49375,
+            "processing_end": 1265202098.30625,
+            "psd_start_offset": -1024.0,
+            "psd_end_offset": -640.0,
+            "psd_segment_duration": 8.0
+          }
+        },
+        {
+          "event": "GW200224_222234",
+          "gps": 1266618172.4,
+          "sources": [
+            {
+              "detector": "H1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200224_222234/v1/H-H1_GWOSC_4KHZ_R1-1266616125-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/H-H1_GWOSC_4KHZ_R1-1266616125-4096.hdf5"
+            },
+            {
+              "detector": "L1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200224_222234/v1/L-L1_GWOSC_4KHZ_R1-1266616125-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/L-L1_GWOSC_4KHZ_R1-1266616125-4096.hdf5"
+            },
+            {
+              "detector": "V1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200224_222234/v1/V-V1_GWOSC_4KHZ_R1-1266616125-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/V-V1_GWOSC_4KHZ_R1-1266616125-4096.hdf5"
+            }
+          ],
+          "psd_window": [
+            -1024.0,
+            -640.0
+          ],
+          "center_offset": 0.0,
+          "zscore_count": 1,
+          "processing": {
+            "center_time": 1266618172.4,
+            "output_start": 1266618170.4,
+            "output_end": 1266618174.4,
+            "processing_start": 1266618169.99375,
+            "processing_end": 1266618174.80625,
+            "psd_start_offset": -1024.0,
+            "psd_end_offset": -640.0,
+            "psd_segment_duration": 8.0
+          }
+        },
+        {
+          "event": "GW200219_094415",
+          "gps": 1266140673.1,
+          "sources": [
+            {
+              "detector": "H1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200219_094415/v1/H-H1_GWOSC_4KHZ_R1-1266138626-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/H-H1_GWOSC_4KHZ_R1-1266138626-4096.hdf5"
+            },
+            {
+              "detector": "L1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200219_094415/v1/L-L1_GWOSC_4KHZ_R1-1266138626-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/L-L1_GWOSC_4KHZ_R1-1266138626-4096.hdf5"
+            },
+            {
+              "detector": "V1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW200219_094415/v1/V-V1_GWOSC_4KHZ_R1-1266138626-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/V-V1_GWOSC_4KHZ_R1-1266138626-4096.hdf5"
+            }
+          ],
+          "psd_window": [
+            -1024.0,
+            -640.0
+          ],
+          "center_offset": 0.0,
+          "zscore_count": 1,
+          "processing": {
+            "center_time": 1266140673.1,
+            "output_start": 1266140671.1,
+            "output_end": 1266140675.1,
+            "processing_start": 1266140670.69375,
+            "processing_end": 1266140675.50625,
+            "psd_start_offset": -1024.0,
+            "psd_end_offset": -640.0,
+            "psd_segment_duration": 8.0
+          }
+        },
+        {
+          "event": "GW191230_180458",
+          "gps": 1261764316.4,
+          "sources": [
+            {
+              "detector": "H1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW191230_180458/v1/H-H1_GWOSC_4KHZ_R1-1261762269-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/H-H1_GWOSC_4KHZ_R1-1261762269-4096.hdf5"
+            },
+            {
+              "detector": "L1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW191230_180458/v1/L-L1_GWOSC_4KHZ_R1-1261762269-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/L-L1_GWOSC_4KHZ_R1-1261762269-4096.hdf5"
+            },
+            {
+              "detector": "V1",
+              "url": "https://gwosc.org/eventapi/json/GWTC-3-confident/GW191230_180458/v1/V-V1_GWOSC_4KHZ_R1-1261762269-4096.hdf5",
+              "cached_file": "/data/vserrano/cbc_pe_data/gwosc_cache/V-V1_GWOSC_4KHZ_R1-1261762269-4096.hdf5"
+            }
+          ],
+          "psd_window": [
+            -1024.0,
+            -640.0
+          ],
+          "center_offset": 0.0,
+          "zscore_count": 1,
+          "processing": {
+            "center_time": 1261764316.4,
+            "output_start": 1261764314.4,
+            "output_end": 1261764318.4,
+            "processing_start": 1261764313.99375,
+            "processing_end": 1261764318.80625,
+            "psd_start_offset": -1024.0,
+            "psd_end_offset": -640.0,
+            "psd_segment_duration": 8.0
+          }
+        }
+      ],
+      "skipped": [
+        {
+          "event": "GW191129_134029",
+          "stage": "data",
+          "reason": "nonfinite_event_window",
+          "error": "ValueError: Invalid event window: V1: event processing window contains NaN/Inf"
+        },
+        {
+          "event": "GW200225_060421",
+          "stage": "data",
+          "reason": "nonfinite_event_window",
+          "error": "ValueError: Invalid event window: V1: event processing window contains NaN/Inf"
+        },
+        {
+          "event": "GW200128_022011",
+          "stage": "data",
+          "reason": "nonfinite_event_window",
+          "error": "ValueError: Invalid event window: V1: event processing window contains NaN/Inf"
+        },
+        {
+          "event": "GW191222_033537",
+          "stage": "data",
+          "reason": "nonfinite_event_window",
+          "error": "ValueError: Invalid event window: V1: event processing window contains NaN/Inf"
+        },
+        {
+          "event": "GW191109_010717",
+          "stage": "data",
+          "reason": "nonfinite_event_window",
+          "error": "ValueError: Invalid event window: V1: event processing window contains NaN/Inf"
+        }
+      ],
+      "status_counts": {
+        "success": 9,
+        "skipped": 5
+      },
+      "gw170814_role": "separate M11.13 GWTC-1 posterior anchor, excluded from cohort aggregates",
+      "code_sources": {
+        "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/notebooks/m11/M11_14_real_events_lvk_comparison.ipynb": "d998c76ef6b45f5db7a44b22b8004a0135f7d64f3f3ffe1feae650307ba4b020",
+        "/afs/ciemat.es/user/v/vserrano/Desktop/gw/Gravitational-Waves-Lab/cbc_pe/configs/generation/generate_500k_bbh_4s.json": "e7625cb8a4490b2302f31ad4bffa36eff39a7af0fda1b9e52999d232588107ea"
+      },
+      "versions": {
+        "python": "3.10.0 (default, Mar  3 2022, 09:58:08) [GCC 7.5.0]",
+        "numpy": "2.2.6",
+        "torch": "2.11.0+cu130"
+      }
+    },
+    "tables": {
+      "event_status": [
+        {
+          "event": "GW200202_154313",
+          "gps_time": 1264693411.5,
+          "catalog": "GWTC-3-confident",
+          "detectors": "H1,L1,V1",
+          "redshift": 0.09,
+          "redshift_lower": 0.06,
+          "redshift_upper": 0.12,
+          "chirp_mass_lvk": 8.164100000000001,
+          "chirp_mass_lvk_lower": 7.851027979531866,
+          "chirp_mass_lvk_upper": 8.50895453455044,
+          "total_mass_lvk": 19.1622,
+          "total_mass_lvk_lower": 18.261373240850386,
+          "total_mass_lvk_upper": 21.172803590964666,
+          "mass_1_lvk": 11.009,
+          "mass_1_lvk_lower": 9.453209204295128,
+          "mass_1_lvk_upper": 14.836013718292634,
+          "mass_2_lvk": 7.957000000000001,
+          "mass_2_lvk_lower": 6.091103432663,
+          "mass_2_lvk_upper": 9.175836330275729,
+          "chi_eff_lvk": 0.04,
+          "chi_eff_lvk_lower": -0.0199999999999999,
+          "chi_eff_lvk_upper": 0.17,
+          "network_snr_lvk": 10.8,
+          "historical_failure": null,
+          "processing_status": "success",
+          "reference_source": "/data/vserrano/cbc_pe_data/lvk_references/GWTC-3-confident_detector_frame_reference_error_propagated.csv"
+        },
+        {
+          "event": "GW191129_134029",
+          "gps_time": 1259070047.1,
+          "catalog": "GWTC-3-confident",
+          "detectors": "H1,L1,V1",
+          "redshift": 0.16,
+          "redshift_lower": 0.1,
+          "redshift_upper": 0.21,
+          "chirp_mass_lvk": 8.4796,
+          "chirp_mass_lvk_lower": 7.9338299018817535,
+          "chirp_mass_lvk_upper": 9.09797827419792,
+          "total_mass_lvk": 20.3,
+          "total_mass_lvk_lower": 18.55639339299256,
+          "total_mass_lvk_upper": 23.21826678012823,
+          "mass_1_lvk": 12.412,
+          "mass_1_lvk_lower": 9.89282156249304,
+          "mass_1_lvk_upper": 17.19799634350048,
+          "mass_2_lvk": 7.771999999999999,
+          "mass_2_lvk_lower": 5.759442423183873,
+          "mass_2_lvk_upper": 9.54395513487221,
+          "chi_eff_lvk": 0.06,
+          "chi_eff_lvk_lower": -0.02,
+          "chi_eff_lvk_upper": 0.22,
+          "network_snr_lvk": 13.1,
+          "historical_failure": "Invalid event window: V1: event processing window contains NaN/Inf",
+          "processing_status": "skipped",
+          "reference_source": "/data/vserrano/cbc_pe_data/lvk_references/GWTC-3-confident_detector_frame_reference_error_propagated.csv"
+        },
+        {
+          "event": "GW200316_215756",
+          "gps_time": 1268431094.1,
+          "catalog": "GWTC-3-confident",
+          "detectors": "H1,L1,V1",
+          "redshift": 0.22,
+          "redshift_lower": 0.14,
+          "redshift_upper": 0.3,
+          "chirp_mass_lvk": 10.675,
+          "chirp_mass_lvk_lower": 9.705339750221755,
+          "chirp_mass_lvk_upper": 11.705602231707266,
+          "total_mass_lvk": 25.864,
+          "total_mass_lvk_lower": 22.89246571616614,
+          "total_mass_lvk_upper": 34.810232279568865,
+          "mass_1_lvk": 15.982,
+          "mass_1_lvk_lower": 12.292047696785229,
+          "mass_1_lvk_upper": 28.47005188970641,
+          "mass_2_lvk": 9.516,
+          "mass_2_lvk_lower": 5.92339370372984,
+          "mass_2_lvk_upper": 12.03452655336409,
+          "chi_eff_lvk": 0.13,
+          "chi_eff_lvk_lower": 0.03,
+          "chi_eff_lvk_upper": 0.4,
+          "network_snr_lvk": 10.3,
+          "historical_failure": null,
+          "processing_status": "success",
+          "reference_source": "/data/vserrano/cbc_pe_data/lvk_references/GWTC-3-confident_detector_frame_reference_error_propagated.csv"
+        },
+        {
+          "event": "GW200225_060421",
+          "gps_time": 1266645879.3,
+          "catalog": "GWTC-3-confident",
+          "detectors": "H1,L1,V1",
+          "redshift": 0.22,
+          "redshift_lower": 0.12,
+          "redshift_upper": 0.31,
+          "chirp_mass_lvk": 17.323999999999998,
+          "chirp_mass_lvk_lower": 15.102814730825004,
+          "chirp_mass_lvk_upper": 19.55608064370444,
+          "total_mass_lvk": 40.87,
+          "total_mass_lvk_lower": 35.908336972344856,
+          "total_mass_lvk_upper": 46.197277822678295,
+          "mass_1_lvk": 23.546,
+          "mass_1_lvk_lower": 19.408307406295144,
+          "mass_1_lvk_upper": 29.888489180124783,
+          "mass_2_lvk": 17.08,
+          "mass_2_lvk_lower": 12.58634892320287,
+          "mass_2_lvk_upper": 20.720969101763977,
+          "chi_eff_lvk": -0.12,
+          "chi_eff_lvk_lower": -0.4,
+          "chi_eff_lvk_upper": 0.05,
+          "network_snr_lvk": 12.5,
+          "historical_failure": "Invalid event window: V1: event processing window contains NaN/Inf",
+          "processing_status": "skipped",
+          "reference_source": "/data/vserrano/cbc_pe_data/lvk_references/GWTC-3-confident_detector_frame_reference_error_propagated.csv"
+        },
+        {
+          "event": "GW191215_223052",
+          "gps_time": 1260484270.3,
+          "catalog": "GWTC-3-confident",
+          "detectors": "H1,L1,V1",
+          "redshift": 0.35,
+          "redshift_lower": 0.2099999999999999,
+          "redshift_upper": 0.48,
+          "chirp_mass_lvk": 24.84,
+          "chirp_mass_lvk_lower": 21.389956377087387,
+          "chirp_mass_lvk_upper": 28.653471384447503,
+          "total_mass_lvk": 58.455,
+          "total_mass_lvk_lower": 50.06179626125995,
+          "total_mass_lvk_upper": 67.55882699747748,
+          "mass_1_lvk": 33.615,
+          "mass_1_lvk_lower": 27.07371411723964,
+          "mass_1_lvk_upper": 43.731837153972585,
+          "mass_2_lvk": 24.435,
+          "mass_2_lvk_lower": 18.34752260784486,
+          "mass_2_lvk_upper": 30.078891299449342,
+          "chi_eff_lvk": -0.04,
+          "chi_eff_lvk_lower": -0.25,
+          "chi_eff_lvk_upper": 0.13,
+          "network_snr_lvk": 11.2,
+          "historical_failure": null,
+          "processing_status": "success",
+          "reference_source": "/data/vserrano/cbc_pe_data/lvk_references/GWTC-3-confident_detector_frame_reference_error_propagated.csv"
+        },
+        {
+          "event": "GW200129_065458",
+          "gps_time": 1264316116.4,
+          "catalog": "GWTC-3-confident",
+          "detectors": "H1,L1,V1",
+          "redshift": 0.18,
+          "redshift_lower": 0.1099999999999999,
+          "redshift_upper": 0.2299999999999999,
+          "chirp_mass_lvk": 32.096,
+          "chirp_mass_lvk_lower": 28.780730478528174,
+          "chirp_mass_lvk_upper": 34.92267366351335,
+          "total_mass_lvk": 74.69399999999999,
+          "total_mass_lvk_lower": 68.7165502929761,
+          "total_mass_lvk_upper": 80.875692729342,
+          "mass_1_lvk": 40.71,
+          "mass_1_lvk_lower": 36.32671481648752,
+          "mass_1_lvk_upper": 52.51867261803798,
+          "mass_2_lvk": 34.22,
+          "mass_2_lvk_lower": 23.059821865220968,
+          "mass_2_lvk_upper": 38.37520589140899,
+          "chi_eff_lvk": 0.11,
+          "chi_eff_lvk_lower": -0.05,
+          "chi_eff_lvk_upper": 0.22,
+          "network_snr_lvk": 26.8,
+          "historical_failure": null,
+          "processing_status": "success",
+          "reference_source": "/data/vserrano/cbc_pe_data/lvk_references/GWTC-3-confident_detector_frame_reference_error_propagated.csv"
+        },
+        {
+          "event": "GW200311_115853",
+          "gps_time": 1267963151.3,
+          "catalog": "GWTC-3-confident",
+          "detectors": "H1,L1,V1",
+          "redshift": 0.23,
+          "redshift_lower": 0.16,
+          "redshift_upper": 0.28,
+          "chirp_mass_lvk": 32.718,
+          "chirp_mass_lvk_lower": 29.632770024779354,
+          "chirp_mass_lvk_upper": 35.9557776328834,
+          "total_mass_lvk": 76.137,
+          "total_mass_lvk_lower": 69.39441555484842,
+          "total_mass_lvk_upper": 83.35339702344598,
+          "mass_1_lvk": 42.066,
+          "mass_1_lvk_lower": 36.81457048033586,
+          "mass_1_lvk_upper": 50.12158712944004,
+          "mass_2_lvk": 34.071,
+          "mass_2_lvk_lower": 26.55942426650705,
+          "mass_2_lvk_upper": 39.300729820937214,
+          "chi_eff_lvk": -0.02,
+          "chi_eff_lvk_lower": -0.22,
+          "chi_eff_lvk_upper": 0.14,
+          "network_snr_lvk": 17.8,
+          "historical_failure": null,
+          "processing_status": "success",
+          "reference_source": "/data/vserrano/cbc_pe_data/lvk_references/GWTC-3-confident_detector_frame_reference_error_propagated.csv"
+        },
+        {
+          "event": "GW200208_130117",
+          "gps_time": 1265202095.9,
+          "catalog": "GWTC-3-confident",
+          "detectors": "H1,L1,V1",
+          "redshift": 0.4,
+          "redshift_lower": 0.26,
+          "redshift_upper": 0.55,
+          "chirp_mass_lvk": 38.78,
+          "chirp_mass_lvk_lower": 32.959820964953046,
+          "chirp_mass_lvk_upper": 45.42051391083551,
+          "total_mass_lvk": 91.42,
+          "total_mass_lvk_lower": 78.22126657591721,
+          "total_mass_lvk_upper": 106.40457957368172,
+          "mass_1_lvk": 52.78,
+          "mass_1_lvk_lower": 42.621275473761486,
+          "mass_1_lvk_upper": 66.97504931305278,
+          "mass_2_lvk": 38.35999999999999,
+          "mass_2_lvk_lower": 27.443805791394137,
+          "mass_2_lvk_upper": 48.0905960762946,
+          "chi_eff_lvk": -0.07,
+          "chi_eff_lvk_lower": -0.34,
+          "chi_eff_lvk_upper": 0.1399999999999999,
+          "network_snr_lvk": 10.8,
+          "historical_failure": null,
+          "processing_status": "success",
+          "reference_source": "/data/vserrano/cbc_pe_data/lvk_references/GWTC-3-confident_detector_frame_reference_error_propagated.csv"
+        },
+        {
+          "event": "GW200224_222234",
+          "gps_time": 1266618172.4,
+          "catalog": "GWTC-3-confident",
+          "detectors": "H1,L1,V1",
+          "redshift": 0.32,
+          "redshift_lower": 0.21,
+          "redshift_upper": 0.4,
+          "chirp_mass_lvk": 41.05200000000001,
+          "chirp_mass_lvk_lower": 36.11182419341174,
+          "chirp_mass_lvk_upper": 46.0684609038644,
+          "total_mass_lvk": 95.436,
+          "total_mass_lvk_lower": 84.84382246183534,
+          "total_mass_lvk_upper": 106.56167624910957,
+          "mass_1_lvk": 52.8,
+          "mass_1_lvk_lower": 45.40786904877897,
+          "mass_1_lvk_upper": 62.20512285937829,
+          "mass_2_lvk": 43.16400000000001,
+          "mass_2_lvk_lower": 33.002089500492545,
+          "mass_2_lvk_upper": 50.018805030050096,
+          "chi_eff_lvk": 0.1,
+          "chi_eff_lvk_lower": -0.06,
+          "chi_eff_lvk_upper": 0.25,
+          "network_snr_lvk": 20.0,
+          "historical_failure": null,
+          "processing_status": "success",
+          "reference_source": "/data/vserrano/cbc_pe_data/lvk_references/GWTC-3-confident_detector_frame_reference_error_propagated.csv"
+        },
+        {
+          "event": "GW200219_094415",
+          "gps_time": 1266140673.1,
+          "catalog": "GWTC-3-confident",
+          "detectors": "H1,L1,V1",
+          "redshift": 0.57,
+          "redshift_lower": 0.35,
+          "redshift_upper": 0.7899999999999999,
+          "chirp_mass_lvk": 43.332,
+          "chirp_mass_lvk_lower": 34.81951857564435,
+          "chirp_mass_lvk_upper": 54.01696364055583,
+          "total_mass_lvk": 102.04999999999998,
+          "total_mass_lvk_lower": 82.80864152405032,
+          "total_mass_lvk_upper": 126.45937369126868,
+          "mass_1_lvk": 58.87499999999999,
+          "mass_1_lvk_lower": 45.25823133045141,
+          "mass_1_lvk_upper": 76.74975731303783,
+          "mass_2_lvk": 43.80299999999999,
+          "mass_2_lvk_lower": 29.2565781719352,
+          "mass_2_lvk_upper": 56.94274763836808,
+          "chi_eff_lvk": -0.08,
+          "chi_eff_lvk_lower": -0.37,
+          "chi_eff_lvk_upper": 0.15,
+          "network_snr_lvk": 10.7,
+          "historical_failure": null,
+          "processing_status": "success",
+          "reference_source": "/data/vserrano/cbc_pe_data/lvk_references/GWTC-3-confident_detector_frame_reference_error_propagated.csv"
+        },
+        {
+          "event": "GW200128_022011",
+          "gps_time": 1264213229.9,
+          "catalog": "GWTC-3-confident",
+          "detectors": "H1,L1,V1",
+          "redshift": 0.56,
+          "redshift_lower": 0.28,
+          "redshift_upper": 0.8400000000000001,
+          "chirp_mass_lvk": 49.92,
+          "chirp_mass_lvk_lower": 37.514436731852925,
+          "chirp_mass_lvk_upper": 64.65674319515679,
+          "total_mass_lvk": 117.0,
+          "total_mass_lvk_lower": 88.86748500400293,
+          "total_mass_lvk_upper": 150.827657323557,
+          "mass_1_lvk": 65.83200000000001,
+          "mass_1_lvk_lower": 48.5321054338473,
+          "mass_1_lvk_upper": 87.44410475636282,
+          "mass_2_lvk": 50.856,
+          "mass_2_lvk_lower": 33.84717029305074,
+          "mass_2_lvk_upper": 68.26153888852626,
+          "chi_eff_lvk": 0.12,
+          "chi_eff_lvk_lower": -0.13,
+          "chi_eff_lvk_upper": 0.36,
+          "network_snr_lvk": 10.6,
+          "historical_failure": "Invalid event window: V1: event processing window contains NaN/Inf",
+          "processing_status": "skipped",
+          "reference_source": "/data/vserrano/cbc_pe_data/lvk_references/GWTC-3-confident_detector_frame_reference_error_propagated.csv"
+        },
+        {
+          "event": "GW191222_033537",
+          "gps_time": 1261020955.1,
+          "catalog": "GWTC-3-confident",
+          "detectors": "H1,L1,V1",
+          "redshift": 0.51,
+          "redshift_lower": 0.25,
+          "redshift_upper": 0.74,
+          "chirp_mass_lvk": 51.038,
+          "chirp_mass_lvk_lower": 39.4521705519199,
+          "chirp_mass_lvk_upper": 64.28091950439932,
+          "total_mass_lvk": 119.29,
+          "total_mass_lvk_lower": 92.87440422780512,
+          "total_mass_lvk_upper": 149.52002646376613,
+          "mass_1_lvk": 68.101,
+          "mass_1_lvk_lower": 51.26575494683846,
+          "mass_1_lvk_upper": 87.55602017475181,
+          "mass_2_lvk": 52.397000000000006,
+          "mass_2_lvk_lower": 34.15480964357624,
+          "mass_2_lvk_upper": 68.54946761334007,
+          "chi_eff_lvk": -0.04,
+          "chi_eff_lvk_lower": -0.29,
+          "chi_eff_lvk_upper": 0.16,
+          "network_snr_lvk": 12.5,
+          "historical_failure": "Invalid event window: V1: event processing window contains NaN/Inf",
+          "processing_status": "skipped",
+          "reference_source": "/data/vserrano/cbc_pe_data/lvk_references/GWTC-3-confident_detector_frame_reference_error_propagated.csv"
+        },
+        {
+          "event": "GW191109_010717",
+          "gps_time": 1257296855.2,
+          "catalog": "GWTC-3-confident",
+          "detectors": "H1,L1,V1",
+          "redshift": 0.25,
+          "redshift_lower": 0.13,
+          "redshift_upper": 0.43,
+          "chirp_mass_lvk": 59.375,
+          "chirp_mass_lvk_lower": 48.40318952952613,
+          "chirp_mass_lvk_upper": 74.10939852861324,
+          "total_mass_lvk": 140.0,
+          "total_mass_lvk_lower": 115.90366002895875,
+          "total_mass_lvk_upper": 172.11581541857532,
+          "mass_1_lvk": 81.25,
+          "mass_1_lvk_lower": 65.44169522054942,
+          "mass_1_lvk_upper": 99.30415464650729,
+          "mass_2_lvk": 58.75,
+          "mass_2_lvk_lower": 41.54906688577623,
+          "mass_2_lvk_upper": 79.32022362542517,
+          "chi_eff_lvk": -0.29,
+          "chi_eff_lvk_lower": -0.6,
+          "chi_eff_lvk_upper": 0.13,
+          "network_snr_lvk": 17.3,
+          "historical_failure": "Invalid event window: V1: event processing window contains NaN/Inf",
+          "processing_status": "skipped",
+          "reference_source": "/data/vserrano/cbc_pe_data/lvk_references/GWTC-3-confident_detector_frame_reference_error_propagated.csv"
+        },
+        {
+          "event": "GW191230_180458",
+          "gps_time": 1261764316.4,
+          "catalog": "GWTC-3-confident",
+          "detectors": "H1,L1,V1",
+          "redshift": 0.69,
+          "redshift_lower": 0.4199999999999999,
+          "redshift_upper": 0.95,
+          "chirp_mass_lvk": 61.685,
+          "chirp_mass_lvk_lower": 48.02160653424633,
+          "chirp_mass_lvk_upper": 78.48095975227376,
+          "total_mass_lvk": 145.34,
+          "total_mass_lvk_lower": 114.5106827840771,
+          "total_mass_lvk_upper": 184.4682723871116,
+          "mass_1_lvk": 83.48599999999999,
+          "mass_1_lvk_lower": 62.48313305284251,
+          "mass_1_lvk_upper": 110.4074400803523,
+          "mass_2_lvk": 62.53,
+          "mass_2_lvk_lower": 39.92295463798951,
+          "mass_2_lvk_upper": 83.461614844536,
+          "chi_eff_lvk": -0.05,
+          "chi_eff_lvk_lower": -0.36,
+          "chi_eff_lvk_upper": 0.21,
+          "network_snr_lvk": 10.4,
+          "historical_failure": null,
+          "processing_status": "success",
+          "reference_source": "/data/vserrano/cbc_pe_data/lvk_references/GWTC-3-confident_detector_frame_reference_error_propagated.csv"
+        }
+      ],
+      "event_predictions": [
+        {
+          "event": "GW200202_154313",
+          "model": "M10",
+          "label": "chirp_mass",
+          "prediction": 10.618010808437704,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200202_154313",
+          "model": "M10",
+          "label": "total_mass",
+          "prediction": 27.853655561980304,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200202_154313",
+          "model": "M10",
+          "label": "chi_eff",
+          "prediction": 0.4335473468821949,
+          "frame": "dimensionless"
+        },
+        {
+          "event": "GW200202_154313",
+          "model": "M11",
+          "label": "chirp_mass",
+          "prediction": 15.163832276040011,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200202_154313",
+          "model": "M11",
+          "label": "total_mass",
+          "prediction": 39.87147017829193,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200202_154313",
+          "model": "M11",
+          "label": "chi_eff",
+          "prediction": 0.1665356922419576,
+          "frame": "dimensionless"
+        },
+        {
+          "event": "GW200316_215756",
+          "model": "M10",
+          "label": "chirp_mass",
+          "prediction": 12.507019504041637,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200316_215756",
+          "model": "M10",
+          "label": "total_mass",
+          "prediction": 32.079116253321445,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200316_215756",
+          "model": "M10",
+          "label": "chi_eff",
+          "prediction": 0.0710456680594906,
+          "frame": "dimensionless"
+        },
+        {
+          "event": "GW200316_215756",
+          "model": "M11",
+          "label": "chirp_mass",
+          "prediction": 13.909145310023632,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200316_215756",
+          "model": "M11",
+          "label": "total_mass",
+          "prediction": 35.09555433701826,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200316_215756",
+          "model": "M11",
+          "label": "chi_eff",
+          "prediction": 0.0590930135904059,
+          "frame": "dimensionless"
+        },
+        {
+          "event": "GW191215_223052",
+          "model": "M10",
+          "label": "chirp_mass",
+          "prediction": 16.52964670274787,
+          "frame": "detector"
+        },
+        {
+          "event": "GW191215_223052",
+          "model": "M10",
+          "label": "total_mass",
+          "prediction": 40.19736976267677,
+          "frame": "detector"
+        },
+        {
+          "event": "GW191215_223052",
+          "model": "M10",
+          "label": "chi_eff",
+          "prediction": -0.4836559736739865,
+          "frame": "dimensionless"
+        },
+        {
+          "event": "GW191215_223052",
+          "model": "M11",
+          "label": "chirp_mass",
+          "prediction": 23.2185580614464,
+          "frame": "detector"
+        },
+        {
+          "event": "GW191215_223052",
+          "model": "M11",
+          "label": "total_mass",
+          "prediction": 54.64444919773632,
+          "frame": "detector"
+        },
+        {
+          "event": "GW191215_223052",
+          "model": "M11",
+          "label": "chi_eff",
+          "prediction": -0.3775848923343545,
+          "frame": "dimensionless"
+        },
+        {
+          "event": "GW200129_065458",
+          "model": "M10",
+          "label": "chirp_mass",
+          "prediction": 30.12989550211148,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200129_065458",
+          "model": "M10",
+          "label": "total_mass",
+          "prediction": 71.44560905323578,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200129_065458",
+          "model": "M10",
+          "label": "chi_eff",
+          "prediction": -0.0152429879790361,
+          "frame": "dimensionless"
+        },
+        {
+          "event": "GW200129_065458",
+          "model": "M11",
+          "label": "chirp_mass",
+          "prediction": 31.241331316635865,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200129_065458",
+          "model": "M11",
+          "label": "total_mass",
+          "prediction": 75.34302450586074,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200129_065458",
+          "model": "M11",
+          "label": "chi_eff",
+          "prediction": 0.0228998280533483,
+          "frame": "dimensionless"
+        },
+        {
+          "event": "GW200311_115853",
+          "model": "M10",
+          "label": "chirp_mass",
+          "prediction": 34.427156777798814,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200311_115853",
+          "model": "M10",
+          "label": "total_mass",
+          "prediction": 82.48512078395879,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200311_115853",
+          "model": "M10",
+          "label": "chi_eff",
+          "prediction": 0.0826054201441017,
+          "frame": "dimensionless"
+        },
+        {
+          "event": "GW200311_115853",
+          "model": "M11",
+          "label": "chirp_mass",
+          "prediction": 34.54238506125563,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200311_115853",
+          "model": "M11",
+          "label": "total_mass",
+          "prediction": 81.69765921450426,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200311_115853",
+          "model": "M11",
+          "label": "chi_eff",
+          "prediction": 0.0378924756573253,
+          "frame": "dimensionless"
+        },
+        {
+          "event": "GW200208_130117",
+          "model": "M10",
+          "label": "chirp_mass",
+          "prediction": 29.999661781967006,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200208_130117",
+          "model": "M10",
+          "label": "total_mass",
+          "prediction": 77.7708443955396,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200208_130117",
+          "model": "M10",
+          "label": "chi_eff",
+          "prediction": -0.3776774304867469,
+          "frame": "dimensionless"
+        },
+        {
+          "event": "GW200208_130117",
+          "model": "M11",
+          "label": "chirp_mass",
+          "prediction": 36.7920497334177,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200208_130117",
+          "model": "M11",
+          "label": "total_mass",
+          "prediction": 88.48720475057098,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200208_130117",
+          "model": "M11",
+          "label": "chi_eff",
+          "prediction": -0.2115350487502176,
+          "frame": "dimensionless"
+        },
+        {
+          "event": "GW200224_222234",
+          "model": "M10",
+          "label": "chirp_mass",
+          "prediction": 43.15559472414702,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200224_222234",
+          "model": "M10",
+          "label": "total_mass",
+          "prediction": 101.23308498790834,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200224_222234",
+          "model": "M10",
+          "label": "chi_eff",
+          "prediction": 0.1724949011016585,
+          "frame": "dimensionless"
+        },
+        {
+          "event": "GW200224_222234",
+          "model": "M11",
+          "label": "chirp_mass",
+          "prediction": 40.43125355028627,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200224_222234",
+          "model": "M11",
+          "label": "total_mass",
+          "prediction": 95.94239201599952,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200224_222234",
+          "model": "M11",
+          "label": "chi_eff",
+          "prediction": 0.0740253408206008,
+          "frame": "dimensionless"
+        },
+        {
+          "event": "GW200219_094415",
+          "model": "M10",
+          "label": "chirp_mass",
+          "prediction": 38.8298938123051,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200219_094415",
+          "model": "M10",
+          "label": "total_mass",
+          "prediction": 95.69892306332298,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200219_094415",
+          "model": "M10",
+          "label": "chi_eff",
+          "prediction": -0.5788429930506034,
+          "frame": "dimensionless"
+        },
+        {
+          "event": "GW200219_094415",
+          "model": "M11",
+          "label": "chirp_mass",
+          "prediction": 40.92060787644067,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200219_094415",
+          "model": "M11",
+          "label": "total_mass",
+          "prediction": 98.1765493306259,
+          "frame": "detector"
+        },
+        {
+          "event": "GW200219_094415",
+          "model": "M11",
+          "label": "chi_eff",
+          "prediction": -0.3977143778261194,
+          "frame": "dimensionless"
+        },
+        {
+          "event": "GW191230_180458",
+          "model": "M10",
+          "label": "chirp_mass",
+          "prediction": 49.379814342335294,
+          "frame": "detector"
+        },
+        {
+          "event": "GW191230_180458",
+          "model": "M10",
+          "label": "total_mass",
+          "prediction": 114.46237761467135,
+          "frame": "detector"
+        },
+        {
+          "event": "GW191230_180458",
+          "model": "M10",
+          "label": "chi_eff",
+          "prediction": -0.3900339082693271,
+          "frame": "dimensionless"
+        },
+        {
+          "event": "GW191230_180458",
+          "model": "M11",
+          "label": "chirp_mass",
+          "prediction": 51.72316491826905,
+          "frame": "detector"
+        },
+        {
+          "event": "GW191230_180458",
+          "model": "M11",
+          "label": "total_mass",
+          "prediction": 124.42722474663788,
+          "frame": "detector"
+        },
+        {
+          "event": "GW191230_180458",
+          "model": "M11",
+          "label": "chi_eff",
+          "prediction": -0.1130138012803918,
+          "frame": "dimensionless"
+        }
+      ],
+      "per_event_comparison": [
+        {
+          "event": "GW200202_154313",
+          "label": "chirp_mass",
+          "lvk_central": 8.164100000000001,
+          "lvk_lower": 7.851027979531866,
+          "lvk_upper": 8.50895453455044,
+          "prediction_M10": 10.618010808437704,
+          "absolute_discrepancy_M10": 2.4539108084377013,
+          "lower_M10": 4.68982064203783,
+          "upper_M10": 16.465408993610595,
+          "width_M10": 11.775588351572765,
+          "overlap_M10": 0.6579265550185749,
+          "overlap_fraction_lvk_M10": 1.0,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 15.163832276040011,
+          "absolute_discrepancy_M11": 6.99973227604001,
+          "lower_M11": -3.395286711229346,
+          "upper_M11": 34.151132485860785,
+          "width_M11": 37.54641919709013,
+          "overlap_M11": 0.6579265550185749,
+          "overlap_fraction_lvk_M11": 1.0,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW200202_154313",
+          "label": "total_mass",
+          "lvk_central": 19.1622,
+          "lvk_lower": 18.261373240850386,
+          "lvk_upper": 21.172803590964666,
+          "prediction_M10": 27.853655561980304,
+          "absolute_discrepancy_M10": 8.691455561980305,
+          "lower_M10": 14.761179449791598,
+          "upper_M10": 36.06701043817998,
+          "width_M10": 21.30583098838838,
+          "overlap_M10": 2.91143035011428,
+          "overlap_fraction_lvk_M10": 1.0,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 39.87147017829193,
+          "absolute_discrepancy_M11": 20.70927017829193,
+          "lower_M11": 25.34811501662807,
+          "upper_M11": 50.14976354956707,
+          "width_M11": 24.801648532939,
+          "overlap_M11": 0.0,
+          "overlap_fraction_lvk_M11": 0.0,
+          "intervals_overlap_M11": false
+        },
+        {
+          "event": "GW200202_154313",
+          "label": "chi_eff",
+          "lvk_central": 0.04,
+          "lvk_lower": -0.0199999999999999,
+          "lvk_upper": 0.17,
+          "prediction_M10": 0.4335473468821949,
+          "absolute_discrepancy_M10": 0.3935473468821949,
+          "lower_M10": 0.1641854779565799,
+          "upper_M10": 0.7029092158078099,
+          "width_M10": 0.53872373785123,
+          "overlap_M10": 0.0058145220434201,
+          "overlap_fraction_lvk_M10": 0.0306027475969479,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 0.1665356922419576,
+          "absolute_discrepancy_M11": 0.1265356922419576,
+          "lower_M11": -0.3030833843680618,
+          "upper_M11": 0.6361547688519771,
+          "width_M11": 0.9392381532200388,
+          "overlap_M11": 0.1899999999999999,
+          "overlap_fraction_lvk_M11": 1.0,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW200316_215756",
+          "label": "chirp_mass",
+          "lvk_central": 10.675,
+          "lvk_lower": 9.705339750221755,
+          "lvk_upper": 11.705602231707266,
+          "prediction_M10": 12.507019504041637,
+          "absolute_discrepancy_M10": 1.832019504041636,
+          "lower_M10": 0.5507215426843004,
+          "upper_M10": 23.21637880929052,
+          "width_M10": 22.665657266606217,
+          "overlap_M10": 2.0002624814855103,
+          "overlap_fraction_lvk_M10": 1.0,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 13.909145310023632,
+          "absolute_discrepancy_M11": 3.2341453100236315,
+          "lower_M11": -4.649973677245725,
+          "upper_M11": 32.896445519844406,
+          "width_M11": 37.54641919709013,
+          "overlap_M11": 2.0002624814855103,
+          "overlap_fraction_lvk_M11": 1.0,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW200316_215756",
+          "label": "total_mass",
+          "lvk_central": 25.864,
+          "lvk_lower": 22.89246571616614,
+          "lvk_upper": 34.810232279568865,
+          "prediction_M10": 32.079116253321445,
+          "absolute_discrepancy_M10": 6.215116253321444,
+          "lower_M10": 18.98664014113274,
+          "upper_M10": 40.29247112952112,
+          "width_M10": 21.30583098838838,
+          "overlap_M10": 11.917766563402726,
+          "overlap_fraction_lvk_M10": 1.0,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 35.09555433701826,
+          "absolute_discrepancy_M11": 9.231554337018256,
+          "lower_M11": 20.5721991753544,
+          "upper_M11": 45.3738477082934,
+          "width_M11": 24.801648532939,
+          "overlap_M11": 11.917766563402726,
+          "overlap_fraction_lvk_M11": 1.0,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW200316_215756",
+          "label": "chi_eff",
+          "lvk_central": 0.13,
+          "lvk_lower": 0.03,
+          "lvk_upper": 0.4,
+          "prediction_M10": 0.0710456680594906,
+          "absolute_discrepancy_M10": 0.0589543319405093,
+          "lower_M10": -0.2263880193012679,
+          "upper_M10": 0.3684793554202492,
+          "width_M10": 0.5948673747215172,
+          "overlap_M10": 0.3384793554202492,
+          "overlap_fraction_lvk_M10": 0.9148090687033762,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 0.0590930135904059,
+          "absolute_discrepancy_M11": 0.070906986409594,
+          "lower_M11": -0.2781558537503379,
+          "upper_M11": 0.3963418809311498,
+          "width_M11": 0.6744977346814878,
+          "overlap_M11": 0.3663418809311498,
+          "overlap_fraction_lvk_M11": 0.9901131917058104,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW191215_223052",
+          "label": "chirp_mass",
+          "lvk_central": 24.84,
+          "lvk_lower": 21.389956377087387,
+          "lvk_upper": 28.653471384447503,
+          "prediction_M10": 16.52964670274787,
+          "absolute_discrepancy_M10": 8.310353297252131,
+          "lower_M10": 12.685881889732627,
+          "upper_M10": 19.97356794709472,
+          "width_M10": 7.2876860573620945,
+          "overlap_M10": 0.0,
+          "overlap_fraction_lvk_M10": 0.0,
+          "intervals_overlap_M10": false,
+          "prediction_M11": 23.2185580614464,
+          "absolute_discrepancy_M11": 1.6214419385535983,
+          "lower_M11": 16.5398903477967,
+          "upper_M11": 29.95938830903971,
+          "width_M11": 13.41949796124301,
+          "overlap_M11": 7.263515007360116,
+          "overlap_fraction_lvk_M11": 1.0,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW191215_223052",
+          "label": "total_mass",
+          "lvk_central": 58.455,
+          "lvk_lower": 50.06179626125995,
+          "lvk_upper": 67.55882699747748,
+          "prediction_M10": 40.19736976267677,
+          "absolute_discrepancy_M10": 18.257630237323227,
+          "lower_M10": 27.104893650488066,
+          "upper_M10": 48.410724638876445,
+          "width_M10": 21.30583098838838,
+          "overlap_M10": 0.0,
+          "overlap_fraction_lvk_M10": 0.0,
+          "intervals_overlap_M10": false,
+          "prediction_M11": 54.64444919773632,
+          "absolute_discrepancy_M11": 3.810550802263677,
+          "lower_M11": 40.12109403607246,
+          "upper_M11": 64.92274256901146,
+          "width_M11": 24.801648532939,
+          "overlap_M11": 14.860946307751512,
+          "overlap_fraction_lvk_M11": 0.849341041448277,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW191215_223052",
+          "label": "chi_eff",
+          "lvk_central": -0.04,
+          "lvk_lower": -0.25,
+          "lvk_upper": 0.13,
+          "prediction_M10": -0.4836559736739865,
+          "absolute_discrepancy_M10": 0.4436559736739865,
+          "lower_M10": -0.7621836731155085,
+          "upper_M10": -0.2051282742324645,
+          "width_M10": 0.557055398883044,
+          "overlap_M10": 0.0448717257675355,
+          "overlap_fraction_lvk_M10": 0.1180834888619355,
+          "intervals_overlap_M10": true,
+          "prediction_M11": -0.3775848923343545,
+          "absolute_discrepancy_M11": 0.3375848923343545,
+          "lower_M11": -0.7148337596750984,
+          "upper_M11": -0.0403360249936106,
+          "width_M11": 0.6744977346814878,
+          "overlap_M11": 0.2096639750063893,
+          "overlap_fraction_lvk_M11": 0.551747302648393,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW200129_065458",
+          "label": "chirp_mass",
+          "lvk_central": 32.096,
+          "lvk_lower": 28.780730478528174,
+          "lvk_upper": 34.92267366351335,
+          "prediction_M10": 30.12989550211148,
+          "absolute_discrepancy_M10": 1.966104497888516,
+          "lower_M10": 24.20170533571161,
+          "upper_M10": 35.97729368728437,
+          "width_M10": 11.775588351572765,
+          "overlap_M10": 6.141943184985177,
+          "overlap_fraction_lvk_M10": 1.0,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 31.241331316635865,
+          "absolute_discrepancy_M11": 0.8546686833641317,
+          "lower_M11": 22.74578777838893,
+          "upper_M11": 39.82912691930818,
+          "width_M11": 17.08333914091925,
+          "overlap_M11": 6.141943184985177,
+          "overlap_fraction_lvk_M11": 1.0,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW200129_065458",
+          "label": "total_mass",
+          "lvk_central": 74.69399999999999,
+          "lvk_lower": 68.7165502929761,
+          "lvk_upper": 80.875692729342,
+          "prediction_M10": 71.44560905323578,
+          "absolute_discrepancy_M10": 3.248390946764204,
+          "lower_M10": 56.81477792335909,
+          "upper_M10": 81.87121643973808,
+          "width_M10": 25.05643851637899,
+          "overlap_M10": 12.159142436365912,
+          "overlap_fraction_lvk_M10": 1.0,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 75.34302450586074,
+          "absolute_discrepancy_M11": 0.6490245058607513,
+          "lower_M11": 60.65713976337838,
+          "upper_M11": 88.35407754236121,
+          "width_M11": 27.69693777898283,
+          "overlap_M11": 12.159142436365912,
+          "overlap_fraction_lvk_M11": 1.0,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW200129_065458",
+          "label": "chi_eff",
+          "lvk_central": 0.11,
+          "lvk_lower": -0.05,
+          "lvk_upper": 0.22,
+          "prediction_M10": -0.0152429879790361,
+          "absolute_discrepancy_M10": 0.1252429879790361,
+          "lower_M10": -0.3405210005078918,
+          "upper_M10": 0.3100350245498195,
+          "width_M10": 0.6505560250577114,
+          "overlap_M10": 0.27,
+          "overlap_fraction_lvk_M10": 1.0,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 0.0228998280533483,
+          "absolute_discrepancy_M11": 0.0871001719466516,
+          "lower_M11": -0.2814697571875291,
+          "upper_M11": 0.3272694132942257,
+          "width_M11": 0.6087391704817549,
+          "overlap_M11": 0.27,
+          "overlap_fraction_lvk_M11": 1.0,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW200311_115853",
+          "label": "chirp_mass",
+          "lvk_central": 32.718,
+          "lvk_lower": 29.632770024779354,
+          "lvk_upper": 35.9557776328834,
+          "prediction_M10": 34.427156777798814,
+          "absolute_discrepancy_M10": 1.7091567777988104,
+          "lower_M10": 25.662151654925765,
+          "upper_M10": 42.38278396044734,
+          "width_M10": 16.720632305521576,
+          "overlap_M10": 6.323007608104042,
+          "overlap_fraction_lvk_M10": 1.0,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 34.54238506125563,
+          "absolute_discrepancy_M11": 1.8243850612556256,
+          "lower_M11": 29.08207661825196,
+          "upper_M11": 39.316410500218296,
+          "width_M11": 10.234333881966336,
+          "overlap_M11": 6.323007608104042,
+          "overlap_fraction_lvk_M11": 1.0,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW200311_115853",
+          "label": "total_mass",
+          "lvk_central": 76.137,
+          "lvk_lower": 69.39441555484842,
+          "lvk_upper": 83.35339702344598,
+          "prediction_M10": 82.48512078395879,
+          "absolute_discrepancy_M10": 6.348120783958791,
+          "lower_M10": 68.15433387786243,
+          "upper_M10": 94.35346962422398,
+          "width_M10": 26.19913574636155,
+          "overlap_M10": 13.958981468597557,
+          "overlap_fraction_lvk_M10": 1.0,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 81.69765921450426,
+          "absolute_discrepancy_M11": 5.560659214504256,
+          "lower_M11": 67.0117744720219,
+          "upper_M11": 94.70871225100473,
+          "width_M11": 27.69693777898283,
+          "overlap_M11": 13.958981468597557,
+          "overlap_fraction_lvk_M11": 1.0,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW200311_115853",
+          "label": "chi_eff",
+          "lvk_central": -0.02,
+          "lvk_lower": -0.22,
+          "lvk_upper": 0.14,
+          "prediction_M10": 0.0826054201441017,
+          "absolute_discrepancy_M10": 0.1026054201441017,
+          "lower_M10": -0.2148282672166568,
+          "upper_M10": 0.3800391075048603,
+          "width_M10": 0.5948673747215172,
+          "overlap_M10": 0.3548282672166568,
+          "overlap_fraction_lvk_M10": 0.9856340756018246,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 0.0378924756573253,
+          "absolute_discrepancy_M11": 0.0578924756573253,
+          "lower_M11": -0.2372017614878006,
+          "upper_M11": 0.3129867128024513,
+          "width_M11": 0.5501884742902519,
+          "overlap_M11": 0.36,
+          "overlap_fraction_lvk_M11": 1.0,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW200208_130117",
+          "label": "chirp_mass",
+          "lvk_central": 38.78,
+          "lvk_lower": 32.959820964953046,
+          "lvk_upper": 45.42051391083551,
+          "prediction_M10": 29.999661781967006,
+          "absolute_discrepancy_M10": 8.780338218032995,
+          "lower_M10": 21.23465665909396,
+          "upper_M10": 37.955288964615534,
+          "width_M10": 16.720632305521576,
+          "overlap_M10": 4.995467999662488,
+          "overlap_fraction_lvk_M10": 0.4008980898059285,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 36.7920497334177,
+          "absolute_discrepancy_M11": 1.9879502665823023,
+          "lower_M11": 29.01950758703994,
+          "upper_M11": 44.02179964412559,
+          "width_M11": 15.002292057085654,
+          "overlap_M11": 11.061978679172547,
+          "overlap_fraction_lvk_M11": 0.8877498809428483,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW200208_130117",
+          "label": "total_mass",
+          "lvk_central": 91.42,
+          "lvk_lower": 78.22126657591721,
+          "lvk_upper": 106.40457957368172,
+          "prediction_M10": 77.7708443955396,
+          "absolute_discrepancy_M10": 13.649155604460404,
+          "lower_M10": 63.1400132656629,
+          "upper_M10": 88.19645178204189,
+          "width_M10": 25.05643851637899,
+          "overlap_M10": 9.975185206124678,
+          "overlap_fraction_lvk_M10": 0.3539394111301219,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 88.48720475057098,
+          "absolute_discrepancy_M11": 2.93279524942902,
+          "lower_M11": 73.80132000808862,
+          "upper_M11": 101.49825778707144,
+          "width_M11": 27.69693777898283,
+          "overlap_M11": 23.27699121115424,
+          "overlap_fraction_lvk_M11": 0.8259139446452078,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW200208_130117",
+          "label": "chi_eff",
+          "lvk_central": -0.07,
+          "lvk_lower": -0.34,
+          "lvk_upper": 0.1399999999999999,
+          "prediction_M10": -0.3776774304867469,
+          "absolute_discrepancy_M10": 0.3076774304867469,
+          "lower_M10": -0.7214501989172106,
+          "upper_M10": -0.0339046620562832,
+          "width_M10": 0.6875455368609273,
+          "overlap_M10": 0.3060953379437167,
+          "overlap_fraction_lvk_M10": 0.6376986207160766,
+          "intervals_overlap_M10": true,
+          "prediction_M11": -0.2115350487502176,
+          "absolute_discrepancy_M11": 0.1415350487502176,
+          "lower_M11": -0.4604116125196951,
+          "upper_M11": 0.0373415150192597,
+          "width_M11": 0.4977531275389548,
+          "overlap_M11": 0.3773415150192598,
+          "overlap_fraction_lvk_M11": 0.7861281562901247,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW200224_222234",
+          "label": "chirp_mass",
+          "lvk_central": 41.05200000000001,
+          "lvk_lower": 36.11182419341174,
+          "lvk_upper": 46.0684609038644,
+          "prediction_M10": 43.15559472414702,
+          "absolute_discrepancy_M10": 2.1035947241470154,
+          "lower_M10": 39.31182991113178,
+          "upper_M10": 46.59951596849388,
+          "width_M10": 7.2876860573620945,
+          "overlap_M10": 6.756630992732617,
+          "overlap_fraction_lvk_M10": 0.6786057570664785,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 40.43125355028627,
+          "absolute_discrepancy_M11": 0.6207464497137352,
+          "lower_M11": 33.75258583663657,
+          "upper_M11": 47.17208379787958,
+          "width_M11": 13.41949796124301,
+          "overlap_M11": 9.956636710452656,
+          "overlap_fraction_lvk_M11": 1.0,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW200224_222234",
+          "label": "total_mass",
+          "lvk_central": 95.436,
+          "lvk_lower": 84.84382246183534,
+          "lvk_upper": 106.56167624910957,
+          "prediction_M10": 101.23308498790834,
+          "absolute_discrepancy_M10": 5.797084987908335,
+          "lower_M10": 86.56807193147927,
+          "upper_M10": 116.32040763538384,
+          "width_M10": 29.752335703904578,
+          "overlap_M10": 19.9936043176303,
+          "overlap_fraction_lvk_M10": 0.9206068202441688,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 95.94239201599952,
+          "absolute_discrepancy_M11": 0.5063920159995234,
+          "lower_M11": 80.62048795105204,
+          "upper_M11": 114.05802230887709,
+          "width_M11": 33.43753435782503,
+          "overlap_M11": 21.717853787274223,
+          "overlap_fraction_lvk_M11": 1.0,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW200224_222234",
+          "label": "chi_eff",
+          "lvk_central": 0.1,
+          "lvk_lower": -0.06,
+          "lvk_upper": 0.25,
+          "prediction_M10": 0.1724949011016585,
+          "absolute_discrepancy_M10": 0.0724949011016585,
+          "lower_M10": -0.1249387862591,
+          "upper_M10": 0.4699285884624171,
+          "width_M10": 0.5948673747215172,
+          "overlap_M10": 0.31,
+          "overlap_fraction_lvk_M10": 1.0,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 0.0740253408206008,
+          "absolute_discrepancy_M11": 0.0259746591793991,
+          "lower_M11": -0.201068896324525,
+          "upper_M11": 0.3491195779657268,
+          "width_M11": 0.5501884742902519,
+          "overlap_M11": 0.31,
+          "overlap_fraction_lvk_M11": 1.0,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW200219_094415",
+          "label": "chirp_mass",
+          "lvk_central": 43.332,
+          "lvk_lower": 34.81951857564435,
+          "lvk_upper": 54.01696364055583,
+          "prediction_M10": 38.8298938123051,
+          "absolute_discrepancy_M10": 4.502106187694899,
+          "lower_M10": 30.064888689432053,
+          "upper_M10": 46.78552099495363,
+          "width_M10": 16.720632305521576,
+          "overlap_M10": 11.966002419309277,
+          "overlap_fraction_lvk_M10": 0.6233122365423711,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 40.92060787644067,
+          "absolute_discrepancy_M11": 2.411392123559331,
+          "lower_M11": 32.425064338193735,
+          "upper_M11": 49.508403479112985,
+          "width_M11": 17.08333914091925,
+          "overlap_M11": 14.688884903468631,
+          "overlap_fraction_lvk_M11": 0.7651479065991205,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW200219_094415",
+          "label": "total_mass",
+          "lvk_central": 102.04999999999998,
+          "lvk_lower": 82.80864152405032,
+          "lvk_upper": 126.45937369126868,
+          "prediction_M10": 95.69892306332298,
+          "absolute_discrepancy_M10": 6.351076936677004,
+          "lower_M10": 81.36813615722662,
+          "upper_M10": 107.56727190358816,
+          "width_M10": 26.19913574636155,
+          "overlap_M10": 24.75863037953785,
+          "overlap_fraction_lvk_M10": 0.5671985130671312,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 98.1765493306259,
+          "absolute_discrepancy_M11": 3.87345066937408,
+          "lower_M11": 82.85464526567841,
+          "upper_M11": 116.29217962350344,
+          "width_M11": 33.43753435782503,
+          "overlap_M11": 33.43753435782503,
+          "overlap_fraction_lvk_M11": 0.7660245933500416,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW200219_094415",
+          "label": "chi_eff",
+          "lvk_central": -0.08,
+          "lvk_lower": -0.37,
+          "lvk_upper": 0.15,
+          "prediction_M10": -0.5788429930506034,
+          "absolute_discrepancy_M10": 0.4988429930506033,
+          "lower_M10": -0.8573706924921254,
+          "upper_M10": -0.3003152936090814,
+          "width_M10": 0.557055398883044,
+          "overlap_M10": 0.0696847063909186,
+          "overlap_fraction_lvk_M10": 0.1340090507517665,
+          "intervals_overlap_M10": true,
+          "prediction_M11": -0.3977143778261194,
+          "absolute_discrepancy_M11": 0.3177143778261194,
+          "lower_M11": -0.7349632451668633,
+          "upper_M11": -0.0604655104853755,
+          "width_M11": 0.6744977346814878,
+          "overlap_M11": 0.3095344895146245,
+          "overlap_fraction_lvk_M11": 0.5952586336819702,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW191230_180458",
+          "label": "chirp_mass",
+          "lvk_central": 61.685,
+          "lvk_lower": 48.02160653424633,
+          "lvk_upper": 78.48095975227376,
+          "prediction_M10": 49.379814342335294,
+          "absolute_discrepancy_M10": 12.305185657664708,
+          "lower_M10": 37.42351638097796,
+          "upper_M10": 60.089173647584175,
+          "width_M10": 22.665657266606217,
+          "overlap_M10": 12.067567113337844,
+          "overlap_fraction_lvk_M10": 0.3961859277496289,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 51.72316491826905,
+          "absolute_discrepancy_M11": 9.961835081730952,
+          "lower_M11": 40.94977408619809,
+          "upper_M11": 61.88078015873543,
+          "width_M11": 20.931006072537343,
+          "overlap_M11": 13.859173624489102,
+          "overlap_fraction_lvk_M11": 0.4550055126018408,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW191230_180458",
+          "label": "total_mass",
+          "lvk_central": 145.34,
+          "lvk_lower": 114.5106827840771,
+          "lvk_upper": 184.4682723871116,
+          "prediction_M10": 114.46237761467135,
+          "absolute_discrepancy_M10": 30.877622385328635,
+          "lower_M10": 96.84833668405798,
+          "upper_M10": 131.4428199135125,
+          "width_M10": 34.59448322945451,
+          "overlap_M10": 16.93213712943539,
+          "overlap_fraction_lvk_M10": 0.2420343128674767,
+          "intervals_overlap_M10": true,
+          "prediction_M11": 124.42722474663788,
+          "absolute_discrepancy_M11": 20.912775253362128,
+          "lower_M11": 106.45859700865547,
+          "upper_M11": 143.48439701273128,
+          "width_M11": 37.02580000407579,
+          "overlap_M11": 28.97371422865417,
+          "overlap_fraction_lvk_M11": 0.4141611280929183,
+          "intervals_overlap_M11": true
+        },
+        {
+          "event": "GW191230_180458",
+          "label": "chi_eff",
+          "lvk_central": -0.05,
+          "lvk_lower": -0.36,
+          "lvk_upper": 0.21,
+          "prediction_M10": -0.3900339082693271,
+          "absolute_discrepancy_M10": 0.3400339082693271,
+          "lower_M10": -0.7338066766997908,
+          "upper_M10": -0.0462611398388634,
+          "width_M10": 0.6875455368609273,
+          "overlap_M10": 0.3137388601611365,
+          "overlap_fraction_lvk_M10": 0.5504190529142746,
+          "intervals_overlap_M10": true,
+          "prediction_M11": -0.1130138012803918,
+          "absolute_discrepancy_M11": 0.0630138012803918,
+          "lower_M11": -0.3618903650498692,
+          "upper_M11": 0.1358627624890855,
+          "width_M11": 0.4977531275389548,
+          "overlap_M11": 0.4958627624890855,
+          "overlap_fraction_lvk_M11": 0.8699346710334835,
+          "intervals_overlap_M11": true
+        }
+      ],
+      "aggregate_summary": [
+        {
+          "label": "chirp_mass",
+          "n_valid_events": 9,
+          "fraction_M11_closer": 0.6666666666666666,
+          "fraction_equal": 0.0,
+          "fraction_M11_further": 0.3333333333333333,
+          "median_absolute_discrepancy_M10": 2.4539108084377013,
+          "median_mondrian_width_M10": 16.720632305521576,
+          "fraction_intervals_overlapped_M10": 0.8888888888888888,
+          "median_overlap_fraction_lvk_M10": 0.6786057570664785,
+          "median_absolute_discrepancy_M11": 1.9879502665823023,
+          "median_mondrian_width_M11": 17.08333914091925,
+          "fraction_intervals_overlapped_M11": 1.0,
+          "median_overlap_fraction_lvk_M11": 1.0
+        },
+        {
+          "label": "total_mass",
+          "n_valid_events": 9,
+          "fraction_M11_closer": 0.7777777777777778,
+          "fraction_equal": 0.0,
+          "fraction_M11_further": 0.2222222222222222,
+          "median_absolute_discrepancy_M10": 6.351076936677004,
+          "median_mondrian_width_M10": 25.05643851637899,
+          "fraction_intervals_overlapped_M10": 0.8888888888888888,
+          "median_overlap_fraction_lvk_M10": 0.9206068202441688,
+          "median_absolute_discrepancy_M11": 3.87345066937408,
+          "median_mondrian_width_M11": 27.69693777898283,
+          "fraction_intervals_overlapped_M11": 0.8888888888888888,
+          "median_overlap_fraction_lvk_M11": 0.849341041448277
+        },
+        {
+          "label": "chi_eff",
+          "n_valid_events": 9,
+          "fraction_M11_closer": 0.8888888888888888,
+          "fraction_equal": 0.0,
+          "fraction_M11_further": 0.1111111111111111,
+          "median_absolute_discrepancy_M10": 0.3076774304867469,
+          "median_mondrian_width_M10": 0.5948673747215172,
+          "fraction_intervals_overlapped_M10": 1.0,
+          "median_overlap_fraction_lvk_M10": 0.6376986207160766,
+          "median_absolute_discrepancy_M11": 0.0871001719466516,
+          "median_mondrian_width_M11": 0.6087391704817549,
+          "fraction_intervals_overlapped_M11": 1.0,
+          "median_overlap_fraction_lvk_M11": 0.9901131917058104
+        }
+      ]
+    },
+    "separate_anchor_files": {
+      "m10_vs_m11_summary.csv": {
+        "path": "/data/vserrano/cbc_pe_data/results/M11_final_G1_500k/real_events/GW170814/m10_vs_m11_summary.csv",
+        "status": "present",
+        "size": 105990,
+        "mtime_ns": 1791217900637041622,
+        "sha256": "81982b8eaee1cf2649260305ee789ada35a2e9e67a7c949cf14bfbd83f608c81"
+      },
+      "conformal_status.csv": {
+        "path": "/data/vserrano/cbc_pe_data/results/M11_final_G1_500k/real_events/GW170814/conformal_status.csv",
+        "status": "present",
+        "size": 396,
+        "mtime_ns": 1791217900644041854,
+        "sha256": "0dd66aa7f2ccbafae12bd3c4137d70345c593aae775b0c24d33bc91e88cd7824"
+      },
+      "provenance.json": {
+        "path": "/data/vserrano/cbc_pe_data/results/M11_final_G1_500k/real_events/GW170814/provenance.json",
+        "status": "present",
+        "size": 15266,
+        "mtime_ns": 1791217904587172553,
+        "sha256": "b1aea2d74fb841a1ec6747917e46140a6a79c146c64b80f7e1eda35ce6d0be11"
+      }
+    }
+  },
+  "unresolved": [
+    "Uncertainty and numerical acceptance tolerances are provisional; no pass/fail decision",
+    "Source-ID mapping beyond frozen dataset row IDs not established; review before grouped uncertainty",
+    "Historical checkpoint content identity is not independently verified by deserialization or content hash"
+  ],
+  "versions": {
+    "python": "3.10.0 (default, Mar  3 2022, 09:58:08) [GCC 7.5.0]",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "h5py": "3.16.0"
+  }
+}

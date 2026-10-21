@@ -172,6 +172,40 @@ def main():
         {"enabled": False},
     )
 
+    weighting_cfg = training_cfg.get("sample_weighting")
+    sampling_cfg = training_cfg.get("balanced_sampling")
+    sampling_enabled = sampling_cfg is not None and sampling_cfg.get("enabled", False)
+    if sampling_enabled:
+        if weighting_cfg is not None:
+            raise ValueError("M12.3 sampling cannot be combined with sample weighting")
+        if sampling_cfg != dict(enabled=True, mode="marginal_mixture", threshold=0.8,
+                                p_peripheral=0.35, seed=123):
+            raise ValueError("M12.3-S1 requires the frozen marginal-mixture policy")
+        tag = outputs_cfg.get("checkpoint_tag", "")
+        if not tag.startswith("M12_3_S1_") or any(c in tag for c in "/\\"):
+            raise ValueError("Sampling requires a distinct M12_3_S1_ checkpoint tag")
+        # Lock the single-factor experiment while retaining existing root overrides.
+        with open(project_root / "configs/experiments/train_m11_final_G1_500k.json") as f:
+            frozen_cfg = json.load(f)
+        candidate = json.loads(json.dumps(cfg))
+        del candidate["training"]["balanced_sampling"]
+        candidate["outputs"]["checkpoint_tag"] = frozen_cfg["outputs"]["checkpoint_tag"]
+        for root_key in ("data_root", "project_root"):
+            candidate.pop(root_key, None)
+            frozen_cfg.pop(root_key, None)
+        if candidate != frozen_cfg:
+            raise ValueError("M12.3-S1 must preserve all other frozen M11 configuration choices")
+    if weighting_cfg is not None:
+        if (training_cfg.get("loss", "MSELoss") != "MSELoss"
+                or weighting_cfg.get("method") not in {"train_label_mahalanobis", "train_label_marginal"}
+                or weighting_cfg.get("normalization") != "train_mean_one"):
+            raise ValueError("Sample weighting requires MSELoss and train_mean_one global or marginal weights")
+        if training_cfg.get("data_loading_mode") not in {"hdf5_batch", "hdf5_batch_slices"}:
+            raise ValueError("Optional sample weighting currently supports HDF5 batch loading only")
+        tag_prefix = "M12_2" if weighting_cfg["method"] == "train_label_marginal" else "M12_1"
+        if not outputs_cfg.get("checkpoint_tag", "").startswith(tag_prefix):
+            raise ValueError(f"Sample weighting requires a separate {tag_prefix} checkpoint tag")
+
     dataset_id = get_required(dataset_cfg, "dataset_id")
 
     models_dir = data_root / "models"
@@ -182,6 +216,14 @@ def main():
     results_dir = (results_root / dataset_id)
 
     checkpoints_dir = (checkpoints_root / dataset_id)
+
+    if weighting_cfg is not None or sampling_enabled:
+        weighted_name = make_checkpoint_name(
+            dataset_id, model_cfg, training_cfg, outputs_cfg["checkpoint_tag"])
+        for destination in (checkpoints_dir / weighted_name,
+                            results_dir / weighted_name.replace("_checkpoint.pt", "_history.npz")):
+            if destination.exists():
+                raise FileExistsError(f"Refusing to overwrite an existing experiment: {destination}")
 
     for path in [
         models_dir,
@@ -362,6 +404,40 @@ def main():
     print("Data loading")
     print("=" * 80)
 
+    sample_weights_by_row, weighting_metadata = None, None
+    balanced_sampler = None
+    if sampling_enabled:
+        from src.models.balanced_sampling import load_train_marginal_sampler
+        if (dataset_id != "M11_final_G1_500k"
+                or label_names != ["chirp_mass", "total_mass", "chi_eff"]
+                or {name: len(ids) for name, ids in split_dict.items()}
+                != dict(train=400000, val=40000, cal=30000, test=30000)):
+            raise ValueError("M12.3 requires frozen G1 labels and split sizes")
+        if not np.array_equal(np.sort(stats["train_idx"]), np.sort(train_idx)):
+            raise ValueError("Label scaler and sampling train memberships differ")
+        # Membership metadata only; no cal/test targets or signals are evaluated.
+        with h5py.File(dataset_path, "r") as h:
+            membership = h["split"].asstr()[:]
+            for name, ids in split_dict.items():
+                if not np.array_equal(np.sort(ids), np.flatnonzero(membership == name)):
+                    raise ValueError(f"Frozen HDF5 {name} membership mismatch")
+        balanced_sampler = load_train_marginal_sampler(
+            dataset_path, train_idx, seed=sampling_cfg["seed"],
+            threshold=sampling_cfg["threshold"], p_peripheral=sampling_cfg["p_peripheral"])
+        print("Balanced sampling provenance:", json.dumps(balanced_sampler.metadata, sort_keys=True))
+    if weighting_cfg is not None:
+        from src.models.sample_weighting import load_train_sample_weights
+        if (dataset_id != "M11_final_G1_500k"
+                or label_names != ["chirp_mass", "total_mass", "chi_eff"]
+                or {name: len(ids) for name, ids in split_dict.items()}
+                != dict(train=400000, val=40000, cal=30000, test=30000)):
+            raise ValueError("M12 weighting requires the frozen final G1 labels and split sizes")
+        if not np.array_equal(np.sort(stats["train_idx"]), np.sort(train_idx)):
+            raise ValueError("Label scaler and weighting train memberships differ")
+        sample_weights_by_row, _, weighting_metadata = load_train_sample_weights(
+            dataset_path, train_idx, alpha=float(weighting_cfg["alpha"]),
+            method=weighting_cfg["method"])
+
     train_dataset = HDF5RegressionDataset(
         h5_path=dataset_path,
         indices=train_idx,
@@ -440,6 +516,8 @@ def main():
             shuffle_batches=shuffle_batches,
             shuffle_within_batch=shuffle_within_batch,
             max_slice_overread=max_slice_overread,
+            sample_weights_by_row=sample_weights_by_row,
+            balanced_sampling=balanced_sampler,
         )
 
         train_loader_kwargs = dict(
@@ -705,6 +783,11 @@ def main():
         "split_seed": int(splits["seed"]) if "seed" in splits.files else None, 
     }
 
+    if weighting_metadata is not None:
+        full_model_config["sample_weighting"] = weighting_metadata
+    if balanced_sampler is not None:
+        full_model_config["balanced_sampling"] = balanced_sampler.metadata
+
     print()
     print("=" * 80)
     print("Training")
@@ -738,6 +821,7 @@ def main():
         min_epochs_before_early_stopping=int(training_cfg.get("min_epochs_before_early_stopping", 0)),
         learning_rate=float(training_cfg.get("learning_rate", 3e-4)),
         weight_decay=float(training_cfg.get("weight_decay", 3e-4)),
+        sample_weighted=weighting_cfg is not None,
     )
 
     model.load_state_dict(best_checkpoint["model_state_dict"])
@@ -760,7 +844,11 @@ def main():
 
     checkpoint_path = checkpoints_dir / checkpoint_file_name
 
-    torch.save(best_checkpoint, checkpoint_path)
+    if sampling_enabled:
+        with open(checkpoint_path, "xb") as output:
+            torch.save(best_checkpoint, output)
+    else:
+        torch.save(best_checkpoint, checkpoint_path)
 
     print("Saved checkpoint:", checkpoint_path)
 
@@ -769,7 +857,11 @@ def main():
     history_path = results_dir / history_file_name
 
     if isinstance(history, dict):
-        np.savez_compressed(history_path, **history)
+        if sampling_enabled:
+            with open(history_path, "xb") as output:
+                np.savez_compressed(output, **history)
+        else:
+            np.savez_compressed(history_path, **history)
         print("Saved history:", history_path)
     else:
         # Fallback if your train_model returns a list or another object.

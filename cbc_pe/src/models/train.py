@@ -4,21 +4,32 @@ import torch
 import torch.nn as nn
 import time
 import copy
+import json
 
-def train_one_epoch(model, loader, loss_fn, optimizer, device):
+def train_one_epoch(model, loader, loss_fn, optimizer, device, sample_weighted=False):
     model.train() # Red a modo entrenamiento
+    if sample_weighted:
+        from src.models.sample_weighting import sample_weighted_mse
 
     total_loss = 0.0
     n_samples = 0
 
-    for X_batch, y_batch in loader:
+    for batch in loader:
+        if sample_weighted:
+            X_batch, y_batch, weights = batch
+            weights = weights.to(device, non_blocking=True)
+        else:
+            X_batch, y_batch = batch
         X_batch = X_batch.to(device, non_blocking=True) # Mueve los datos a la GPU/CPU
         y_batch = y_batch.to(device, non_blocking=True)  
 
         optimizer.zero_grad() # Borra los gradientes y los hace cero
 
         pred = model(X_batch) # Aplica el modelo y obtiene las predicciones
-        loss = loss_fn(pred, y_batch) # Calcula el error de la predicción con la verdad
+        if sample_weighted:
+            loss = sample_weighted_mse(pred, y_batch, weights)
+        else:
+            loss = loss_fn(pred, y_batch) # Calcula el error de la predicción con la verdad
 
         loss.backward() # Calcula los gradientes de la función de error
         optimizer.step() # Actualiza los pesos del modelo
@@ -72,6 +83,7 @@ def train_model(
     min_epochs_before_early_stopping: int = 0,
     learning_rate: float = 3e-4,
     weight_decay: float = 1e-4,
+    sample_weighted: bool = False,
 ):
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -104,6 +116,13 @@ def train_model(
         if hasattr(train_loader, "dataset") and hasattr(train_loader.dataset, "set_epoch"):
             train_loader.dataset.set_epoch(epoch)
 
+        sampling_provenance = getattr(
+            getattr(train_loader, "dataset", None), "sampling_epoch_provenance", None)
+        if sampling_provenance is not None:
+            #print("Sampling epoch:", json.dumps(sampling_provenance, sort_keys=True), flush=True)
+            for key, value in sampling_provenance.items():
+                history.setdefault("sampling_" + key, []).append(value)
+
         epoch_t0 = time.time()
 
         # print(f"Epoch {(epoch+1):03d} | starting train", flush=True)
@@ -115,6 +134,7 @@ def train_model(
             loss_fn=loss_fn,
             optimizer=optimizer,
             device=device,
+            sample_weighted=sample_weighted,
         )
 
         train_time = time.time() - train_t0
@@ -176,6 +196,8 @@ def train_model(
                     "weight_decay": weight_decay,
                 },
             }
+            if sampling_provenance is not None:
+                best_checkpoint["sampling_epoch_provenance"] = copy.deepcopy(sampling_provenance)
 
         else:
             epochs_without_improvement += 1
@@ -201,4 +223,3 @@ def train_model(
     best_checkpoint["history"] = history
 
     return best_checkpoint, history
-

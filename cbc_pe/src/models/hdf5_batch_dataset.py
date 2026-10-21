@@ -71,6 +71,7 @@ class HDF5BatchIterableDataset(IterableDataset):
     The dataset yields:
       X_batch: torch.float32, shape (B, C, T)
       y_batch: torch.float32, shape (B, D)
+      Optional weights: torch.float32, shape (B,) or (B, 3), when a row lookup is supplied.
     """
 
     def __init__(
@@ -88,6 +89,8 @@ class HDF5BatchIterableDataset(IterableDataset):
         max_slice_overread: float = 4.0,
         x_key: str = "X",
         y_key: str = "y",
+        sample_weights_by_row: np.ndarray | None = None,
+        balanced_sampling=None,
     ):
         super().__init__()
 
@@ -141,8 +144,32 @@ class HDF5BatchIterableDataset(IterableDataset):
         if np.any(self.indices < 0) or np.any(self.indices >= self.x_shape[0]):
             raise ValueError("Some indices are outside the valid dataset range.")
 
+        self.sample_weights_by_row = None
+        if sample_weights_by_row is not None:
+            weights = np.asarray(sample_weights_by_row, dtype=np.float32)
+            if (weights.shape != (self.x_shape[0],)
+                    and not (self.y_shape[1:] == (3,) and weights.shape == (self.x_shape[0], 3))):
+                raise ValueError("Weights require shape (N_dataset,) or (N_dataset, 3), indexed by row ID")
+            selected = weights[self.indices]
+            if not np.isfinite(selected).all() or (selected <= 0).any():
+                raise ValueError("Split weights must be finite and positive")
+            self.sample_weights_by_row = weights
+
         # Physical HDF5 indices sorted increasingly.
         self.sorted_indices = np.sort(self.indices).astype(np.int64)
+
+        self.balanced_sampling = balanced_sampling
+        self.sampling_epoch_provenance = None
+        self._schedule_epoch = None
+        if balanced_sampling is not None:
+            if sample_weights_by_row is not None:
+                raise ValueError("Balanced sampling cannot be combined with sample weighting")
+            if not np.array_equal(self.sorted_indices, balanced_sampling.train_ids):
+                raise ValueError("Sampler IDs must exactly match the dataset train membership")
+            # Updated only by the parent between exhausted epoch iterators. Shared
+            # storage also reaches persistent workers without stale Python state.
+            self._sampling_schedule = torch.empty(
+                len(self.sorted_indices), dtype=torch.int64).share_memory_()
 
         n = len(self.sorted_indices)
         if self.drop_last:
@@ -151,17 +178,32 @@ class HDF5BatchIterableDataset(IterableDataset):
             self.n_batches = int(np.ceil(n / self.batch_size))
 
         self.epoch = 0
+        if self.balanced_sampling is not None:
+            self.set_epoch(0)
 
     def __len__(self) -> int:
         return self.n_batches
 
     def set_epoch(self, epoch: int):
         self.epoch = int(epoch)
+        if self.balanced_sampling is not None and self._schedule_epoch != epoch:
+            from src.models.sample_weighting import array_hash
+            schedule = self.balanced_sampling.schedule(epoch)
+            self._sampling_schedule.numpy()[:] = schedule
+            consumed = (self.n_batches * self.batch_size if self.drop_last else len(schedule))
+            self.sampling_epoch_provenance = {
+                "epoch_zero_based": int(epoch), "nominal_draws": len(schedule),
+                "consumed_draws": consumed, "dropped_draws": len(schedule) - consumed,
+                "optimizer_steps": self.n_batches,
+                "schedule_sha256": array_hash(schedule),
+                "consumed_schedule_sha256": array_hash(schedule[:consumed]),
+            }
+            self._schedule_epoch = int(epoch)
 
     def _batch_ids_for_worker(self) -> np.ndarray:
         batch_ids = np.arange(self.n_batches, dtype=np.int64)
 
-        if self.shuffle_batches:
+        if self.shuffle_batches and self.balanced_sampling is None:
             rng = np.random.default_rng(self.seed + self.epoch)
             batch_ids = rng.permutation(batch_ids)
 
@@ -177,6 +219,8 @@ class HDF5BatchIterableDataset(IterableDataset):
         return batch_ids[worker_id::num_workers]
 
     def _read_batch(self, h5: h5py.File, batch_id: int):
+        if self.balanced_sampling is not None:
+            return self._read_sampled_batch(h5, batch_id)
         start_pos = int(batch_id) * self.batch_size
         stop_pos = start_pos + self.batch_size
 
@@ -231,9 +275,50 @@ class HDF5BatchIterableDataset(IterableDataset):
         if self.y_mean is not None and self.y_std is not None:
             y = (y - self.y_mean) / (self.y_std + 1e-8)
 
+        if self.sample_weights_by_row is not None:
+            # batch_indices already matches X/y after restoring shuffled order.
+            weights = self.sample_weights_by_row[batch_indices]
+            return torch.from_numpy(X), torch.from_numpy(y), torch.from_numpy(weights)
         return torch.from_numpy(X), torch.from_numpy(y)
 
-    def __iter__(self) -> Iterator[tuple[torch.Tensor, torch.Tensor]]:
+    def _read_sampled_batch(self, h5: h5py.File, batch_id: int):
+        start = int(batch_id) * self.batch_size
+        rows = self._sampling_schedule.numpy()[start:start + self.batch_size]
+        if len(rows) == 0 or (self.drop_last and len(rows) < self.batch_size):
+            return None
+        unique, inverse = np.unique(rows, return_inverse=True)
+        # Same greedy bounded spans as benchmark_sampled_hdf5_reads.py (B).
+        # Retain one dataset handle across slices; never materialize whole chunks
+        # just to fetch scattered rows. Non-G1 fixtures remain bounded as well.
+        x_dataset = h5[self.x_key]
+        chunk_rows = min(64, x_dataset.chunks[0]) if x_dataset.chunks else 64
+        overread_limit = min(4.0, self.max_slice_overread)
+        X_unique = np.empty((len(unique), *x_dataset.shape[1:]), dtype=x_dataset.dtype)
+        start = 0
+        while start < len(unique):
+            end = start + 1
+            while end < len(unique):
+                if unique[end] // chunk_rows != unique[start] // chunk_rows:
+                    break
+                if unique[end] - unique[start] + 1 > overread_limit * (end - start + 1):
+                    break
+                end += 1
+            lo, hi = int(unique[start]), int(unique[end - 1]) + 1
+            block = x_dataset[lo:hi]
+            X_unique[start:end] = block[unique[start:end] - lo]
+            del block
+            start = end
+        # Inverse restores the exact sampled order and multiplicity.
+        # Labels are small: read only selected train IDs even in the slice path.
+        y_unique = h5[self.y_key][unique]
+        X = np.asarray(X_unique[inverse], dtype=np.float32)
+        y = np.asarray(y_unique[inverse], dtype=np.float32)
+        X = apply_input_normalization_to_batch(X, self.input_normalization)
+        if self.y_mean is not None and self.y_std is not None:
+            y = (y - self.y_mean) / (self.y_std + 1e-8)
+        return torch.from_numpy(X), torch.from_numpy(y)
+
+    def __iter__(self) -> Iterator[tuple[torch.Tensor, ...]]:
         # Important: each worker opens its own HDF5 file handle.
         with h5py.File(self.h5_path, "r") as h5:
             for batch_id in self._batch_ids_for_worker():
