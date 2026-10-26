@@ -77,3 +77,10 @@ For notebooks: keep cell order reproducible, avoid hidden state, reuse existing 
 - Comment non-obvious scientific decisions and data contracts, not self-evident code.
 - Final response should state: **files created/modified; what changed; any scientific assumptions or unresolved blockers; and minimal user-run verification commands if necessary**.
 - Do not include lengthy transcripts, additional recommendations unrelated to the assigned deliverable, or claims of scientific validation without results.
+
+## 9. Claude Code in this repository
+- Las decisiones científicas se toman fuera (chat del Proyecto). Implementa solo lo que pide el prompt; si algo afecta a la corrección científica, para y pregunta.
+- Economía de tokens: lee solo los ficheros indicados; nada de búsquedas amplias ni de abrir notebooks completos (extrae celdas concretas).
+- No ejecutes tests, entrenamiento, inferencia, notebooks ni comandos sobre datos reales; propón el comando mínimo para que lo ejecute el usuario.
+- La VM (Fedora 16, PyTorch 1.9.1, P100) solo ejecuta scripts: mantén compatibilidad y no añadas dependencias.
+- Respuesta final: ficheros cambiados, resumen del diff, supuestos y comando de verificación. Sin commits.
