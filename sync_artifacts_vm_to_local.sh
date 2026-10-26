@@ -13,11 +13,11 @@ RSYNC_ARGS=(
   --human-readable
   --itemize-changes
   --info=progress2
-  --partial
+  --partial-dir=.rsync-partial  # parciales aparte, nunca con el nombre final
+  --update                      # actualiza lo que cambió en la VM; no pisa lo más reciente en local
   --prune-empty-dirs
   --exclude="processed/"
   --exclude="raw/"
-  --ignore-existing
 )
 
 if [[ "${1:-}" == "--dry-run" ]]; then

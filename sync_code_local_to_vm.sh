@@ -13,6 +13,8 @@ fi
 
 rsync -av --progress "${EXTRA_ARGS[@]}" \
   --exclude "data/" \
+  --exclude "notebooks/" \
+  --exclude ".claude/" \
   --exclude ".ipynb_checkpoints/" \
   --exclude "**/__pycache__/" \
   --exclude "**/*.pyc" \
@@ -25,5 +27,7 @@ rsync -av --progress "${EXTRA_ARGS[@]}" \
   --exclude "*.hdf5" \
   --exclude "*.pt" \
   --exclude "*.pth" \
+  --exclude "*.png" \
+  --exclude "*.pdf" \
   "${LOCAL_REPO}" \
   "${REMOTE_HOST}:${REMOTE_REPO}"
