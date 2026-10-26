@@ -476,9 +476,22 @@ class SignalProcessor:
         if self.whitening_max_filter_duration <= 0:
             raise ValueError("whitening_max_filter_duration must be positive.")
 
-        if self.whitening_max_filter_duration >= self.config.duration:
+        # The previous check compared against the final output window
+        # (config.duration), not against the segment that is actually filtered.
+        # With crop_to_config the filtered segment is processing_duration. This
+        # is a pure relaxation: it changes no numerical result.
+        if self.output_mode == "crop_to_config":
+            limit_name = "config.processing_duration"
+            whitening_limit = self.config.processing_duration
+        else:
+            limit_name = "config.duration"
+            whitening_limit = self.config.duration
+
+        if self.whitening_max_filter_duration >= whitening_limit:
             raise ValueError(
-                "whitening_max_filter_duration must be smaller than segment duration."
+                "whitening_max_filter_duration must be smaller than "
+                f"{limit_name}={whitening_limit}; "
+                f"got {self.whitening_max_filter_duration}."
             )
 
         if self.fir_order <= 0:
