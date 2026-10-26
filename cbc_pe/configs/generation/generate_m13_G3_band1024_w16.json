@@ -1,0 +1,16 @@
+{
+  "experiment_id": "M13_G3_band1024_w16_500k",
+  "dataset_id": "M13_G3_band1024_w16_500k",
+  "base_g1_h5": "M11_final_G1_500k/m11_final_G1_500k.h5",
+  "overrides": {
+    "signal_processor.lowpass_frequency": 1024.0,
+    "signal_processor.whitening_max_filter_duration": 16.0,
+    "simulation.processing_context_start_samples": 33408,
+    "simulation.processing_context_end_samples": 33408,
+    "simulation.snr_high_frequency_cutoff": 1024.0
+  },
+  "storage": {
+    "X_chunks": [1, 3, 16384],
+    "X_compression": "lzf"
+  }
+}

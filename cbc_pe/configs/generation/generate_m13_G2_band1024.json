@@ -1,0 +1,8 @@
+{
+  "experiment_id": "M13_G2_band1024_500k",
+  "dataset_id": "M13_G2_band1024_500k",
+  "base_g1_h5": "M11_final_G1_500k/m11_final_G1_500k.h5",
+  "overrides": {
+    "signal_processor.lowpass_frequency": 1024.0
+  }
+}
