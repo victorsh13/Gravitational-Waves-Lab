@@ -34,6 +34,18 @@ SHARD_ATTRS = {"shard_index", "selected_rows", "shard_block_count", "raw_psd_fil
                "initialization_complete"}
 
 
+def read_col(ds):
+    return ds.asstr()[:] if h5py.check_string_dtype(ds.dtype) else ds[:]
+
+
+def same_col(a, b):
+    # No conversion between text and numeric columns: a kind mismatch aborts.
+    a_str = h5py.check_string_dtype(a.dtype) is not None
+    b_str = h5py.check_string_dtype(b.dtype) is not None
+    require(a_str == b_str, f"{a.name}: text/non-text mismatch ({a.dtype} vs {b.dtype})")
+    return np.array_equal(read_col(a), read_col(b))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
@@ -135,8 +147,7 @@ def main():
             # Paired-row check against G1 trainio.
             with h5py.File(g1_trainio, "r") as ref:
                 require(np.array_equal(out["y"][:], ref["y"][:]), "y differs from G1 trainio")
-                require(np.array_equal(out["file_group_id"].asstr()[:],
-                                       ref["file_group_id"].asstr()[:]),
+                require(same_col(out["file_group_id"], ref["file_group_id"]),
                         "file_group_id differs from G1 trainio")
             out.attrs["verified_against_g1_trainio"] = str(g1_trainio.resolve())
             out.attrs["merge_complete"] = True
