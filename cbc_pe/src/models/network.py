@@ -1,4 +1,5 @@
 from __future__ import annotations
+import math
 import torch
 import torch.nn as nn
 
@@ -1159,3 +1160,365 @@ class WideCNN_Pool(nn.Module):
 
         return y_pred
 
+
+
+class TokenTransformer(nn.Module):
+    """
+    Small transformer encoder over a token sequence, read out through a CLS token.
+
+    Input (B, C, T) -> output (B, C) with C = d_model.
+
+    - Absolute sinusoidal positional encoding added to the T sequence tokens; the
+      learned CLS token is prepended after that (it carries no positional code).
+    - PyTorch 1.9 compatible: post-norm nn.TransformerEncoderLayer (no norm_first)
+      and the (T, B, C) layout (no batch_first).
+    - The attention-weight dropout of each layer is set to 0.0, so all remaining
+      dropout lives in nn.Dropout modules (switched off by the M13 trainer).
+    """
+
+    def __init__(
+        self,
+        d_model: int,
+        n_layers: int = 2,
+        n_heads: int = 4,
+        ff=None,
+        dropout: float = 0.05,
+        max_len: int = 4096,
+    ):
+        super().__init__()
+
+        if d_model <= 0 or d_model % 2 != 0:
+            raise ValueError(f"d_model must be positive and even, got {d_model}")
+
+        if d_model % n_heads != 0:
+            raise ValueError(
+                f"d_model={d_model} must be divisible by n_heads={n_heads}."
+            )
+
+        if n_layers <= 0:
+            raise ValueError(f"n_layers must be positive, got {n_layers}")
+
+        ff = 2 * d_model if ff is None else int(ff)
+
+        self.d_model = d_model
+        self.max_len = max_len
+
+        position = torch.arange(max_len, dtype=torch.float32).unsqueeze(1)
+        div_term = torch.exp(
+            torch.arange(0, d_model, 2, dtype=torch.float32)
+            * (-math.log(10000.0) / d_model)
+        )
+        pe = torch.zeros(max_len, d_model)
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+
+        # (max_len, 1, d_model); not persistent, so it is not stored in checkpoints.
+        self.register_buffer("positional_encoding", pe.unsqueeze(1), persistent=False)
+
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, d_model))
+        nn.init.normal_(self.cls_token, std=0.02)
+
+        layers = []
+        for _ in range(n_layers):
+            layer = nn.TransformerEncoderLayer(
+                d_model=d_model,
+                nhead=n_heads,
+                dim_feedforward=ff,
+                dropout=dropout,
+                activation="gelu",
+            )
+            layer.self_attn.dropout = 0.0
+            layers.append(layer)
+
+        self.layers = nn.ModuleList(layers)
+
+    def forward(self, x):
+        if x.ndim != 3 or x.shape[1] != self.d_model:
+            raise ValueError(
+                f"TokenTransformer expects (batch, {self.d_model}, time), "
+                f"received {tuple(x.shape)}"
+            )
+
+        n_tokens = x.shape[-1]
+        if n_tokens > self.max_len:
+            raise ValueError(
+                f"Sequence length {n_tokens} exceeds max_len={self.max_len}."
+            )
+
+        # (B, C, T) -> (T, B, C)
+        x = x.permute(2, 0, 1)
+        x = x + self.positional_encoding[:n_tokens]
+
+        cls = self.cls_token.expand(1, x.shape[1], self.d_model)
+        x = torch.cat([cls, x], dim=0)
+
+        for layer in self.layers:
+            x = layer(x)
+
+        # CLS output: (B, C)
+        return x[0]
+
+
+class SimpleCNN_ResidualDilatedTransformerAgg(SimpleCNN_ResidualDilated):
+    """
+    M13.4a: M11 (SimpleCNN_ResidualDilated) with transformer aggregation.
+
+    Identical to the base class up to self.projection (B, 128, ~2048). The global
+    AdaptiveAvgPool1d is replaced by AvgPool1d(agg_pool) -> (B, 128, ~256) tokens
+    -> TokenTransformer(128) -> CLS (B, 128), followed by the base embedding_layer
+    and head.
+    """
+
+    def __init__(
+        self,
+        agg_pool: int = 8,
+        agg_layers: int = 2,
+        agg_heads: int = 4,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        if agg_pool <= 0:
+            raise ValueError(f"agg_pool must be positive, got {agg_pool}")
+
+        self.pool = nn.AvgPool1d(kernel_size=agg_pool, stride=agg_pool)
+
+        self.aggregator = TokenTransformer(
+            d_model=128,
+            n_layers=agg_layers,
+            n_heads=agg_heads,
+        )
+
+    def encode(self, x):
+        x = self.block1(x)
+        x = self.block2(x)
+        x = self.block3(x)
+        x = self.residual_blocks(x)
+        x = self.projection(x)
+
+        # (batch, 128, time) -> (batch, 128, time // agg_pool)
+        x = self.pool(x)
+
+        # (batch, 128, tokens) -> (batch, 128)
+        x = self.aggregator(x)
+
+        return x
+
+
+def _largest_group_divisor(channels, max_groups):
+    for g in range(min(channels, max_groups), 0, -1):
+        if channels % g == 0:
+            return g
+    return 1
+
+
+def _group_norm(channels, max_groups):
+    return nn.GroupNorm(
+        num_groups=_largest_group_divisor(channels, max_groups),
+        num_channels=channels,
+    )
+
+
+class _MRDenseLayer(nn.Module):
+    """
+    Pre-activation DenseNet-BC layer with parallel multi-kernel branches.
+
+    GN -> LeakyReLU -> 1x1 conv to 2g -> GN -> LeakyReLU -> parallel convs
+    (one per kernel, g / len(kernels) channels each) -> concat (g) -> Dropout.
+    """
+
+    def __init__(self, in_channels, growth, kernels, dropout, max_groups):
+        super().__init__()
+
+        bottleneck = 2 * growth
+        branch_channels = growth // len(kernels)
+
+        self.bottleneck = nn.Sequential(
+            _group_norm(in_channels, max_groups),
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.Conv1d(in_channels, bottleneck, kernel_size=1),
+            _group_norm(bottleneck, max_groups),
+            nn.LeakyReLU(negative_slope=0.01),
+        )
+
+        self.branches = nn.ModuleList(
+            [
+                nn.Conv1d(bottleneck, branch_channels, kernel_size=k, padding=k // 2)
+                for k in kernels
+            ]
+        )
+
+        # nn.Dropout1d does not exist in PyTorch 1.9.
+        self.dropout = nn.Dropout(p=dropout)
+
+    def forward(self, x):
+        h = self.bottleneck(x)
+        h = torch.cat([branch(h) for branch in self.branches], dim=1)
+        return self.dropout(h)
+
+
+class _MRDenseBlock(nn.Module):
+    """Dense block: each layer sees the block input plus all previous layer outputs."""
+
+    def __init__(self, in_channels, growth, n_layers, kernels, dropout, max_groups):
+        super().__init__()
+
+        self.layers = nn.ModuleList(
+            [
+                _MRDenseLayer(
+                    in_channels + i * growth, growth, kernels, dropout, max_groups
+                )
+                for i in range(n_layers)
+            ]
+        )
+        self.out_channels = in_channels + n_layers * growth
+
+    def forward(self, x):
+        features = [x]
+        for layer in self.layers:
+            features.append(layer(torch.cat(features, dim=1)))
+        return torch.cat(features, dim=1)
+
+
+class MRDenseNet(nn.Module):
+    """
+    M13.4b: multiresolution dense network with per-scale readout and transformer.
+
+    - Conv1d 1x1 input projection to stage_channels[0].
+    - One dense block per stage; between stages GN -> LeakyReLU -> 1x1 conv to
+      stage_channels[s+1] -> AvgPool1d(2). With 7 stages: 16384 -> 256 steps.
+    - Per-scale readout: TemporalAttentionPool1d on each dense block output.
+    - After the last stage: GN -> LeakyReLU -> 1x1 conv to token_dim ->
+      TokenTransformer(token_dim) -> CLS.
+    - Embedding on concat(per-scale vectors, CLS), then a linear head.
+    """
+
+    INPUT_LENGTH = 16384
+
+    def __init__(
+        self,
+        n_detectors: int = 3,
+        n_outputs: int = 3,
+        stage_channels=(16, 24, 32, 48, 64, 96, 128),
+        dense_layers: int = 2,
+        kernels=(3, 9, 27),
+        token_dim: int = 128,
+        embedding_dim: int = 64,
+        dropout_conv: float = 0.05,
+        dropout_dense: float = 0.1,
+        max_groups: int = 8,
+    ):
+        super().__init__()
+
+        self.stage_channels = tuple(int(c) for c in stage_channels)
+        self.kernels = tuple(int(k) for k in kernels)
+
+        if len(self.stage_channels) == 0 or any(c <= 0 for c in self.stage_channels):
+            raise ValueError(f"Invalid stage_channels: {stage_channels}")
+
+        n_downsamples = len(self.stage_channels) - 1
+        if self.INPUT_LENGTH % (2 ** n_downsamples) != 0:
+            raise ValueError(
+                f"Input length {self.INPUT_LENGTH} is not divisible by "
+                f"2**{n_downsamples}."
+            )
+
+        if len(self.kernels) == 0 or any(k <= 0 or k % 2 == 0 for k in self.kernels):
+            raise ValueError(f"kernels must be positive odd integers, got {kernels}")
+
+        if dense_layers <= 0:
+            raise ValueError(f"dense_layers must be positive, got {dense_layers}")
+
+        n_kernels = len(self.kernels)
+
+        self.input_projection = nn.Conv1d(
+            n_detectors, self.stage_channels[0], kernel_size=1
+        )
+
+        self.dense_blocks = nn.ModuleList()
+        self.readouts = nn.ModuleList()
+        self.transitions = nn.ModuleList()
+        self.growth_rates = []
+
+        readout_dim = 0
+        for s, channels in enumerate(self.stage_channels):
+            # Growth g = channels // 2, rounded to the nearest multiple of the
+            # number of kernel branches (at least one channel per branch).
+            growth = max(
+                n_kernels,
+                n_kernels * int(channels / 2 / n_kernels + 0.5),
+            )
+            self.growth_rates.append(growth)
+
+            block = _MRDenseBlock(
+                channels, growth, dense_layers, self.kernels, dropout_conv, max_groups
+            )
+            self.dense_blocks.append(block)
+            self.readouts.append(TemporalAttentionPool1d(block.out_channels))
+            readout_dim += block.out_channels
+
+            if s < n_downsamples:
+                self.transitions.append(
+                    nn.Sequential(
+                        _group_norm(block.out_channels, max_groups),
+                        nn.LeakyReLU(negative_slope=0.01),
+                        nn.Conv1d(
+                            block.out_channels,
+                            self.stage_channels[s + 1],
+                            kernel_size=1,
+                        ),
+                        nn.AvgPool1d(kernel_size=2, stride=2),
+                    )
+                )
+
+        self.token_projection = nn.Sequential(
+            _group_norm(self.dense_blocks[-1].out_channels, max_groups),
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.Conv1d(self.dense_blocks[-1].out_channels, token_dim, kernel_size=1),
+        )
+
+        self.aggregator = TokenTransformer(d_model=token_dim)
+
+        self.feature_dim = readout_dim + token_dim
+
+        self.embedding_layer = nn.Sequential(
+            nn.Linear(self.feature_dim, 128),
+            nn.LeakyReLU(negative_slope=0.1),
+            nn.Dropout(p=dropout_dense),
+            nn.Linear(128, embedding_dim),
+            nn.LeakyReLU(negative_slope=0.1),
+        )
+
+        self.head = nn.Linear(embedding_dim, n_outputs)
+
+    def encode(self, x):
+        # Input: (batch, n_detectors, 16384)
+        x = self.input_projection(x)
+
+        scale_vectors = []
+        for s, block in enumerate(self.dense_blocks):
+            x = block(x)
+            # (batch, C_s, T_s) -> (batch, C_s)
+            scale_vectors.append(self.readouts[s](x).squeeze(-1))
+            if s < len(self.transitions):
+                x = self.transitions[s](x)
+
+        # (batch, C_last, 256) -> (batch, token_dim, 256) -> (batch, token_dim)
+        x = self.token_projection(x)
+        cls = self.aggregator(x)
+
+        return torch.cat(scale_vectors + [cls], dim=1)
+
+    def embed(self, x):
+        features = self.encode(x)
+        embedding = self.embedding_layer(features)
+        return embedding
+
+    def forward(self, x, return_embedding=False):
+        embedding = self.embed(x)
+        y_pred = self.head(embedding)
+
+        if return_embedding:
+            return y_pred, embedding
+
+        return y_pred
