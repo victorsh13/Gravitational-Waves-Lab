@@ -1,6 +1,6 @@
 # M13.6 — Aumentación de ruido: señal limpia + banco de ruido por PSD
 
-**Estado:** en curso (28-10-2026). Paso 0 (control de la descomposición) verificado. Generación de señal limpia y banco de ruido en curso; entrenamientos M13.6a y M13.4a-aug pendientes. Criterios de evaluación fijados el 28-10-2026, antes de entrenar (§7).
+**Estado:** cerrado (31-10-2026): aumentación adoptada como base (§8). Segunda semilla y M13.4b-aug en curso. Criterios de evaluación fijados el 28-10-2026, antes de entrenar (§7).
 
 ## 1. Motivación
 
@@ -70,3 +70,27 @@ Procedimiento idéntico a M13.3b (80 épocas, coseno, dropout apagado el último
 Si no se cumple P-AUG3, la aumentación no se adopta como base.
 
 **M13.4a-aug frente a M13.6a.** Misma regla de resolución. HIP-CONTEXTO queda apoyada si la diferencia de ΔRMSE de χ_eff entre τ largos (D8–D10) y cortos (D1–D3) tiene un IC que excluye 0.
+
+## 8. Resultados (31-10-2026)
+
+Evaluación en [M13_6_evaluation.ipynb](../../notebooks/m13/M13_6_evaluation.ipynb). 1 semilla en las ejecuciones con aumentación.
+
+**Verificado (val G3, 40 000 filas emparejadas; ruido de semilla de M13.3b: 1,4 / 1,1 / 0,6 %)**
+1. **Aumentación adoptada como base.** M13.6a frente a M13.3b: ΔRMSE −6,0 % [−6,6; −5,4] / −5,8 % [−6,3; −5,3] / −5,7 % [−6,1; −5,2] (resueltos). P-AUG1 (train40k/val 0,99–1,03), P-AUG2 (mejor época = final) y P-AUG3: PASA. Pendiente θ sobre f en val 1,000 ± 0,004: la contracción desaparece también en val.
+2. **C3 ≈ 0** (−0,02 a −0,05 %) en 6a y 4a-aug: el residuo de C3 de G1/G3 sin aumentación era efecto de la memorización, no de cambio de dominio (hipótesis previa descartada).
+3. **M13.4a-aug (transformer)** frente a M13.6a: −2,4 % (no resuelto) / −3,1 % / −3,9 % (resueltos); frente a M13.3b: −8,2 / −8,8 / −9,4 %; frente a M11 en G1: −17,9 / −21,2 / −15,1 %. Mejor modelo del proyecto.
+4. **HIP-CONTEXTO apoyada:** χ_eff mejora en todos los deciles de τ (~−2,5 %) y −9,1 % en el decil más largo; (D8–D10) − (D1–D3) = −2,1 % [−3,2; −0,9]. En sistemas ligeros (f220 > 1024 Hz), −51 % en M_c y M.
+5. Colas: Q10 de M_c +0,63 → +0,47 M☉; Q90 de χ_eff −0,107 → −0,095. Mejora en todos los bins de SNR.
+6. Orden temprano (G3, 5 modelos, descriptivo): Spearman con el final −0,4 a +0,3 en las épocas 0–10; 0,8 en la 20. Las primeras épocas no sirven para elegir arquitectura.
+
+**Hipótesis / pendiente**
+- Con aumentación, la mejor época es la final y la val sigue bajando: más épocas podrían mejorar (no probado).
+- Confirmación con la segunda semilla y M13.4b-aug (en curso).
+
+**Ejecuciones en curso (31-10-2026)**
+
+| Experimento | Config | Notas |
+|---|---|---|
+| M13.4b-aug s123 | [train_m13_4b_G3aug_s123.json](../../configs/experiments/m13/train_m13_4b_G3aug_s123.json) | `MRDenseNet` con checkpointing de gradiente por etapa; monitor train40k cada 10 épocas |
+| M13.6a s124 | [train_m13_6a_G3aug_s124_m10.json](../../configs/experiments/m13/train_m13_6a_G3aug_s124_m10.json) | `monitor_train40k_every = 10` |
+| M13.4a-aug s124 | [train_m13_4a_G3aug_s124.json](../../configs/experiments/m13/train_m13_4a_G3aug_s124.json) | `monitor_train40k_every = 10` |

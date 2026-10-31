@@ -29,10 +29,11 @@ Este índice recoge los datasets, experimentos y términos de la fase M13, con s
 | M13.3a | M11 reentrenado (planificador coseno 80 épocas, lotes aleatorios, memmap fp16; R1 dropout M11, R2/R3 dropout apagado último 20 %) en G1 | entrenamiento GPU | cerrado (27-10): RMSE sin cambio resuelto; pendiente en val 1,04–1,06 → 0,97–0,99 y menor sesgo en colas; P3 y P4 fallan | M13_3_procedure_and_G3.md |
 | M13.3b | M11 reentrenado como M13.3a (dropout apagado último 20 %) en G3 | entrenamiento GPU | cerrado (28-10): G3 frente a G1 −10,2 / −12,6 / −6,5 % RMSE (resuelto); pasa a ser la base | M13_3_procedure_and_G3.md |
 | M13.4a | M11 + agregación por transformer: AvgPool1d(8) → 256 tokens → transformer 2 capas con CLS, en lugar del promedio global (`SimpleCNN_ResidualDilatedTransformerAgg`) | entrenamiento GPU | cerrado (28-10): global sin resolver; HIP-CONTEXTO apoyada (χ_eff τ largo − corto −3,0 % [−4,7; −1,3], 1 semilla); no se adopta | M13_3_procedure_and_G3.md |
-| M13.4b | Multirresolución densa (7 etapas, 16384 → 256 pasos, ramas k = 3/9/27) con lectura por escala (atención temporal) y transformer sobre la última etapa (`MRDenseNet`) | entrenamiento GPU | pendiente de rediseño (checkpointing), en el régimen de M13.6 | — |
+| M13.4b | Multirresolución densa (7 etapas, 16384 → 256 pasos, ramas k = 3/9/27) con lectura por escala (atención temporal) y transformer sobre la última etapa (`MRDenseNet`) | entrenamiento GPU | con aumentación y checkpointing por etapa: en curso | M13_6_noise_augmentation.md |
 | M13.4.x | Arquitecturas candidatas | entrenamiento GPU | por definir | — |
 | M13.5 | diagnóstico de la brecha train–val: ruido fijo frente a entorno | CPU local | cerrado (28-10): RUIDO_FIJO en 3 modelos × 3 etiquetas (f 0,90–1,08), control válido | M13_5_renoise.md |
-| M13.6 | aumentación de ruido: señal limpia + banco de ruido por PSD; M13.6a (s123, s124) y M13.4a-aug | CPU local + GPU | en curso: paso 0 verificado (PASS); señal y banco en generación | M13_6_noise_augmentation.md |
+| M13.6 | aumentación de ruido: señal limpia + banco de ruido por PSD; M13.6a (s123, s124) y M13.4a-aug | CPU local + GPU | cerrado (31-10): aumentación adoptada como base; P-AUG1–3 PASA; 6a −6 % frente a 3b | M13_6_noise_augmentation.md |
+| M13.4a-aug | M13.4a + aumentación de ruido (M13.6) | entrenamiento GPU | 4a + aumentación: mejor modelo (−8 a −9 % frente a 3b; HIP-CONTEXTO apoyada); 1 semilla, s124 en curso | M13_6_noise_augmentation.md |
 
 ## 3. Términos heredados de M12
 
@@ -54,6 +55,7 @@ Este índice recoge los datasets, experimentos y términos de la fase M13, con s
 ## 4. Hipótesis
 
 - **HIP-LÍNEAS:** el blanqueado con filtro de 0,5 s deja líneas que dominan la varianza de X y, vía z-score, encogen la componente útil. Verificado en G1 (64 filas): V1 98,7 % de la varianza en líneas (mediana), L1 5,9 %, H1 0,9 %. Efecto sobre M11: no medido. Corrección: blanqueado largo en G3 (M13.0c).
+- **HIP-CONTEXTO:** el contexto temporal largo (agregación por transformer) mejora χ_eff en señales de τ largo. **Apoyada por M13.4a-aug** (régimen aumentado): (D8–D10) − (D1–D3) = −2,1 % [−3,2; −0,9] en ΔRMSE de χ_eff frente a M13.6a (1 semilla).
 - **HIP-RUIDO-FIJO:** la brecha train–val (MSE_train40k/MSE_val ≈ 0,71 en G1 y G3) se debe a que la red memoriza la realización fija de ruido de cada fila de train, no a un cambio de entorno PSD. **Verificada por M13.5:** cambiar solo el ruido gaussiano de 10 000 filas de train lleva su MSE al nivel de val (f = 0,90–1,08, ≥ 0,7 en los 3 modelos y las 3 etiquetas; control de val válido). Consecuencia: aumentación de ruido (M13.6).
 
 ## 5. Líneas futuras
