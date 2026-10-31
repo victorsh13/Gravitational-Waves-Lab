@@ -2,6 +2,7 @@ from __future__ import annotations
 import math
 import torch
 import torch.nn as nn
+import torch.utils.checkpoint
 
 
 class ConvBlock(nn.Module):
@@ -1391,6 +1392,9 @@ class MRDenseNet(nn.Module):
     - After the last stage: GN -> LeakyReLU -> 1x1 conv to token_dim ->
       TokenTransformer(token_dim) -> CLS.
     - Embedding on concat(per-scale vectors, CLS), then a linear head.
+    - checkpoint_stages: stages run under gradient checkpointing in train mode
+      (dense block + readout + transition recomputed in backward; memory only,
+      same parameters and same forward values).
     """
 
     INPUT_LENGTH = 16384
@@ -1407,10 +1411,12 @@ class MRDenseNet(nn.Module):
         dropout_conv: float = 0.05,
         dropout_dense: float = 0.1,
         max_groups: int = 8,
+        checkpoint_stages=(),
     ):
         super().__init__()
 
         self.stage_channels = tuple(int(c) for c in stage_channels)
+        self.checkpoint_stages = tuple(sorted(set(int(s) for s in checkpoint_stages)))
         self.kernels = tuple(int(k) for k in kernels)
 
         if len(self.stage_channels) == 0 or any(c <= 0 for c in self.stage_channels):
@@ -1428,6 +1434,12 @@ class MRDenseNet(nn.Module):
 
         if dense_layers <= 0:
             raise ValueError(f"dense_layers must be positive, got {dense_layers}")
+
+        if any(s < 0 or s >= len(self.stage_channels) for s in self.checkpoint_stages):
+            raise ValueError(
+                f"checkpoint_stages must index stages 0..{len(self.stage_channels) - 1}, "
+                f"got {checkpoint_stages}"
+            )
 
         n_kernels = len(self.kernels)
 
@@ -1495,19 +1507,41 @@ class MRDenseNet(nn.Module):
         # Input: (batch, n_detectors, 16384)
         x = self.input_projection(x)
 
+        use_ckpt = self.training and torch.is_grad_enabled()
         scale_vectors = []
-        for s, block in enumerate(self.dense_blocks):
-            x = block(x)
-            # (batch, C_s, T_s) -> (batch, C_s)
-            scale_vectors.append(self.readouts[s](x).squeeze(-1))
-            if s < len(self.transitions):
-                x = self.transitions[s](x)
+        for s in range(len(self.dense_blocks)):
+            if use_ckpt and s in self.checkpoint_stages:
+                x, v = self._checkpointed_stage(s, x)
+            else:
+                x, v = self._run_stage(s, x)
+            scale_vectors.append(v)
 
         # (batch, C_last, 256) -> (batch, token_dim, 256) -> (batch, token_dim)
         x = self.token_projection(x)
         cls = self.aggregator(x)
 
         return torch.cat(scale_vectors + [cls], dim=1)
+
+    def _run_stage(self, s, x):
+        x = self.dense_blocks[s](x)
+        # (batch, C_s, T_s) -> (batch, C_s)
+        v = self.readouts[s](x).squeeze(-1)
+        if s < len(self.transitions):
+            x = self.transitions[s](x)
+        return x, v
+
+    def _checkpointed_stage(self, s, x):
+        # Only the stage input is stored; the full-resolution dense features, readout
+        # and transition activations are recomputed in backward. preserve_rng_state=True
+        # replays the same dropout masks. In PyTorch 1.9 checkpoint yields outputs
+        # without grad if no input requires grad; a dummy requires_grad tensor avoids that.
+        def run(x_in, *_dummy):
+            return self._run_stage(s, x_in)
+
+        args = [x]
+        if not x.requires_grad:
+            args.append(torch.ones(1, device=x.device, requires_grad=True))
+        return torch.utils.checkpoint.checkpoint(run, *args, preserve_rng_state=True)
 
     def embed(self, x):
         features = self.encode(x)

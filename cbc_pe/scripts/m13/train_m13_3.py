@@ -325,12 +325,15 @@ def main():
     warmup_epochs = int(sched["warmup_epochs"])
     weight_decay = float(tcfg["weight_decay"])
     off_fraction = float(tcfg.get("dropout_off_fraction", 0.0))
+    tr_every = int(tcfg.get("monitor_train40k_every", 1))
     if sched.get("type") != "cosine":
         raise SystemExit(f"Only the cosine schedule is implemented, got {sched.get('type')}")
     if int(tcfg["batch_size"]) != BATCH or tcfg.get("loss", "MSELoss") != "MSELoss":
         raise SystemExit("Expected batch_size 256 and MSELoss")
     if float(tcfg["learning_rate"]) != peak_lr:
         raise SystemExit("training.learning_rate must equal schedule.peak_lr")
+    if tr_every < 1:
+        raise SystemExit(f"monitor_train40k_every must be >= 1, got {tr_every}")
     if not 0.0 <= off_fraction < 1.0:
         raise SystemExit(f"dropout_off_fraction must be in [0, 1), got {off_fraction}")
     if cfg.get("input_normalization", {}).get("enabled", False):
@@ -545,13 +548,19 @@ def main():
         t0 = time.perf_counter()
         val_out = predict(model, val_loader, device)
         t_val = time.perf_counter() - t0
-        t0 = time.perf_counter()
-        tr_out = predict(model, tr_loader, device)
-        t_tr = time.perf_counter() - t0
+        # train40k is always evaluated at the last epoch (its predictions are saved).
+        do_tr = (epoch + 1) % tr_every == 0 or epoch == max_epochs - 1
         val_mse, val_slope = label_metrics(val_out[0], val_out[2])
-        tr_mse, tr_slope = label_metrics(tr_out[0], tr_out[2])
+        if do_tr:
+            t0 = time.perf_counter()
+            tr_out = predict(model, tr_loader, device)
+            t_tr = time.perf_counter() - t0
+            tr_mse, tr_slope = label_metrics(tr_out[0], tr_out[2])
+            last_eval = (val_out, tr_out)
+        else:
+            tr_mse = tr_slope = np.full_like(val_mse, np.nan)
+            t_tr = float("nan")
         val_loss = float(val_mse.mean())
-        last_eval = (val_out, tr_out)
 
         rec = {"epoch": epoch, "lr_first": lr_first, "lr_last": lr_last, "train_loss": train_loss,
                "val_loss": val_loss, "val_mse": val_mse, "val_slope": val_slope, "train40k_mse": tr_mse,
@@ -575,7 +584,8 @@ def main():
 
         print(f"epoch {epoch:02d}/{max_epochs - 1} | lr {lr_first:.3e}->{lr_last:.3e} | train {train_loss:.5f} | "
               f"val {val_loss:.5f}{' *' if improved else ''} mse {fmt(val_mse)} slope {fmt(val_slope)} | "
-              f"tr40k mse {fmt(tr_mse)} slope {fmt(tr_slope)} | dropout {'off' if dropout_off else 'on'} | "
+              f"{f'tr40k mse {fmt(tr_mse)} slope {fmt(tr_slope)}' if do_tr else 'tr40k skipped'} | "
+              f"dropout {'off' if dropout_off else 'on'} | "
               f"t_train {t_train:.0f}s wait {wait:.1f}s t_val {t_val:.0f}s t_tr40k {t_tr:.0f}s | "
               f"elapsed {(time.time() - t_run0) / 60:.1f} min", flush=True)
 
