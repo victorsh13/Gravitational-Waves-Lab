@@ -24,6 +24,7 @@ if str(SCRIPT_PROJECT_ROOT) not in sys.path:
     )
 
 from src.paths import (
+    dataset_processed_dir,
     resolve_data_root,
     resolve_processed_artifact,
     resolve_project_root,
@@ -136,6 +137,7 @@ def main():
     from src.models.dataset import HDF5RegressionDataset
     from src.models.hdf5_batch_dataset import HDF5BatchIterableDataset
     from src.models.evaluate import extract_predictions_and_embeddings
+    from src.models.memmap_dataset import FP16MemmapBatchDataset, SequentialBatchSampler
     from src.models.utils import set_seed
 
     dataset_cfg = get_required(cfg, "dataset")
@@ -203,12 +205,28 @@ def main():
                 legacy_checkpoint_path
             )
 
-    for name, path in {
+    data_loading_mode = str(
+        prediction_cfg.get("data_loading_mode", "hdf5_batch_slices")
+    )
+
+    # fp16_memmap: X/y/row_ids come from a build_fp16_memmap.py export, so the
+    # source HDF5 is not required (it may be absent on the GPU VM).
+    memmap_dir = None
+    required_files = {
         "dataset": dataset_path,
         "split": split_path,
         "label stats": label_stats_path,
         "checkpoint": checkpoint_path,
-    }.items():
+    }
+    if data_loading_mode == "fp16_memmap":
+        memmap_dir = (
+            dataset_processed_dir(data_root, dataset_id)
+            / get_required(prediction_cfg, "memmap_dir")
+        )
+        del required_files["dataset"]
+        required_files["memmap manifest"] = memmap_dir / "manifest.json"
+
+    for name, path in required_files.items():
         if path is None or not path.exists():
             raise FileNotFoundError(f"{name} file not found: {path}")
 
@@ -225,17 +243,23 @@ def main():
     print("split_path:", split_path)
     print("label_stats_path:", label_stats_path)
     print("checkpoint_path:", checkpoint_path)
-
-    with h5py.File(dataset_path, "r") as f:
-        X_shape = f["X"].shape
-        y_shape = f["y"].shape
-
-        n_samples = int(X_shape[0])
-        n_detectors = int(X_shape[1])
-        signal_length = int(X_shape[2])
-        n_outputs = int(y_shape[1])
+    print("memmap_dir:", memmap_dir)
 
     splits_npz = np.load(split_path)
+
+    if memmap_dir is None:
+        with h5py.File(dataset_path, "r") as f:
+            X_shape = f["X"].shape
+            y_shape = f["y"].shape
+    else:
+        first_split = str(prediction_cfg.get("splits", ["val"])[0])
+        X_shape = np.load(memmap_dir / f"X_{first_split}.npy", mmap_mode="r").shape
+        y_shape = np.load(memmap_dir / f"y_{first_split}.npy", mmap_mode="r").shape
+
+    n_samples = int(X_shape[0])
+    n_detectors = int(X_shape[1])
+    signal_length = int(X_shape[2])
+    n_outputs = int(y_shape[1])
 
     split_dict = {}
 
@@ -315,9 +339,6 @@ def main():
     max_slice_overread = float(
         prediction_cfg.get("max_slice_overread", 4.0)
     )
-    data_loading_mode = str(
-        prediction_cfg.get("data_loading_mode", "hdf5_batch_slices")
-    )
 
     print()
     print("=" * 80)
@@ -344,6 +365,9 @@ def main():
         "available_splits": np.array(requested_splits),
     }
 
+    if memmap_dir is not None:
+        save_payload["memmap_dir"] = str(memmap_dir)
+
     for split_name in requested_splits:
         indices = split_dict[split_name]
 
@@ -353,7 +377,52 @@ def main():
         print("=" * 80)
         print("n_samples:", len(indices))
 
-        if data_loading_mode in {"hdf5_batch", "hdf5_batch_slices"}:
+        if data_loading_mode == "fp16_memmap":
+            # Same feeding as the M13.3 trainer's val loader: ascending row IDs,
+            # sequential batches, train-only y standardization, X stored as
+            # already z-scored float16 (no on-the-fly input normalization).
+            if input_normalization_cfg.get("enabled", False):
+                raise ValueError(
+                    "fp16_memmap holds already-normalized X; "
+                    "input_normalization.enabled must be false"
+                )
+
+            row_ids = np.load(memmap_dir / f"row_ids_{split_name}.npy")
+
+            if not np.array_equal(row_ids, np.sort(indices)):
+                raise ValueError(
+                    f"row_ids_{split_name}.npy in {memmap_dir} does not match "
+                    f"sort({split_name}_idx) of the split file"
+                )
+
+            dataset = FP16MemmapBatchDataset(
+                memmap_dir,
+                split_name,
+                y_mean,
+                y_std,
+            )
+
+            loader_kwargs = {
+                "sampler": SequentialBatchSampler(len(dataset), batch_size),
+                "batch_size": None,
+                "num_workers": num_workers,
+                "pin_memory": pin_memory,
+            }
+
+            if num_workers > 0:
+                loader_kwargs.update(
+                    persistent_workers=False,
+                    prefetch_factor=prefetch_factor,
+                )
+
+            # fp16 -> fp32 is exact, so casting on the CPU matches the
+            # trainer's cast on the GPU.
+            loader = (
+                (X_batch.float(), y_batch)
+                for X_batch, y_batch in DataLoader(dataset, **loader_kwargs)
+            )
+
+        elif data_loading_mode in {"hdf5_batch", "hdf5_batch_slices"}:
             dataset = HDF5BatchIterableDataset(
                 h5_path=dataset_path,
                 indices=indices,
@@ -434,7 +503,7 @@ def main():
 
         # Important: batch-level prediction yields data in sorted physical-index
         # order, so store indices in the same order.
-        if data_loading_mode in {"hdf5_batch", "hdf5_batch_slices"}:
+        if data_loading_mode in {"hdf5_batch", "hdf5_batch_slices", "fp16_memmap"}:
             save_payload[f"idx_{split_name}"] = np.sort(indices)
         else:
             save_payload[f"idx_{split_name}"] = indices

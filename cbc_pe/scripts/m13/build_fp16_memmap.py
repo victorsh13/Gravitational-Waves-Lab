@@ -3,7 +3,9 @@
 Output (never overwritten): $CBC_PE_DATA_ROOT/processed/<dataset_id>/fp16_memmap/
     X_<split>.npy (float16, (N, C, T)), y_<split>.npy (float32, unstandardized),
     row_ids_<split>.npy (int64, ascending HDF5 row IDs), manifest.json
-Only train/val are exportable; cal/test are never written. The HDF5 is scanned in contiguous
+By default only train/val are exportable and cal/test are never written. With --heldout only
+cal/test are exportable, into a separate directory fp16_memmap_heldout/ (inference only; the
+trainer never reads it). The HDF5 is scanned in contiguous
 1024-row blocks, so rows of other splits pass transiently through memory and are discarded
 before any statistic is computed. X is stored as the HDF5 holds it (already z-scored per sample
 and detector); configs that normalize on the fly are rejected.
@@ -54,7 +56,9 @@ def jsonable(v):
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--config", type=Path, required=True)
-    p.add_argument("--splits", nargs="+", choices=["train", "val"], default=["train", "val"])
+    p.add_argument("--splits", nargs="+", choices=["train", "val", "cal", "test"], default=None)
+    p.add_argument("--heldout", action="store_true",
+                   help="export cal/test (default both) to fp16_memmap_heldout/ instead of train/val")
     p.add_argument("--data-root", type=Path, default=None)
     return p.parse_args()
 
@@ -62,7 +66,11 @@ def parse_args():
 def main():
     t_start = time.time()
     args = parse_args()
-    splits_req = list(dict.fromkeys(args.splits))
+    allowed = ["cal", "test"] if args.heldout else ["train", "val"]
+    splits_req = list(dict.fromkeys(args.splits if args.splits is not None else allowed))
+    if not set(splits_req) <= set(allowed):
+        raise SystemExit(f"Splits {splits_req} not allowed {'with' if args.heldout else 'without'} --heldout; "
+                         f"allowed: {allowed}")
     cfg = json.loads(args.config.read_text())
     dcfg = cfg["dataset"]
     dataset_id = dcfg["dataset_id"]
@@ -78,8 +86,8 @@ def main():
         if not p.exists():
             raise FileNotFoundError(p)
 
-    out_dir = dataset_processed_dir(data_root, dataset_id) / "fp16_memmap"
-    tmp_dir = out_dir.with_name(f"fp16_memmap.tmp_{os.getpid()}")
+    out_dir = dataset_processed_dir(data_root, dataset_id) / ("fp16_memmap_heldout" if args.heldout else "fp16_memmap")
+    tmp_dir = out_dir.with_name(f"{out_dir.name}.tmp_{os.getpid()}")
     if out_dir.exists():
         raise SystemExit(f"Output directory already exists, refusing to overwrite: {out_dir}")
     tmp_dir.mkdir(parents=False, exist_ok=False)
@@ -215,6 +223,8 @@ def main():
         "splits": per_split,
         "total_time_s": time.time() - t_start,
     }
+    if args.heldout:
+        manifest["heldout"] = True
     (tmp_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     if out_dir.exists():
         raise SystemExit(f"Output directory appeared during export; result left in {tmp_dir}")
