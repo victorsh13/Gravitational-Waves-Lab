@@ -1556,3 +1556,211 @@ class MRDenseNet(nn.Module):
             return y_pred, embedding
 
         return y_pred
+
+
+class _InceptionBlock1d(nn.Module):
+    """
+    Residual 1D Inception block.
+
+    1x1 bottleneck to c_out // 4, then three parallel convs (one per kernel), plus a
+    MaxPool1d(3) -> 1x1 branch on the block input; concat (c_out) -> GN -> LeakyReLU
+    -> Dropout, then + x (1x1 conv on x when c_in != c_out). Length preserved.
+    """
+
+    def __init__(
+        self,
+        c_in: int,
+        c_out: int,
+        kernels=(9, 19, 39),
+        dropout: float = 0.05,
+        max_groups: int = 8,
+    ):
+        super().__init__()
+
+        kernels = tuple(int(k) for k in kernels)
+
+        if c_out <= 0 or c_out % 4 != 0:
+            raise ValueError(f"c_out must be a positive multiple of 4, got {c_out}")
+
+        if len(kernels) != 3 or any(k <= 0 or k % 2 == 0 for k in kernels):
+            raise ValueError(f"kernels must be three positive odd integers, got {kernels}")
+
+        branch = c_out // 4
+
+        self.bottleneck = nn.Conv1d(c_in, branch, kernel_size=1)
+        self.branches = nn.ModuleList(
+            [nn.Conv1d(branch, branch, kernel_size=k, padding=k // 2) for k in kernels]
+        )
+        self.pool_branch = nn.Sequential(
+            nn.MaxPool1d(kernel_size=3, stride=1, padding=1),
+            nn.Conv1d(c_in, branch, kernel_size=1),
+        )
+
+        self.post = nn.Sequential(
+            _group_norm(c_out, max_groups),
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.Dropout(p=dropout),
+        )
+
+        self.residual = (
+            nn.Identity() if c_in == c_out else nn.Conv1d(c_in, c_out, kernel_size=1)
+        )
+
+    def forward(self, x):
+        z = self.bottleneck(x)
+        out = torch.cat(
+            [conv(z) for conv in self.branches] + [self.pool_branch(x)], dim=1
+        )
+        return self.post(out) + self.residual(x)
+
+
+class InceptionTransformerNet(nn.Module):
+    """
+    M13.4c: multiscale Inception encoder with the M13.4a transformer aggregation.
+
+    - Stem: Conv1d(k=7) -> GN -> LeakyReLU at full resolution.
+    - Levels: level_blocks[i] Inception blocks at level_channels[i]; AvgPool1d(2)
+      after every level except the last. With 4 levels: 16384 -> 2048 steps.
+    - 1x1 conv to token_dim -> GN -> LeakyReLU -> AvgPool1d(agg_pool) -> 256 tokens
+      -> TokenTransformer(token_dim) -> CLS.
+    - Embedding and head with the same structure as SimpleCNN_ResidualDilatedTransformerAgg.
+    """
+
+    INPUT_LENGTH = 16384
+    N_TOKENS = 256
+
+    def __init__(
+        self,
+        n_detectors: int = 3,
+        n_outputs: int = 3,
+        stem_channels: int = 32,
+        stem_stride: int = 1,
+        level_channels=(32, 48, 64, 96),
+        level_blocks=(1, 1, 2, 2),
+        kernels=(9, 19, 39),
+        token_dim: int = 128,
+        agg_pool: int = 8,
+        agg_layers: int = 2,
+        agg_heads: int = 4,
+        embedding_dim: int = 64,
+        dropout_conv: float = 0.05,
+        dropout_dense: float = 0.1,
+        max_groups: int = 8,
+    ):
+        super().__init__()
+
+        self.level_channels = tuple(int(c) for c in level_channels)
+        self.level_blocks = tuple(int(b) for b in level_blocks)
+
+        if len(self.level_channels) == 0 or len(self.level_channels) != len(self.level_blocks):
+            raise ValueError(
+                f"level_channels and level_blocks must be non-empty and of equal length, "
+                f"got {level_channels} and {level_blocks}"
+            )
+
+        if any(b <= 0 for b in self.level_blocks):
+            raise ValueError(f"level_blocks must be positive, got {level_blocks}")
+
+        if agg_pool <= 0:
+            raise ValueError(f"agg_pool must be positive, got {agg_pool}")
+
+        if stem_stride <= 0:
+            raise ValueError(f"stem_stride must be positive, got {stem_stride}")
+
+        # Token count fixed by the M13.4a contract:
+        # 16384 / stem_stride / 2**(levels-1) / agg_pool = 256, every division exact.
+        length = self.INPUT_LENGTH
+        for factor in (stem_stride, 2 ** (len(self.level_channels) - 1), agg_pool):
+            if length % factor != 0:
+                length = None
+                break
+            length //= factor
+        if length != self.N_TOKENS:
+            raise ValueError(
+                f"Expected {self.N_TOKENS} tokens from input length {self.INPUT_LENGTH} "
+                f"with stem_stride={stem_stride}, {len(self.level_channels)} levels and "
+                f"agg_pool={agg_pool} (all divisions exact), got {length}."
+            )
+
+        # k=7, padding=3: output length = input length / stem_stride (16384 -> 8192 for 2).
+        self.stem = nn.Sequential(
+            nn.Conv1d(
+                n_detectors, stem_channels, kernel_size=7, stride=stem_stride, padding=3
+            ),
+            _group_norm(stem_channels, max_groups),
+            nn.LeakyReLU(negative_slope=0.01),
+        )
+
+        self.levels = nn.ModuleList()
+        c_prev = stem_channels
+        for i, (channels, n_blocks) in enumerate(zip(self.level_channels, self.level_blocks)):
+            blocks = []
+            for b in range(n_blocks):
+                blocks.append(
+                    _InceptionBlock1d(
+                        c_prev if b == 0 else channels,
+                        channels,
+                        kernels=kernels,
+                        dropout=dropout_conv,
+                        max_groups=max_groups,
+                    )
+                )
+            if i < len(self.level_channels) - 1:
+                blocks.append(nn.AvgPool1d(kernel_size=2, stride=2))
+            self.levels.append(nn.Sequential(*blocks))
+            c_prev = channels
+
+        self.token_projection = nn.Sequential(
+            nn.Conv1d(c_prev, token_dim, kernel_size=1),
+            _group_norm(token_dim, max_groups),
+            nn.LeakyReLU(negative_slope=0.01),
+        )
+
+        self.pool = nn.AvgPool1d(kernel_size=agg_pool, stride=agg_pool)
+
+        self.aggregator = TokenTransformer(
+            d_model=token_dim,
+            n_layers=agg_layers,
+            n_heads=agg_heads,
+        )
+
+        # Same embedding structure as SimpleCNN_ResidualDilatedTransformerAgg (input token_dim).
+        self.embedding_layer = nn.Sequential(
+            nn.Linear(token_dim, 64),
+            nn.LeakyReLU(negative_slope=0.1),
+            nn.Dropout(p=dropout_dense),
+            nn.Linear(64, embedding_dim),
+            nn.LeakyReLU(negative_slope=0.1),
+        )
+
+        self.head = nn.Linear(embedding_dim, n_outputs)
+
+    def encode(self, x):
+        # Input: (batch, n_detectors, 16384)
+        x = self.stem(x)
+
+        for level in self.levels:
+            x = level(x)
+
+        # (batch, C_last, 2048) -> (batch, token_dim, 2048) -> (batch, token_dim, 256)
+        x = self.token_projection(x)
+        x = self.pool(x)
+
+        # (batch, token_dim, tokens) -> (batch, token_dim)
+        x = self.aggregator(x)
+
+        return x
+
+    def embed(self, x):
+        features = self.encode(x)
+        embedding = self.embedding_layer(features)
+        return embedding
+
+    def forward(self, x, return_embedding=False):
+        embedding = self.embed(x)
+        y_pred = self.head(embedding)
+
+        if return_embedding:
+            return y_pred, embedding
+
+        return y_pred
