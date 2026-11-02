@@ -46,7 +46,7 @@ def estimate_offsource_psd(
     psd_end_offset: float = -128.0,
     psd_segment_duration: float = 8.0,
     low_frequency_cutoff: float = 30.0,
-    max_filter_duration: float = 0.5,
+    max_filter_duration: float | None = 0.5,
     trunc_method: str = "hann",
 ) -> FrequencySeries:
     """
@@ -55,6 +55,11 @@ def estimate_offsource_psd(
     The PSD is estimated from the requested off-source time window,
     interpolated to the target frequency spacing, truncated in the
     inverse-spectrum domain, and adjusted to the target frequency length.
+
+    With ``max_filter_duration=None`` the inverse-spectrum truncation is
+    skipped (Welch -> interpolation -> length adjustment only). This matches
+    the raw empirical PSD of the G1/G3 generators, where SignalProcessor
+    conditions the PSD exactly once during whitening.
 
     Parameters
     ----------
@@ -83,7 +88,8 @@ def estimate_offsource_psd(
         Low-frequency cutoff passed to inverse-spectrum truncation.
 
     max_filter_duration
-        Maximum whitening-filter duration in seconds.
+        Maximum whitening-filter duration in seconds, or None to skip
+        inverse-spectrum truncation in the estimation.
 
     trunc_method
         Truncation window passed to inverse_spectrum_truncation.
@@ -102,7 +108,8 @@ def estimate_offsource_psd(
     psd_end_offset = float(psd_end_offset)
     psd_segment_duration = float(psd_segment_duration)
     low_frequency_cutoff = float(low_frequency_cutoff)
-    max_filter_duration = float(max_filter_duration)
+    if max_filter_duration is not None:
+        max_filter_duration = float(max_filter_duration)
 
     if delta_f <= 0:
         raise ValueError("delta_f must be positive.")
@@ -122,7 +129,10 @@ def estimate_offsource_psd(
             "psd_segment_duration must be positive."
         )
 
-    if max_filter_duration <= 0:
+    if (
+        max_filter_duration is not None
+        and max_filter_duration <= 0
+    ):
         raise ValueError(
             "max_filter_duration must be positive."
         )
@@ -187,19 +197,20 @@ def estimate_offsource_psd(
         delta_f,
     )
 
-    max_filter_len = int(
-        round(
-            max_filter_duration
-            * sampling_frequency
+    if max_filter_duration is not None:
+        max_filter_len = int(
+            round(
+                max_filter_duration
+                * sampling_frequency
+            )
         )
-    )
 
-    psd = inverse_spectrum_truncation(
-        psd,
-        max_filter_len=max_filter_len,
-        low_frequency_cutoff=low_frequency_cutoff,
-        trunc_method=trunc_method,
-    )
+        psd = inverse_spectrum_truncation(
+            psd,
+            max_filter_len=max_filter_len,
+            low_frequency_cutoff=low_frequency_cutoff,
+            trunc_method=trunc_method,
+        )
 
     if len(psd) > target_flength:
         psd = psd[:target_flength]

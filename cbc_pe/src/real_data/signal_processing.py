@@ -120,7 +120,7 @@ def build_real_input_like_training(
     psd_end_offset: float = -128.0,
     psd_segment_duration: float = 8.0,
     psd_low_frequency_cutoff: float = 30.0,
-    psd_max_filter_duration: float = 0.5,
+    psd_max_filter_duration: float | None = 0.5,
 ):
     """
     Build one real detector-network input using the same signal-processing
@@ -133,6 +133,11 @@ def build_real_input_like_training(
       4. stacks processed detector channels into shape (1, C, T).
 
     No model-specific input normalization is applied here.
+
+    ``psd_max_filter_duration=None`` skips inverse-spectrum truncation in
+    the PSD estimation, so only the SignalProcessor conditions the PSD
+    (as in the G1/G3 generators). The default 0.5 s keeps the M10/M11
+    real-event pipeline, which conditions twice.
     """
     detectors = list(detectors)
     expected_detector_order = list(

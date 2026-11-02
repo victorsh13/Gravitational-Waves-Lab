@@ -89,6 +89,10 @@ class RealEventRunContext:
 
     apply_intervals: Callable
 
+    # 0.5 s keeps the M10/M11 real-event pipeline; None skips truncation in
+    # the PSD estimation (G1/G3 contract: SignalProcessor conditions once).
+    psd_max_filter_duration: float | None = 0.5
+
 
 def run_single_event(
     event_cfg: dict,
@@ -274,7 +278,9 @@ def run_single_event(
             psd_segment_duration
         ),
         psd_low_frequency_cutoff=30.0,
-        psd_max_filter_duration=0.5,
+        psd_max_filter_duration=(
+            context.psd_max_filter_duration
+        ),
     )
 
     X_real_z = (
