@@ -35,7 +35,7 @@ Este índice recoge los datasets, experimentos y términos de la fase M13, con s
 | M13.5 | diagnóstico de la brecha train–val: ruido fijo frente a entorno | CPU local | cerrado (28-10): RUIDO_FIJO en 3 modelos × 3 etiquetas (f 0,90–1,08), control válido | M13_5_renoise.md |
 | M13.6 | aumentación de ruido: señal limpia + banco de ruido por PSD; M13.6a (s123, s124) y M13.4a-aug | CPU local + GPU | cerrado (31-10): aumentación adoptada como base; P-AUG1–3 PASA; 6a −6 % frente a 3b | M13_6_noise_augmentation.md |
 | M13.4a-aug | M13.4a + aumentación de ruido (M13.6) | entrenamiento GPU | 4a + aumentación: mejor modelo (−8 a −9 % frente a 3b; HIP-CONTEXTO apoyada); 1 semilla, s124 en curso | M13_6_noise_augmentation.md |
-| M13.8 | descomposición del error entre semillas (χ_eff por decil de τ) | CPU local | pre-registrado 4-11-2026; pendiente | M13_8_seed_decomposition.md |
+| M13.8 | descomposición del error entre semillas (χ_eff por decil de τ) | CPU local | pre-registrado 4-11-2026; cerrado: varianza relevante (G∞ 6,0 %); suelo común en D10; ventana descartada | M13_8_seed_decomposition.md |
 
 ## 3. Términos heredados de M12
 
