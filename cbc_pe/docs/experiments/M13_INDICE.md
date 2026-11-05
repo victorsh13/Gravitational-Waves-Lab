@@ -38,6 +38,7 @@ Este índice recoge los datasets, experimentos y términos de la fase M13, con s
 | M13.8 | descomposición del error entre semillas (χ_eff por decil de τ) | CPU local | pre-registrado 4-11-2026; cerrado: varianza relevante (G∞ 6,0 %); suelo común en D10; ventana descartada | M13_8_seed_decomposition.md |
 | M13.11 | referencia bayesiana (PE) por régimen de τ | CPU local | en pausa: G-MM falla por el escalón inicial | M13_11_bayesian_reference.md |
 | M13.12 | dependencia de la red del escalón inicial (clic) | CPU local + inferencia GPU | cerrado: dependencia relevante (ΔRMSE global +28/+16/+12 %) | M13_12_click_dependence.md |
+| M13.13 | G3T: G3 con forma de onda con taper (15–25 Hz) | pre-registrado 5-11-2026 | pendiente | M13_13_G3T_taper.md |
 
 ## 3. Términos heredados de M12
 
