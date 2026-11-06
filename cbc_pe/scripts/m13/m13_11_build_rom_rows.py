@@ -5,17 +5,22 @@ Protocol: docs/experiments/M13_11_bayesian_reference.md (amendment 2, 6-11-2026)
 
 The selection is m13_11_prepare_rows.select_rows (default_rng(131101)). Each row is rebuilt by build_g1_row
 (m13_11.capture_row), which gives the noise of G3, psd_proc, the projection, t_c and the final distance. Only
-the signal changes: SEOBNRv4_ROM from get_td_waveform with f_lower = 15 Hz, aligned by m13_11._align_to_A,
-then the same projector, G-EDGE, injection, processing and z-score as the S15 of m13_13_build_g3t.noisy_row.
+the signal changes: SEOBNRv4_ROM from get_td_waveform with f_lower = 15 Hz, aligned by align_rom, then the same
+projector, G-EDGE, injection, processing and z-score as the S15 of m13_13_build_g3t.noisy_row.
 
-Alignment: _align_to_A fits against A, on the whole of A, and that is exactly how S15 was aligned; ROM and S15
-therefore end up on the same sub-sample grid. The phase left between them is measured directly (analytic
-signal of h+, which does not depend on the inclination) and reported as residual_vs_s15_rad.
+Alignment (align_rom, local: m13_11._align_to_A is frozen and searches only +-32 samples, while the time-domain
+ROM has its peak tens of ms away from SEOBNRv4_opt). Reference: S15 face-on, on the segment S15 was fitted on,
+the length of A. (a) Coarse: FFT cross-correlation of h = h+ - i hx, ROM against S15, within +-0.25 s; a peak at
+the edge fails the row, not the run. (b) Fine, the procedure of _align_to_A on the result of (a): sub-sample lag
+by parabolic interpolation of the peak, then coa_phase += sign * delta / 2. The ROM is padded with zeros before
+being shifted, so that a delay cannot cut its merger. The phase left after the real inclination is regenerated
+is measured apart (analytic signal of h+, which does not depend on the inclination): residual_vs_s15_rad.
+The mismatch ROM-S15 (30-1024 Hz, aLIGOZeroDetHighPower as in G-TAPER) is informative only.
 
 Gates, per row (a failing row gets no .npz, the others go on, and the script exits with an error at the end):
   G-REC    the rebuild reproduces the G3 X, max|dX| <= 1e-5.
   G-NOISE  processed noise of the ROM path vs that of the G3 path, max|d| / max|n| <= 1e-6.
-  G-ALIGN  |residual against A| and |residual_vs_s15_rad| <= 0.04 rad.
+  G-ALIGN  |residual of the face-on fit| and |residual_vs_s15_rad| <= 0.04 rad; coarse peak inside +-0.25 s.
 
 Class of the row (amendment 3; it is a label, the row is kept and goes through the PE): snr2_fraction_flat is the
 fraction of the network SNR^2 of s_ROM inside the flat part of the Tukey window of the PE, from the whitened
@@ -66,17 +71,114 @@ m11 = g3t.m11
 
 ROM_F_LOWER = 15.0
 ALIGN_MAX = g3t.ALIGN_TOL  # 0.04 rad
+COARSE_WINDOW_S = 0.25
 PE_MARGIN_S = 2.0       # of the processing segment at each side of the final window
 PE_TUKEY_RAMP_S = 0.5   # each ramp, inside the margin
 FLAT_SNR2_MIN = 0.999
 SPLIT = "val"
 
 
+class RomAlignmentError(Exception):
+    """The ROM of this row cannot be aligned; the row fails, the run goes on."""
+
+
 def rom_make(kwargs):
-    """Waveform for m13_11._align_to_A. t_valid = 0: as for S15, the fit covers the whole of A (30 Hz up)."""
     from pycbc.waveform import get_td_waveform
-    hp, hc = get_td_waveform(**{**kwargs, "approximant": m11.ROM_APPROXIMANT, "f_lower": ROM_F_LOWER})
-    return hp, hc, 0.0
+    return get_td_waveform(**{**kwargs, "approximant": m11.ROM_APPROXIMANT, "f_lower": ROM_F_LOWER})
+
+
+def rom_s15_mismatch(r_hp, r_hc, s_hp, s_hc):
+    """Worst of h+ and hx: (time and phase maximised, phase maximised at the alignment found), 30-1024 Hz."""
+    from pycbc.filter import match, overlap_cplx
+    from pycbc.psd import aLIGOZeroDetHighPower
+    from pycbc.types import TimeSeries
+    dt = float(r_hp.delta_t)
+    t_ref = min(float(r_hp.start_time), float(s_hp.start_time))
+    k_r, k_s = (int(round((float(ts.start_time) - t_ref) / dt)) for ts in (r_hp, s_hp))
+    n_fft = 2 * int(2 ** np.ceil(np.log2(max(k_r + len(r_hp), k_s + len(s_hp)))))
+    psd = aLIGOZeroDetHighPower(n_fft // 2 + 1, 1.0 / (n_fft * dt), m11.INTRINSIC_PSD_F_LOW)
+
+    def place(ts, k):
+        x = np.zeros(n_fft)
+        x[k:k + len(ts)] = ts.numpy()
+        return TimeSeries(x, delta_t=dt, epoch=0.0)
+
+    lo, hi = m11.BAND_HZ
+    best, here = 0.0, 0.0
+    for r, s_ in ((r_hp, s_hp), (r_hc, s_hc)):
+        a, b = place(r, k_r), place(s_, k_s)
+        best = max(best, 1.0 - float(match(a, b, psd=psd, low_frequency_cutoff=lo, high_frequency_cutoff=hi)[0]))
+        here = max(here, 1.0 - abs(overlap_cplx(a, b, psd=psd, low_frequency_cutoff=lo, high_frequency_cutoff=hi,
+                                                normalized=True)))
+    return best, float(here)
+
+
+def align_rom(opt_args):
+    """(h+, hx, diagnostics) of the ROM aligned with S15; see the module docstring.
+
+    Returns the ROM with the real kwargs. S15 and the ROM share a sub-sample grid, as S15 and A do in _align_to_A.
+    """
+    from pycbc.types import TimeSeries
+    dt = float(opt_args["delta_t"])
+    face = {**opt_args, "inclination": 0.0}
+    coa0 = float(opt_args.get("coa_phase", 0.0))
+    s_hp, s_hc, align_s = m11._opt_click_free_aligned(face)
+    a = s_hp.numpy() - 1j * s_hc.numpy()
+    n_seg = int(round(align_s["common_segment_s"] / dt))
+    i_s = len(a) - n_seg
+    require(i_s >= 0, "S15 is shorter than the segment it was fitted on")
+    a_seg = a[i_s:]
+
+    r_hp, r_hc = rom_make(face)
+    start_r, n_r = float(r_hp.start_time), len(r_hp)
+    x = r_hp.numpy() - 1j * r_hc.numpy()
+    offset = (float(s_hp.start_time) - start_r) / dt
+    k_e = int(round(offset))
+    r0 = offset - k_e
+
+    # (a) r[m] = sum_k x[k + m] conj(a_seg[k]), around m0 = the alignment given by the epochs.
+    n_fft = int(2 ** np.ceil(np.log2(len(x) + n_seg)))
+    r = np.fft.ifft(np.fft.fft(x, n_fft) * np.conj(np.fft.fft(a_seg, n_fft)))
+    w = int(round(COARSE_WINDOW_S / dt))
+    c = np.abs(r[(i_s + k_e + np.arange(-w, w + 1)) % n_fft])
+    i = int(np.argmax(c))
+    if i == 0 or i == 2 * w:
+        raise RomAlignmentError(f"Coarse peak at the edge of +-{COARSE_WINDOW_S:g} s ({(i - w) * dt * 1e3:+.1f} ms)")
+    coarse = i - w
+
+    # (b) Sub-sample lag and phase, as _align_to_A. Zeros at both ends, since _advance keeps the input length.
+    fine = 0.5 * (c[i - 1] - c[i + 1]) / (c[i - 1] - 2.0 * c[i] + c[i + 1])
+    lag = coarse + fine
+    epoch = start_r - w * dt + r0 * dt  # on the sub-sample grid of S15
+
+    def aligned(hp, hc):
+        if float(hp.start_time) != start_r or len(hp) != n_r:
+            raise RomAlignmentError("Regenerated ROM is on another time grid")
+        return tuple(m11._advance(TimeSeries(np.concatenate((np.zeros(w), ts.numpy(), np.zeros(w))), delta_t=dt,
+                                             epoch=start_r - w * dt), lag, epoch) for ts in (hp, hc))
+
+    def phase(hp, hc):
+        h = hp.numpy() - 1j * hc.numpy()
+        begin = i_s + k_e + w
+        seg = h[begin:begin + n_seg]
+        return float(np.angle(np.vdot(seg, a_seg[:len(seg)])))
+
+    delta = phase(*aligned(r_hp, r_hc))
+    best = None
+    for sign in (1.0, -1.0):
+        candidate = aligned(*rom_make({**face, "coa_phase": coa0 + sign * delta / 2}))
+        residual = phase(*candidate)
+        if best is None or abs(residual) < abs(best[1]):
+            best = (sign, residual, candidate)
+        if abs(residual) < m11.CLICK_ALIGN_PHASE_TOL:
+            break
+    sign, residual, face_aligned = best
+    mismatch, mismatch_here = rom_s15_mismatch(*face_aligned, s_hp, s_hc)
+    hp, hc = aligned(*rom_make({**opt_args, "coa_phase": coa0 + sign * delta / 2}))
+    return hp, hc, dict(coarse_lag_ms=coarse * dt * 1e3, fine_lag_ms=fine * dt * 1e3, delta_rad=delta, sign=sign,
+                        residual_rad=residual, coa_phase_shift_rad=sign * delta / 2,
+                        time_shift_s=float((lag - r0) * dt), common_segment_s=n_seg * dt,
+                        mismatch_rom_s15=mismatch, mismatch_rom_s15_at_alignment=mismatch_here)
 
 
 def residual_vs_s15(rom_hp, s15_hp, segment_s):
@@ -135,7 +237,10 @@ def rom_row(row, index, ctx, trainio_h, selected):
                float(np.abs(np.asarray(X_rep, dtype=np.float64) - X_g3).max()))
 
     # Same noise, PSD, injection, processing and z-score; only the signal is the ROM.
-    hp, hc, align = m11._align_to_A(opt_args, rom_make)
+    try:
+        hp, hc, align = align_rom(opt_args)
+    except RomAlignmentError as exc:
+        return dict(row_index=int(index), regime=selected["regime"], alignment_error=str(exc)), None, None
     s15_hp, _, align_s15 = m11._opt_click_free_aligned(opt_args)
     direct = residual_vs_s15(hp, s15_hp, align["common_segment_s"])
     proj = g1.DETECTOR_PROJECTOR.project(h_plus=hp, h_cross=hc, parameters=cap.params,
@@ -183,6 +288,9 @@ def rom_row(row, index, ctx, trainio_h, selected):
                G_ALIGN=float(align["residual_rad"]), residual_vs_s15_rad=direct,
                s15_residual_rad=float(align_s15["residual_rad"]), rom_time_shift_s=float(align["time_shift_s"]),
                rom_coa_phase_shift_rad=float(align["coa_phase_shift_rad"]),
+               coarse_lag_ms=align["coarse_lag_ms"], fine_lag_ms=align["fine_lag_ms"],
+               mismatch_rom_s15=align["mismatch_rom_s15"],
+               mismatch_rom_s15_at_alignment=align["mismatch_rom_s15_at_alignment"],
                edge_samples=n_before, edge=bool(max(n_before.values()) > 0),
                is_truncated=bool(meta["is_truncated"]), target_network_snr=float(row["target_network_snr"]),
                row_class=row_class, snr2_fraction_flat=frac_flat, snr2_fraction_final4s=frac_4s,
@@ -210,6 +318,8 @@ def rom_row(row, index, ctx, trainio_h, selected):
 
 
 def gate_fails(rec):
+    if "alignment_error" in rec:
+        return ["G-ALIGN"]
     fails = []
     if not rec["G_REC"] <= m11.GREC_MAX:
         fails.append("G-REC")
@@ -243,8 +353,11 @@ def summary(records, fails):
                  G_REC=dict(threshold=m11.GREC_MAX, max=max((r["G_REC"] for r in good), default=None)),
                  G_NOISE=dict(threshold=GDIFF_RTOL, max=max((r["G_NOISE"] for r in good), default=None)),
                  G_ALIGN=dict(threshold_rad=ALIGN_MAX,
-                              max_vs_A=max((abs(r["G_ALIGN"]) for r in good), default=None),
+                              max_fit=max((abs(r["G_ALIGN"]) for r in good), default=None),
                               max_vs_s15=max((abs(r["residual_vs_s15_rad"]) for r in good), default=None)),
+                 coarse_lag_ms=dict(min=min((r["coarse_lag_ms"] for r in good), default=None),
+                                    max=max((r["coarse_lag_ms"] for r in good), default=None)),
+                 mismatch_rom_s15_max=max((r["mismatch_rom_s15"] for r in good), default=None),
                  G_EDGE=dict(n_rows_tapered=sum(r["edge"] for r in good)),
                  flat_zone=dict(threshold=FLAT_SNR2_MIN,
                                 truncated_or_edge=[r["row_index"] for r in good if r["row_class"] != "primary"],
@@ -369,8 +482,7 @@ def main():
                 failed = gate_fails(rec)
                 if failed:
                     fails.append(dict(gates=failed, record=rec))
-                    log(f"row {index} ({rec['regime']}) FAIL {failed}: G-REC {rec['G_REC']:.1e}, G-NOISE "
-                        f"{rec['G_NOISE']:.1e}, residual {rec['G_ALIGN']:+.1e} / {rec['residual_vs_s15_rad']:+.1e} rad")
+                    log(f"row {index} ({rec['regime']}) FAIL {failed}: {rec.get('alignment_error', rec)}")
                     continue
                 X[position[index]] = x16
                 X.flush()
@@ -380,8 +492,9 @@ def main():
                 write_row(npz[index], arrays)
                 records[index] = rec
                 log(f"row {index} ({rec['regime']}) {rec['time_s']:.1f} s: G-REC {rec['G_REC']:.1e}, G-NOISE "
-                    f"{rec['G_NOISE']:.1e}, residual {rec['G_ALIGN']:+.1e} rad, vs S15 "
-                    f"{rec['residual_vs_s15_rad']:+.1e} rad, SNR {rec['snr_rom_network_4s']:.2f} (target "
+                    f"{rec['G_NOISE']:.1e}, lag {rec['coarse_lag_ms']:+.2f} + {rec['fine_lag_ms']:+.3f} ms, residual "
+                    f"{rec['G_ALIGN']:+.1e} rad, vs S15 {rec['residual_vs_s15_rad']:+.1e} rad, mismatch "
+                    f"{rec['mismatch_rom_s15']:.1e}, SNR {rec['snr_rom_network_4s']:.2f} (target "
                     f"{rec['target_network_snr']:.2f}), edge {int(rec['edge'])}, flat "
                     f"{rec['snr2_fraction_flat']:.5f}, 4 s {rec['snr2_fraction_final4s']:.5f}, {rec['row_class']}  "
                     f"{progress.tick()}")
@@ -391,7 +504,8 @@ def main():
 
     s = summary(records, fails)
     log(f"Gates: {s['n_rows']} rows OK, {s['n_failed']} failed; G-REC {s['G_REC']['max']}, G-NOISE "
-        f"{s['G_NOISE']['max']}, G-ALIGN {s['G_ALIGN']['max_vs_A']} / {s['G_ALIGN']['max_vs_s15']} rad")
+        f"{s['G_NOISE']['max']}, G-ALIGN {s['G_ALIGN']['max_fit']} / {s['G_ALIGN']['max_vs_s15']} rad; "
+        f"coarse lag {s['coarse_lag_ms']}, max mismatch ROM-S15 {s['mismatch_rom_s15_max']}")
     log(f"Flat zone: {s['flat_zone']}")
     if fails:
         g3t.overwrite_json(out_dir / "gates_FAIL.json", dict(fails=fails))
