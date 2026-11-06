@@ -40,3 +40,6 @@ Con 15–25 Hz, 14/2000 filas superaban el mismatch de 1e-4 frente a Sref (media
 
 ## Enmienda 3 (5-11-2026, antes de generar)
 G-ALIGN: el residuo de fase tras alinear con la forma de onda de G3 suele ser ~1e-16, pero algunas filas llegan a 4–8e-3 rad (gate y prueba de val), cerca del límite de 0,01. Un pequeño error de fase no altera la validez física de la señal (cambia ligeramente la fase de coalescencia, que no es una etiqueta); solo afecta a la comparación fila a fila con G3. Nuevo criterio: tolerancia de 0,04 rad (diferencia en banda con SNR ≤ 1 a SNR 25, como la enmienda 2); las filas que la superan se registran y no detienen la generación. Se para solo si alguna fila supera 0,5 rad (fallo) o más del 0,1 % de un split o fragmento supera 0,04 rad.
+
+## Enmienda 4 (6-11-2026, antes de ver resultados finales)
+Se lanza 4b-aug s123 en G3T en paralelo a 4a (excepción a la regla de no entrenar otro modelo hasta revisar el primero), para aprovechar la GPU (4b tarda ~50 h). Motivo: las 13 primeras épocas de 4a-G3T son sanas (MSE de train40k ≈ val, descenso continuo, pendientes ~1). Si 4a-G3T no cumple P-AUG1 o P-AUG2 al terminar, 4b se detiene.

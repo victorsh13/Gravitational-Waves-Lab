@@ -1,0 +1,33 @@
+{
+  "project_root": "/data/vserrano/gw/Gravitational-Waves-Lab/cbc_pe",
+  "data_root": "/data/vserrano/cbc_pe_data",
+  "dataset": {
+    "dataset_id": "M13_G3_band1024_w16_500k/m13_13_g3t",
+    "dataset_file": "m13_G3_band1024_w16_500k_trainio.h5",
+    "split_file": "../M11_final_G1_500k_splits_train400000_val40000_cal30000_test30000_seed123.npz",
+    "label_stats_file": "../M11_final_G1_500k_label_stats_train_only_train400000_val40000_cal30000_test30000_seed123.npz"
+  },
+  "prediction": {
+    "checkpoint_file": "M13_3/M13_4a_G3aug_s123_final.pt",
+    "splits": [
+      "val"
+    ],
+    "seed": 123,
+    "batch_size": 256,
+    "num_workers": 2,
+    "pin_memory": true,
+    "prefetch_factor": 2,
+    "data_loading_mode": "fp16_memmap",
+    "memmap_dir": "fp16_memmap",
+    "input_normalization": {
+      "enabled": false,
+      "already_normalized": true,
+      "mode": "per_sample_per_detector_zscore",
+      "eps": 1e-06
+    }
+  },
+  "output": {
+    "file_name": "../../M13_3/M13_13/preds_4a_G3_on_G3T_val/val_predictions_embeddings.npz",
+    "overwrite": false
+  }
+}
