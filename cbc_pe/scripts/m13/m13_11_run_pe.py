@@ -41,6 +41,7 @@ injected signal is at t_c - tau; coa_phase is param_coa_phase + param_rom_coa_ph
 as the posterior, hence independent of the coa_phase; loglr_truth_aligned_fixed_phase keeps Re<h|d> - <h|h>/2, the one
 that the coa_phase changes. loglr_max_posterior is the exact loglr at the nested sample of highest likelihood.
 truth_inconsistent: loglr_truth_aligned is more than TRUTH_MAX_DEFICIT below it (information only, not for the bank).
+A failure of these checks never stops a PE: the row is saved with truth_check_error in its .json.
 --check-truth adds these fields to the .json of finished rows, from their stored samples, without running the PE.
 
 Output: <rows_dir>/pe_8s_nlive<N>_walks<W>_eps<E>_d<prior>/
@@ -168,6 +169,7 @@ from pycbc.transforms import MchirpQToMass1Mass2
 from pycbc.types import Array, FrequencySeries, TimeSeries
 from pycbc.waveform import get_fd_waveform_sequence
 from scipy.signal.windows import tukey
+from scipy.special import ive
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -215,7 +217,13 @@ def exact_sh_hh(model, params):
 
 
 def exact_loglr(model, params):
+    """Through the model: needs model.loglr called first, which creates the state of marginalize_loglr."""
     return float(model.marginalize_loglr(*exact_sh_hh(model, params)))
+
+
+def phase_marginal_loglr(sh, hh):
+    """log I0(|sh|) - hh / 2, the phase marginalization of the model, without its state."""
+    return float(np.log(ive(0, abs(sh))) + abs(sh) - 0.5 * hh)
 
 
 def truth_as_injected(row, rows_dir, truth):
@@ -237,10 +245,33 @@ def truth_check(model, injected, nested, nested_logl):
     sh, hh = exact_sh_hh(model, injected)
     i = int(np.argmax(nested_logl))
     best = {k: float(nested[k][i]) for k in (*VARIABLE_PARAMS, "mass1", "mass2")}
-    aligned, top = float(model.marginalize_loglr(sh, hh)), exact_loglr(model, best)
+    aligned, top = phase_marginal_loglr(sh, hh), phase_marginal_loglr(*exact_sh_hh(model, best))
+    model.update(**{k: best[k] for k in VARIABLE_PARAMS})
+    loglr_relative = float(model.loglr)
+    through_model = exact_loglr(model, best)
     return dict(loglr_truth_aligned=aligned, loglr_truth_aligned_fixed_phase=float(sh.real - 0.5 * hh),
-                loglr_max_posterior=top, truth_alignment=dict(tc=injected["tc"], coa_phase=injected["coa_phase"]),
+                loglr_max_posterior=top, loglr_max_posterior_model=through_model,
+                loglr_max_posterior_relative=loglr_relative, marginal_abs_diff=abs(top - through_model),
+                truth_alignment=dict(tc=injected["tc"], coa_phase=injected["coa_phase"]),
                 truth_inconsistent=bool(not top - aligned <= TRUTH_MAX_DEFICIT))
+
+
+def guarded_truth_as_injected(row, rows_dir, truth):
+    """(injected, None), or (None, traceback): this check must never stop a PE."""
+    try:
+        return truth_as_injected(row, rows_dir, truth), None
+    except Exception:
+        return None, traceback.format_exc()
+
+
+def guarded_truth_check(model, injected, error, nested, nested_logl):
+    """Fields of the .json; a failure is recorded as truth_check_error and the PE goes on to save its results."""
+    if error is not None:
+        return dict(truth_check_error=error)
+    try:
+        return truth_check(model, injected, nested, nested_logl)
+    except Exception:
+        return dict(truth_check_error=traceback.format_exc())
 
 
 def component_mass_limits(params):
@@ -340,9 +371,13 @@ def run_row(row_path, out_stem, args):
     model, truth = build_model(row, args)
     model.update(**truth)
     loglr_truth = float(model.loglr)
-    injected = truth_as_injected(row, row_path.parent, truth)  # before the sampler: a missing record fails at once
+    injected, truth_error = guarded_truth_as_injected(row, row_path.parent, truth)
+    try:
+        aligned_text = "failed" if injected is None else f"{phase_marginal_loglr(*exact_sh_hh(model, injected)):.2f}"
+    except Exception:
+        aligned_text, truth_error = "failed", traceback.format_exc()
     print(f"row {index} ({scalar(row, 'regime')}): loglr(truth) {loglr_truth:.2f}, loglr(truth aligned) "
-          f"{exact_loglr(model, injected):.2f}, target SNR "
+          f"{aligned_text}, target SNR "
           f"{scalar(row, 'param_target_network_snr'):.2f}, bins {[len(e) for e in model.edges.values()]}, "
           f"{row_class}, SNR^2 in flat zone {scalar(row, 'snr2_fraction_flat'):.5f}", flush=True)
 
@@ -369,7 +404,7 @@ def run_row(row_path, out_stem, args):
     posterior = derived({k: v[draw] for k, v in nested.items()})
     nested = derived(nested)
     check = relbin_check(model, posterior, N_CHECK)
-    truth_fields = truth_check(model, injected, nested, res.logl)
+    truth_fields = guarded_truth_check(model, injected, truth_error, nested, res.logl)
 
     labels = [str(x) for x in row["label_names"]]
     summary = {k: dict(mean=float(np.average(nested[k], weights=weights)),
@@ -415,9 +450,13 @@ def run_row(row_path, out_stem, args):
 
 
 def truth_summary(fields):
+    if "truth_check_error" in fields:
+        return "truth check FAILED, see truth_check_error in the .json"
     return (f"loglr truth aligned {fields['loglr_truth_aligned']:.2f} (fixed phase "
-            f"{fields['loglr_truth_aligned_fixed_phase']:.2f}), max posterior {fields['loglr_max_posterior']:.2f}"
-            + (", TRUTH INCONSISTENT" if fields["truth_inconsistent"] else ""))
+            f"{fields['loglr_truth_aligned_fixed_phase']:.2f}), max posterior {fields['loglr_max_posterior']:.2f} "
+            f"(through the model {fields['loglr_max_posterior_model']:.2f}, |diff| "
+            f"{fields['marginal_abs_diff']:.1e}; relative {fields['loglr_max_posterior_relative']:.2f}), "
+            f"truth_inconsistent {fields['truth_inconsistent']}")
 
 
 def check_truth_row(row_path, out_stem, args):
