@@ -9,6 +9,9 @@ Training: model class/kwargs from the config, AdamW(lr=peak_lr, wd), MSE on trai
 labels [chirp_mass, total_mass, chi_eff], batch 256, drop_last, RandomBatchSampler(seed). Per-step
 LambdaLR: linear warmup over warmup_epochs to peak_lr, cosine to 0 at the end of max_epochs. No early
 stopping; the registered model is the last epoch (_final.pt). _bestval.pt is informative only.
+Optional training keys (M13.9/M13.10; absent = the behaviour above): schedule.warmup_steps replaces
+schedule.warmup_epochs; train_subset = {n, seed} trains on nested rows default_rng(seed).permutation(...)[:n];
+total_steps stops the run at that step, possibly in the middle of the last epoch.
 Optional dropout switch-off: from 0-based epoch ceil((1 - f) * max_epochs) every nn.Dropout gets p=0.
 
 Optional noise augmentation (M13.6, only if training.noise_augmentation.enabled): train X is rebuilt
@@ -98,6 +101,44 @@ def dropout_off_epoch(fraction, max_epochs):
         return None
     # round() guards against float noise, e.g. (1 - 0.2) * 80 must give 64, not 65.
     return int(math.ceil(round((1.0 - fraction) * max_epochs, 9)))
+
+
+def schedule_steps(tcfg, steps_per_epoch, max_epochs):
+    """Return (warmup_steps, total_steps); without the optional keys, epochs times steps_per_epoch."""
+    sched = tcfg["schedule"]
+    has_steps = "warmup_steps" in sched
+    warmup_steps = int(sched["warmup_steps"]) if has_steps else steps_per_epoch * int(sched["warmup_epochs"])
+    total_steps = int(tcfg.get("total_steps", steps_per_epoch * max_epochs))
+    if not (max_epochs - 1) * steps_per_epoch < total_steps <= max_epochs * steps_per_epoch:
+        raise SystemExit(f"total_steps={total_steps} does not end in epoch {max_epochs} "
+                         f"({steps_per_epoch} steps/epoch)")
+    if has_steps and not 0 < warmup_steps < total_steps:
+        raise SystemExit(f"warmup_steps={warmup_steps} must be in (0, {total_steps})")
+    return warmup_steps, total_steps
+
+
+class SubsetBatchSampler(RandomBatchSampler):
+    """RandomBatchSampler over a fixed set of train positions (same per-epoch permutation rule)."""
+
+    def __init__(self, positions, batch_size, seed, drop_last=True):
+        super().__init__(positions.size, batch_size, seed, drop_last)
+        self.positions = positions
+
+    def _order(self):
+        return self.positions[super()._order()]
+
+
+def make_train_sampler(n_train, tcfg, seed):
+    """Return (sampler, positions); positions is None when the whole train split is used."""
+    sub = tcfg.get("train_subset")
+    if not sub:
+        return RandomBatchSampler(n_train, BATCH, seed=seed, drop_last=True), None
+    n = int(sub["n"])
+    if not 0 < n <= n_train:
+        raise SystemExit(f"train_subset.n={n} must be in (0, {n_train}]")
+    # Same permutation cut at n, so smaller subsets are nested in larger ones with the same seed.
+    positions = np.random.default_rng(int(sub["seed"])).permutation(n_train)[:n]
+    return SubsetBatchSampler(positions, BATCH, seed, drop_last=True), positions
 
 
 def disable_dropout(model):
@@ -322,7 +363,9 @@ def main():
     max_epochs = int(tcfg["max_epochs"])
     sched = tcfg["schedule"]
     peak_lr = float(sched["peak_lr"])
-    warmup_epochs = int(sched["warmup_epochs"])
+    if ("warmup_epochs" in sched) == ("warmup_steps" in sched):
+        raise SystemExit("schedule needs exactly one of warmup_epochs, warmup_steps")
+    warmup_epochs = int(sched["warmup_epochs"]) if "warmup_epochs" in sched else None
     weight_decay = float(tcfg["weight_decay"])
     off_fraction = float(tcfg.get("dropout_off_fraction", 0.0))
     tr_every = int(tcfg.get("monitor_train40k_every", 1))
@@ -399,7 +442,7 @@ def main():
         print(f"WARNING: HDF5 {h5_path} not found; skipping memmap-vs-HDF5 check", flush=True)
         hdf5_check = None
 
-    train_sampler = RandomBatchSampler(len(ds["train"]), BATCH, seed=seed, drop_last=True)
+    train_sampler, subset_pos = make_train_sampler(len(ds["train"]), tcfg, seed)
     if use_aug:
         aug_dir, bank_start, bank_k, aug_info = load_noise_aug(acfg, dataset_processed_dir(data_root, dataset_id),
                                                                mm_dir, row_ids["train"])
@@ -417,8 +460,7 @@ def main():
     tr_loader = make_loader(ds["train"], [tr_pos[i:i + BATCH] for i in range(0, tr_pos.size, BATCH)])
 
     steps_per_epoch = len(train_sampler)
-    total_steps = steps_per_epoch * max_epochs
-    warmup_steps = steps_per_epoch * warmup_epochs
+    warmup_steps, total_steps = schedule_steps(tcfg, steps_per_epoch, max_epochs)
 
     model = getattr(network, mcfg["class_name"])(**mcfg["kwargs"]).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=peak_lr, weight_decay=weight_decay)
@@ -469,7 +511,7 @@ def main():
                  "train_monitor": {"n": TRAIN_MONITOR_N, "seed": TRAIN_MONITOR_SEED}},
         "procedure": {"optimizer": {"name": "AdamW", "lr": peak_lr, "weight_decay": weight_decay},
                       "loss": "MSELoss (standardized labels)", "batch_size": BATCH, "drop_last": True,
-                      "sampler": {"name": "RandomBatchSampler", "seed": seed},
+                      "sampler": {"name": type(train_sampler).__name__, "seed": seed},
                       "schedule": {"type": "linear warmup + cosine to 0, per step", "peak_lr": peak_lr,
                                    "warmup_epochs": warmup_epochs, "warmup_steps": warmup_steps,
                                    "steps_per_epoch": steps_per_epoch, "total_steps": total_steps},
@@ -487,6 +529,11 @@ def main():
     }
     if use_aug:
         run_info["data"]["noise_augmentation"] = aug_info
+    if subset_pos is not None:
+        # Hash of the HDF5 row ids (sorted int64 bytes), so the chosen rows can be checked without the rng.
+        rows = np.sort(row_ids["train"][subset_pos]).astype(np.int64)
+        run_info["data"]["train_subset"] = {"n": int(subset_pos.size), "seed": int(tcfg["train_subset"]["seed"]),
+                                            "row_ids_sha256": hashlib.sha256(rows.tobytes()).hexdigest()}
     info_path = p_info if not args.resume else res_dir / f"run_info_resume_e{start_epoch:03d}.json"
     with open(info_path, "x") as f:
         json.dump(run_info, f, indent=2)
@@ -539,11 +586,14 @@ def main():
             scheduler.step()
             loss_sum += loss.detach() * xb.shape[0]
             n_seen += xb.shape[0]
+            if scheduler.last_epoch >= total_steps:
+                break
         del it
         train_loss = float(loss_sum) / n_seen
         t_train = time.perf_counter() - t0
-        if scheduler.last_epoch != (epoch + 1) * steps_per_epoch:
-            raise RuntimeError(f"scheduler step {scheduler.last_epoch} != {(epoch + 1) * steps_per_epoch}")
+        expected_step = min((epoch + 1) * steps_per_epoch, total_steps)
+        if scheduler.last_epoch != expected_step:
+            raise RuntimeError(f"scheduler step {scheduler.last_epoch} != {expected_step}")
 
         t0 = time.perf_counter()
         val_out = predict(model, val_loader, device)

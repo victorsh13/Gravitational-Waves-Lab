@@ -36,6 +36,8 @@ Este índice recoge los datasets, experimentos y términos de la fase M13, con s
 | M13.6 | aumentación de ruido: señal limpia + banco de ruido por PSD; M13.6a (s123, s124) y M13.4a-aug | CPU local + GPU | cerrado (31-10): aumentación adoptada como base; P-AUG1–3 PASA; 6a −6 % frente a 3b | M13_6_noise_augmentation.md |
 | M13.4a-aug | M13.4a + aumentación de ruido (M13.6) | entrenamiento GPU | 4a + aumentación: mejor modelo (−8 a −9 % frente a 3b; HIP-CONTEXTO apoyada); 1 semilla, s124 en curso | M13_6_noise_augmentation.md |
 | M13.8 | descomposición del error entre semillas (χ_eff por decil de τ) | CPU local | pre-registrado 4-11-2026; cerrado: varianza relevante (G∞ 6,0 %); suelo común en D10; ventana descartada | M13_8_seed_decomposition.md |
+| M13.9 | protocolo corto: 4a-aug 20 épocas con programa comprimido, s123 y s124, G3T | entrenamiento GPU | pre-registrado 6-11-2026; pendiente | M13_9_short_protocol.md |
+| M13.10 | curva de aprendizaje en número de fuentes: 4a-aug s123, G3T, N = 100k/200k (anidados) frente a 400k, 124 960 pasos | entrenamiento GPU | pre-registrado 6-11-2026; pendiente | M13_10_learning_curve.md |
 | M13.11 | referencia bayesiana (PE) por régimen de τ | CPU local | en pausa: G-MM falla por el escalón inicial | M13_11_bayesian_reference.md |
 | M13.12 | dependencia de la red del escalón inicial (clic) | CPU local + inferencia GPU | cerrado: dependencia relevante (ΔRMSE global +28/+16/+12 %) | M13_12_click_dependence.md |
 | M13.13 | G3T: G3 con forma de onda con taper (15–25 Hz) | pre-registrado 5-11-2026 | pendiente | M13_13_G3T_taper.md |
