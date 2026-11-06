@@ -11,11 +11,12 @@ products 30-1024 Hz.
 Window (amendment 3). Tukey with 0.5 s ramps (alpha = 0.25), inside the 2 s margins. The signal stays in the flat
 part, so the standard model "relative" applies with an unwindowed template. The noise in the ramps is reduced;
 the PSD is not scaled by mean(w^2), because that would raise the SNR of a signal lying in the flat part.
-Rows of class truncated_or_edge also get a PE; they are out of the primary analysis and reported apart.
+Rows of class truncated_or_edge (is_truncated = True in G3, amendment 4) also get a PE; they are out of the primary
+analysis and reported apart. The class comes from is_truncated, not from the row_class stored in the .npz, which
+is stale in rows built before amendment 4. The SNR^2 fractions are copied to the .json as information.
 
 relbin_check: 8 posterior samples, relative loglr against the exact one (template at every frequency bin).
-Criterion of the row: max_abs_diff <= 0.2 (relbin_ok in the .json). primary = class primary, relbin_ok and
-is_truncated = False (G3): a truncated row can fit in the flat zone with signal in the margins.
+Criterion of the row: max_abs_diff <= 0.2 (relbin_ok in the .json). primary = is_truncated False and relbin_ok.
 
 Priors (pre-registration):
   - m1, m2 U[5, 90], m1 >= m2. Sampled as (mchirp, q) with the pycbc distributions that are uniform in m1, m2,
@@ -275,12 +276,13 @@ def run_row(row_path, out_stem, args):
     t_start = time.perf_counter()
     row = load_row(row_path)
     index = scalar(row, "row_index")
+    row_class = "truncated_or_edge" if scalar(row, "param_is_truncated") else "primary"
     model, truth = build_model(row, args)
     model.update(**truth)
     loglr_truth = float(model.loglr)
     print(f"row {index} ({scalar(row, 'regime')}): loglr(truth) {loglr_truth:.2f}, target SNR "
           f"{scalar(row, 'param_target_network_snr'):.2f}, bins {[len(e) for e in model.edges.values()]}, "
-          f"{scalar(row, 'row_class')}, SNR^2 in flat zone {scalar(row, 'snr2_fraction_flat'):.5f}", flush=True)
+          f"{row_class}, SNR^2 in flat zone {scalar(row, 'snr2_fraction_flat'):.5f}", flush=True)
 
     rng = np.random.default_rng([PE_SEED, index])
     sampler = DynestySampler(
@@ -327,10 +329,9 @@ def run_row(row_path, out_stem, args):
         n_likelihood_calls=int(np.sum(res.ncall)), n_iterations=int(res.niter), n_posterior_samples=n_eff,
         logz=float(res.logz[-1]), logz_err=float(res.logzerr[-1]), loglr_truth=loglr_truth,
         target_network_snr=scalar(row, "param_target_network_snr"), labels=summary, relbin_check=check,
-        row_class=scalar(row, "row_class"), snr2_fraction_flat=scalar(row, "snr2_fraction_flat"),
+        row_class=row_class, snr2_fraction_flat=scalar(row, "snr2_fraction_flat"),
         snr2_fraction_final4s=scalar(row, "snr2_fraction_final4s"), is_truncated=scalar(row, "param_is_truncated"),
-        relbin_ok=check["relbin_ok"], primary=bool(scalar(row, "row_class") == "primary" and check["relbin_ok"]
-                                                   and not scalar(row, "param_is_truncated")),
+        relbin_ok=check["relbin_ok"], primary=bool(row_class == "primary" and check["relbin_ok"]),
         settings=dict(nlive=args.nlive, walks=args.walks, epsilon=args.epsilon, dlogz=DLOGZ, workers=args.workers,
                       distance_prior=args.distance_prior, distance_range_mpc=list(DISTANCE_RANGE_MPC),
                       tc_half_width_s=TC_HALF_WIDTH_S, segment_s=row["strain_8s"].shape[1] * scalar(row, "delta_t"),

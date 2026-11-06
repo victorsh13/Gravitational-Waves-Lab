@@ -22,10 +22,23 @@ Gates, per row (a failing row gets no .npz, the others go on, and the script exi
   G-NOISE  processed noise of the ROM path vs that of the G3 path, max|d| / max|n| <= 1e-6.
   G-ALIGN  |residual of the face-on fit| and |residual_vs_s15_rad| <= 0.04 rad; coarse peak inside +-0.25 s.
 
-Class of the row (amendment 3; it is a label, the row is kept and goes through the PE): snr2_fraction_flat is the
-fraction of the network SNR^2 of s_ROM inside the flat part of the Tukey window of the PE, from the whitened
-30-1024 Hz signal in time on the processing segment. Below 0.999 the row is "truncated_or_edge", out of the
-primary analysis and reported apart; otherwise "primary". snr2_fraction_final4s is the same inside the final 4 s.
+Class of the row (amendment 4; a label, every row goes through the PE): "primary" if is_truncated = False in G3,
+i.e. the waveform from 30 Hz fits in the final 4 s; otherwise "truncated_or_edge", reported apart.
+snr2_fraction_flat and snr2_fraction_final4s are information only: the fraction of the network SNR^2 of s_ROM in
+the flat part of the Tukey window of the PE and in the final 4 s, from the whitened 30-1024 Hz signal in time. The
+whitening filter spreads that energy out of the window, so ~0.998 is normal in a row that is not truncated.
+
+G-EDGE: inject would cut a signal that starts before processing_start, so m13_13_build_g3t.edge_taper rolls it up
+over the first 0.5 s of the processing segment ("edge" in the records, samples before it in edge_samples). The
+ROM series can start long before that: the inspiral from 15 Hz, and the padding of its FD-to-TD conversion.
+edge_snr2_removed_fraction is the fraction of the network SNR^2 in 30-1024 Hz of the projection removed by the
+cut and the taper.
+
+--reclassify DIR, for rows already built: writes DIR/row_classes.json with the class from is_truncated and
+edge_snr2_removed_fraction, which needs the noiseless projection again (the taper is outside the stored 8 s): ROM,
+aligned, projected and tapered from the .npz parameters, and required to reproduce the stored signal_8s. Nothing
+of the rows changes (.npz, rows.jsonl, X); a stale row_class in an .npz is ignored, since run_pe takes the class
+from is_truncated. It records this script in meta.json, so that --resume-dir can add rows to DIR.
 
 Output, <data_root>/results/M13_3/M13_11/rom_rows_<UTC>/ (--resume-dir continues one):
   selection.json          same fields as rows/<stamp>/selection.json
@@ -60,6 +73,7 @@ from scipy.signal import hilbert
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
+from src.parameters import CBCParameters
 import scripts.generate_m11_final_G1 as g1
 from scripts.generate_m11_final_G1 import DETECTORS, LABELS, require, resolve_cached_psd_files, sha256_file
 import scripts.m13.generate_m13_G3_whitening as g3
@@ -74,7 +88,7 @@ ALIGN_MAX = g3t.ALIGN_TOL  # 0.04 rad
 COARSE_WINDOW_S = 0.25
 PE_MARGIN_S = 2.0       # of the processing segment at each side of the final window
 PE_TUKEY_RAMP_S = 0.5   # each ramp, inside the margin
-FLAT_SNR2_MIN = 0.999
+RECONSTRUCTION_RTOL = 1e-6  # --reclassify: projection rebuilt vs stored signal_8s
 SPLIT = "val"
 
 
@@ -211,6 +225,31 @@ def snr2_density(x, psd, dt):
     return np.fft.irfft(X, n) ** 2
 
 
+def row_class_of(is_truncated):
+    return "truncated_or_edge" if is_truncated else "primary"
+
+
+def band_snr2(x, psd, dt, n_fft):
+    """Optimal SNR^2 of x in 30-1024 Hz, up to a constant; psd interpolated linearly to the grid of n_fft."""
+    f = np.fft.rfftfreq(n_fft, dt)
+    band = (f >= m11.BAND_HZ[0]) & (f <= m11.BAND_HZ[1])
+    S = np.interp(f[band], psd.sample_frequencies.numpy(), psd.numpy())
+    return float(np.sum(np.abs(np.fft.rfft(x, n_fft)[band]) ** 2 / S))
+
+
+def edge_snr2_removed(full, tapered, n_before, psds, dt):
+    """Fraction of the network SNR^2 (30-1024 Hz) of the projection `full` lost in G-EDGE."""
+    removed, total = 0.0, 0.0
+    for ifo in DETECTORS:
+        x = np.array(full[ifo].numpy(), dtype=np.float64)
+        kept = np.array(tapered[ifo].numpy(), dtype=np.float64)
+        kept[:n_before[ifo]] = 0.0  # what precedes processing_start never reaches the strain
+        n_fft = int(2 ** np.ceil(np.log2(2 * len(x))))
+        removed += band_snr2(x - kept, psds[ifo], dt, n_fft)
+        total += band_snr2(x, psds[ifo], dt, n_fft)
+    return removed / total
+
+
 def rom_row(row, index, ctx, trainio_h, selected):
     """Sequence of m13_13_build_g3t.noisy_row with the ROM in place of S15."""
     from pycbc.filter import sigmasq
@@ -246,6 +285,7 @@ def rom_row(row, index, ctx, trainio_h, selected):
     proj = g1.DETECTOR_PROJECTOR.project(h_plus=hp, h_cross=hc, parameters=cap.params,
                                          geocentric_coalescence_time=cap.geocentric_time)
     s_R, n_before = g3t.edge_taper(proj.strains, processing_start)
+    edge_removed = edge_snr2_removed(proj.strains, s_R, n_before, cap.psds, g1.CONFIG.delta_t)
     inj_R = injector.inject_network(noises=nt.noise, signals=s_R)
 
     # Crop before processing, so that the stored window cannot be affected by process_network.
@@ -272,7 +312,7 @@ def rom_row(row, index, ctx, trainio_h, selected):
     density = sum(snr2_density(clean_full[ifo], cap.psds[ifo], dt) for ifo in DETECTORS)
     frac_flat = float(density[a + ramp:b - ramp].sum() / density.sum())
     frac_4s = float(density[i0:i0 + n].sum() / density.sum())
-    row_class = "primary" if frac_flat >= FLAT_SNR2_MIN else "truncated_or_edge"
+    row_class = row_class_of(bool(meta["is_truncated"]))
 
     raw_R, X_R = g1.stack_and_normalize_network(g1.PROCESSOR.process_network(
         strains={ifo: inj_R[ifo].strain for ifo in DETECTORS}, psds=cap.psds))
@@ -292,6 +332,7 @@ def rom_row(row, index, ctx, trainio_h, selected):
                mismatch_rom_s15=align["mismatch_rom_s15"],
                mismatch_rom_s15_at_alignment=align["mismatch_rom_s15_at_alignment"],
                edge_samples=n_before, edge=bool(max(n_before.values()) > 0),
+               edge_snr2_removed_fraction=edge_removed,
                is_truncated=bool(meta["is_truncated"]), target_network_snr=float(row["target_network_snr"]),
                row_class=row_class, snr2_fraction_flat=frac_flat, snr2_fraction_final4s=frac_4s,
                snr_rom_network_4s=float(np.sqrt(sum(snr2.values()))), time_s=time.perf_counter() - t0)
@@ -307,7 +348,7 @@ def rom_row(row, index, ctx, trainio_h, selected):
         epoch_8s=np.full(len(DETECTORS), final_start - PE_MARGIN_S), strain_8s=strain_8s, signal_8s=signal_8s,
         psd_8s=np.stack([psd8[ifo].numpy() for ifo in DETECTORS]).astype(np.float64), psd_delta_f_8s=delta_f_8s,
         pe_tukey_ramp_s=PE_TUKEY_RAMP_S, row_class=row_class, snr2_fraction_flat=frac_flat,
-        snr2_fraction_final4s=frac_4s,
+        snr2_fraction_final4s=frac_4s, edge_snr2_removed_fraction=edge_removed,
         param_distance=float(meta["final_distance"]), param_geocentric_time=float(meta["actual_geocentric_time"]),
         param_final_network_snr=float(meta["final_network_snr"]),
         **{f"param_{c}": float(row[c]) for c in m11.PARAM_COLUMNS},
@@ -359,9 +400,7 @@ def summary(records, fails):
                                     max=max((r["coarse_lag_ms"] for r in good), default=None)),
                  mismatch_rom_s15_max=max((r["mismatch_rom_s15"] for r in good), default=None),
                  G_EDGE=dict(n_rows_tapered=sum(r["edge"] for r in good)),
-                 flat_zone=dict(threshold=FLAT_SNR2_MIN,
-                                truncated_or_edge=[r["row_index"] for r in good if r["row_class"] != "primary"],
-                                is_truncated_in_g3=[r["row_index"] for r in good if r["is_truncated"]],
+                 flat_zone=dict(truncated_or_edge=[r["row_index"] for r in good if r["is_truncated"]],
                                 min_fraction_flat=min((r["snr2_fraction_flat"] for r in good), default=None),
                                 min_fraction_final4s=min((r["snr2_fraction_final4s"] for r in good), default=None)),
                  time_s_per_row_mean=float(np.mean([r["time_s"] for r in good])) if good else None)
@@ -397,6 +436,62 @@ def publish(out_dir, rows, X_work, records, fails, src_dir, trainio, provenance)
     return final
 
 
+def reclassify(rows_dir, meta):
+    from pycbc.types import FrequencySeries
+    old_meta = json.loads((rows_dir / "meta.json").read_text())
+    require({k: v for k, v in old_meta.items() if k not in ("script_sha256", "previous_script_sha256")}
+            == {k: v for k, v in meta.items() if k != "script_sha256"}, f"{rows_dir} has another selection or G3T")
+    injector = g1.SignalInjector(config=g1.CONFIG, rng=np.random.default_rng(0))
+    regime = {r["row_index"]: r["regime"] for r in json.loads((rows_dir / "selection.json").read_text())["rows"]}
+    dt, n_proc = g1.CONFIG.delta_t, g1.CONFIG.processing_length
+    print("row regime truncated class (was) flat final4s edge_samples removed_fraction reconstruction")
+    out = []
+    for index in sorted(regime):
+        path = rows_dir / f"row_{index:06d}.npz"
+        if not path.exists():
+            continue
+        with np.load(path, allow_pickle=False) as a:
+            row = {k: a[k] for k in a.files}
+        v = {k[len("param_"):]: row[k].item() for k in row if k.startswith("param_")}
+        opt_args = dict(mass1=v["mass_1"], mass2=v["mass_2"], spin1z=v["spin_1z"], spin2z=v["spin_2z"],
+                        inclination=v["inclination"], distance=v["distance"], delta_t=dt,
+                        f_lower=g1.CONFIG.low_frequency_cutoff, approximant=g1.CONFIG.waveform_approximant)
+        hp, hc, _ = align_rom(opt_args)
+        params = CBCParameters(mass_1=v["mass_1"], mass_2=v["mass_2"], distance=v["distance"],
+                               inclination=v["inclination"], ra=v["ra"], dec=v["dec"], spin_1z=v["spin_1z"],
+                               spin_2z=v["spin_2z"], polarization_angle=v["polarization_angle"])
+        proj = g1.DETECTOR_PROJECTOR.project(h_plus=hp, h_cross=hc, parameters=params,
+                                             geocentric_coalescence_time=v["geocentric_time"])
+        processing_start = float(row["epoch"][0]) - g1.CONFIG.processing_context_start_seconds
+        s_R, n_before = g3t.edge_taper(proj.strains, processing_start)
+        i0, margin = g1.CONFIG.processing_context_start_samples, int(round(PE_MARGIN_S / dt))
+        a_i, b_i = i0 - margin, i0 + g1.CONFIG.length + margin
+        rebuilt = np.stack([injector.inject(injector.build_zero_strain(start_time=processing_start, length=n_proc),
+                                            s_R[ifo]).strain.numpy()[a_i:b_i] for ifo in DETECTORS])
+        diff = float(np.abs(rebuilt - row["signal_8s"]).max() / np.abs(row["signal_8s"]).max())
+        require(diff <= RECONSTRUCTION_RTOL, f"Row {index}: rebuilt projection differs from signal_8s ({diff:.1e})")
+        psds = {ifo: FrequencySeries(row["psd_8s"][i], delta_f=row["psd_delta_f_8s"].item())
+                for i, ifo in enumerate(DETECTORS)}
+        rec = dict(row_index=index, regime=regime[index], is_truncated=bool(v["is_truncated"]),
+                   row_class=row_class_of(bool(v["is_truncated"])), previous_row_class=row["row_class"].item(),
+                   snr2_fraction_flat=row["snr2_fraction_flat"].item(),
+                   snr2_fraction_final4s=row["snr2_fraction_final4s"].item(), edge=bool(max(n_before.values()) > 0),
+                   edge_samples=n_before, edge_snr2_removed_fraction=edge_snr2_removed(proj.strains, s_R, n_before,
+                                                                                       psds, dt),
+                   reconstruction_rel_diff=diff)
+        out.append(rec)
+        print(f"{index} {rec['regime']} {rec['is_truncated']} {rec['row_class']} ({rec['previous_row_class']}) "
+              f"{rec['snr2_fraction_flat']:.5f} {rec['snr2_fraction_final4s']:.5f} {list(n_before.values())} "
+              f"{rec['edge_snr2_removed_fraction']:.3e} {diff:.1e}", flush=True)
+    g3t.overwrite_json(rows_dir / "row_classes.json", dict(criterion="primary = is_truncated False (amendment 4)",
+                                                           script_sha256=meta["script_sha256"], rows=out))
+    if old_meta["script_sha256"] != meta["script_sha256"]:
+        # Between these versions only the labels change, not how the rows are built.
+        previous = old_meta.get("previous_script_sha256", []) + [old_meta["script_sha256"]]
+        g3t.overwrite_json(rows_dir / "meta.json", {**meta, "previous_script_sha256": previous})
+    print(f"{sum(r['row_class'] == 'primary' for r in out)}/{len(out)} rows primary -> {rows_dir / 'row_classes.json'}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", type=Path, default=m11.DEFAULT_CONFIG, help="G3 generation config")
@@ -407,6 +502,8 @@ def main():
     parser.add_argument("--limit", type=int, help="First N interleaved rows, plus the longest row of the long regime")
     parser.add_argument("--workers", type=int, default=1, help=f"Worker processes (fork), at most {g3t.MAX_WORKERS}")
     parser.add_argument("--resume-dir", type=Path, help="Existing rom_rows_<UTC> directory to continue")
+    parser.add_argument("--reclassify", type=Path, metavar="DIR",
+                        help="Only write DIR/row_classes.json for the rows already built; see the docstring")
     args = parser.parse_args()
     require(1 <= args.workers <= g3t.MAX_WORKERS, f"--workers must be in 1..{g3t.MAX_WORKERS}")
     require(args.limit is None or args.limit >= 1, "Invalid --limit")
@@ -430,10 +527,15 @@ def main():
     meta = dict(script_sha256=sha256_file(__file__), g3t_script_sha256=sha256_file(g3t.__file__),
                 row_ids=row_ids, rom_f_lower=ROM_F_LOWER, approximant=m11.ROM_APPROXIMANT,
                 lal_data_path=str(lal_data))
+    if args.reclassify:
+        reclassify(args.reclassify, meta)
+        return
     if args.resume_dir:
         out_dir = args.resume_dir
         require((out_dir / "meta.json").exists(), f"Nothing to resume in {out_dir}")
-        require(json.loads((out_dir / "meta.json").read_text()) == meta, "Resume with another script or selection")
+        saved = json.loads((out_dir / "meta.json").read_text())
+        saved.pop("previous_script_sha256", None)  # set by --reclassify
+        require(saved == meta, "Resume with another script or selection")
     else:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         out_dir = root / "results" / "M13_3" / "M13_11" / f"rom_rows_{stamp}"
