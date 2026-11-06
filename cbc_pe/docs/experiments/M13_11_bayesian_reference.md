@@ -63,3 +63,9 @@ Primario: solo filas con is_truncated = False (G3) y gate de zona plana superado
 
 ## Enmienda 4 (7-11-2026, antes de ver resultados del banco)
 Gate de zona plana: la fracción de SNR² medida sobre la señal blanqueada sale ~0,998 en filas no truncadas, porque el filtro de blanqueado de 16 s extiende la energía de la señal fuera de la ventana; el umbral de 0,999 clasificaba mal 6/7 filas de prueba. Primario: filas con is_truncated = False en G3 (onda desde 30 Hz contenida en la ventana final de 4 s). La parte de 15–30 Hz de la señal inyectada queda fuera de la banda de la PE (30–1024 Hz). Las fracciones de SNR² se informan como dato.
+
+## Aplicación de la regla de parada (6-11-2026)
+PE de prueba (fila 414223, la más larga del régimen largo): 1,0 h de reloj con 3 procesos, 2,8 h de CPU, 2,2·10⁶ evaluaciones; relbin max|Δloglr| = 0,017. Supera las 1,5 h de la regla, así que el banco se reduce a 40 filas por régimen (las 40 primeras de cada régimen en selection.json). Resolución esperada del IC de R: ±0,10–0,15 (frente a ±0,08–0,12 con 60). loglr_truth (109) es menor que en la posterior (~165) porque la evaluación en el valor verdadero no aplicaba el desplazamiento de la alineación ROM–S15 (~1 ms); se añade loglr_truth_aligned como comprobación.
+
+## Plan del banco (6-11-2026, antes de calcular)
+Análisis intermedio con 40 filas por régimen (para las Jornadas CPAN, 16–18-11-2026), etiquetado como intermedio. Después, el banco continúa, con independencia del resultado intermedio, hasta 60 filas por régimen (toda la selección); una ampliación posterior con filas nuevas al azar de val (semilla nueva) se fijará en número antes de ver el resultado intermedio. El análisis final usa todas las filas hasta el final fijado; se informan el intermedio y el final. Todas las PE usan la misma configuración (nlive 500, walks 100, epsilon 0,03, dlogz 0,1, priors, banda y ventana) y el mismo entorno (dynesty 2.1.5, pycbc 2.9.0).
