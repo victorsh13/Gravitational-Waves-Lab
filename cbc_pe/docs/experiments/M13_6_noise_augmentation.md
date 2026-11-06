@@ -94,3 +94,22 @@ Evaluación en [M13_6_evaluation.ipynb](../../notebooks/m13/M13_6_evaluation.ipy
 | M13.4b-aug s123 | [train_m13_4b_G3aug_s123.json](../../configs/experiments/m13/train_m13_4b_G3aug_s123.json) | `MRDenseNet` con checkpointing de gradiente por etapa; monitor train40k cada 10 épocas |
 | M13.6a s124 | [train_m13_6a_G3aug_s124_m10.json](../../configs/experiments/m13/train_m13_6a_G3aug_s124_m10.json) | `monitor_train40k_every = 10` |
 | M13.4a-aug s124 | [train_m13_4a_G3aug_s124.json](../../configs/experiments/m13/train_m13_4a_G3aug_s124.json) | `monitor_train40k_every = 10` |
+
+## Comprobación de la inversión temporal del ruido (6-11-2026)
+
+Motivo: comentario de Carlos (la inversión temporal conjuga la transformada de Fourier, así que no sería una realización que vea el detector). Notebook `notebooks/m13/M13_6_noise_reversal_check.ipynb`; resumen `<data_root>/results/M13_3/M13_6_rev/M13_6_rev_summary.json`. Datos: banco de ruido (12 800 realizaciones = 200 bloques PSD × 64; L(n) con el z-score de §5).
+
+Criterios fijados antes de ver los datos (con la enmienda de esa misma tarde: (a) sobre media móvil de 64 muestras; (d) con banda simultánea max-|t| al 95 % sobre las 192 pruebas).
+
+Resultados:
+- (d) Irreversibilidad, A(τ) = E[x(t)²x(t+τ)] − E[x(t)x(t+τ)²], τ = 1..64: PASA en H1, L1 y V1 (máx |t| 3,1 frente a 3,6 de la banda); comportamiento como el control blanco.
+- (a) Estacionariedad: bordes estacionarios (±2 % en los primeros y últimos 0,25 s). FALLA por un exceso de varianza en el centro de la ventana (t = 2,0 s): H1 +9 % (~0,3 s), L1 +100 % (decenas de ms), V1 +37 %.
+- (b) PSD por tramos: ±1 % en 30–1024 Hz salvo en las líneas instrumentales (H1/L1 ~512 y ~1000 Hz; V1 ~456 y ~900 Hz), donde la mitad central tiene más potencia. FALLA solo por las líneas.
+- (c) Gaussianidad: asimetría compatible con 0; curtosis en exceso de L1 +0,13 (consecuencia de (a): varianza no constante dentro de la ventana). FALLA solo L1.
+- Veredicto pre-registrado: simetría NO compatible.
+
+Causa (verificada en el código de pycbc instalado): `pycbc.noise.gaussian.noise_from_psd` genera el ruido en trozos de N = 1/(Δt·Δf_PSD) muestras que avanzan N/2 y se empalman con `lalsimulation.SimNoise`. Con la PSD de procesado de G1/G3/G3T, N es la longitud del segmento de procesado y el empalme cae en su centro, que coincide con t = 2 s de la ventana final (contexto simétrico). El empalme conserva el ruido de banda ancha, pero no la coherencia de las líneas estrechas.
+
+Lectura (posterior al pre-registro): la no estacionariedad es central y simétrica respecto a t = 2 s, y no hay irreversibilidad de tercer orden. La inversión temporal deja el perfil igual, así que en la simulación es aumentación dentro de la distribución. En datos reales (glitches, no estacionariedad) sigue siendo una regularización.
+
+Consecuencia: el empalme es otro artefacto de la simulación, presente en todo el ruido de G1/G3/G3T (también fuera de la aumentación). No depende de los parámetros de la fuente. Prioridad baja; se corregirá en la generación final (PSD con Δf más fino, de modo que el empalme caiga fuera del segmento, o generación directa en frecuencia).
