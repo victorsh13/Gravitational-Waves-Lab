@@ -12,6 +12,15 @@ stopping; the registered model is the last epoch (_final.pt). _bestval.pt is inf
 Optional training keys (M13.9/M13.10; absent = the behaviour above): schedule.warmup_steps replaces
 schedule.warmup_epochs; train_subset = {n, seed} trains on nested rows default_rng(seed).permutation(...)[:n];
 total_steps stops the run at that step, possibly in the middle of the last epoch.
+Optional heteroscedastic head (M14.1; model.heteroscedastic = true, requires training.loss = "beta_nll" and
+training.beta_nll = beta): the model outputs [mu, log_sigma] per label (standardized units, log_sigma clamped
+in the model) and is trained with beta-NLL (Seitzer et al. 2022): per label
+0.5 * (log sigma^2 + (y - mu)^2 / sigma^2) * stop_grad(sigma^2)^beta, mean over labels and batch. Logged
+val/train40k mse and slope are computed on mu; prediction npz files add sigma_<split> (standardized).
+Optional template bank (M14.2; model.template_bank = {n_templates, template_length, n_samples, chunk_templates,
+checkpoint, init}): network.TemplateBank amplitudes sqrt(c_I^2 + c_Q^2) per (detector, template) are concatenated
+after the input before block1; templates initialized by init_template_bank (train rows, default_rng(142001)),
+the rows used recorded in run_info.procedure.template_bank.
 Optional dropout switch-off: from 0-based epoch ceil((1 - f) * max_epochs) every nn.Dropout gets p=0.
 
 Optional noise augmentation (M13.6, only if training.noise_augmentation.enabled): train X is rebuilt
@@ -69,6 +78,9 @@ TRAIN_MONITOR_SPLIT = "train"
 AUG_BANK_K = 64
 AUG_SEED_EPOCH_STRIDE = 10000  # > batches per epoch (400000 // 256 = 1562): no seed reused across epochs
 AUG_ZSCORE_EPS = 1e-6  # M10_INPUT_ZSCORE_EPS used to build the G3 X
+TB_INIT_SEED = 142001  # M14.2 template-bank row selection
+TB_T_SUN = 4.925490947e-6  # G Msun / c^3 [s]
+TB_F_REF = 30.0  # Hz, reference frequency of tau30
 
 
 def parse_args():
@@ -276,6 +288,115 @@ def load_noise_aug(acfg, base_dir, g3_mm_dir, row_ids_train):
     return aug_dir, (j * K).astype(np.int64), K, info
 
 
+def tau_newtonian(mc):
+    """Leading-order time to coalescence from 30 Hz [s] (as scripts/m13/m13_1_diagnostics.py)."""
+    return 5.0 / 256.0 * (TB_T_SUN * mc)**(-5.0 / 3.0) * (np.pi * TB_F_REF)**(-8.0 / 3.0)
+
+
+def hilbert_quadrature(h):
+    """Hilbert transform of a real 1D series by FFT (cos -> sin); DC and Nyquist set to 0."""
+    H = np.fft.rfft(h) * -1j
+    H[0] = 0.0
+    if h.size % 2 == 0:
+        H[-1] = 0.0
+    return np.fft.irfft(H, n=h.size)
+
+
+def init_template_bank(bank, icfg, base_dir, g3_mm_dir, row_ids_train, h5_path):
+    """M14.2: deterministic template-bank initialization from clean train signals (train rows only).
+
+    K = n_tau * n_chi cells: n_tau train quantile bins of tau30 (Newtonian, true chirp mass), each split
+    into n_chi train quantile bins of chi_eff within it; one row per cell by default_rng(seed).choice.
+    Per row: detector with the largest snr_<det> of the trainio HDF5; X_clean_train (L(s) before the
+    z-score) of that detector, z-scored as the input (population std, + eps); merger = argmax of the
+    analytic-signal envelope; the L samples ending at the merger form template_i (merger at the end,
+    zero-padded at the start if needed), template_q = Hilbert(template_i); both unit-norm.
+    """
+    import h5py
+    seed = int(icfg.get("seed", TB_INIT_SEED))
+    n_chi = int(icfg.get("n_chi_eff_bins", 4))
+    K, L = bank.n_templates, bank.template_length
+    if n_chi <= 0 or K % n_chi:
+        raise SystemExit(f"n_templates={K} is not a multiple of n_chi_eff_bins={n_chi}")
+    n_tau = K // n_chi
+    mm_dir = base_dir / icfg.get("memmap_dir", "memmap")
+    man = json.loads((mm_dir / "manifest.json").read_text())
+    if man["g3_memmap"]["row_ids_train_sha256"] != sha256(g3_mm_dir / "row_ids_train.npy"):
+        raise SystemExit(f"{mm_dir} X_clean_train was built against a different G3 row_ids_train.npy")
+    y = np.load(g3_mm_dir / "y_train.npy", mmap_mode="r")  # unstandardized, G3 row_ids_train order
+    if y.shape != (row_ids_train.size, 3):
+        raise SystemExit(f"y_train {y.shape} does not match row_ids_train {row_ids_train.shape}")
+    tau, chi = tau_newtonian(np.asarray(y[:, 0], dtype=np.float64)), np.asarray(y[:, 2], dtype=np.float64)
+    rng = np.random.default_rng(seed)
+    tau_edges = np.quantile(tau, np.linspace(0.0, 1.0, n_tau + 1))
+    tau_bin = np.clip(np.searchsorted(tau_edges[1:-1], tau, side="right"), 0, n_tau - 1)
+    pos, cells = [], []
+    for i in range(n_tau):
+        rows_i = np.flatnonzero(tau_bin == i)
+        chi_edges = np.quantile(chi[rows_i], np.linspace(0.0, 1.0, n_chi + 1))
+        chi_bin = np.clip(np.searchsorted(chi_edges[1:-1], chi[rows_i], side="right"), 0, n_chi - 1)
+        for j in range(n_chi):
+            cell = rows_i[chi_bin == j]
+            if cell.size == 0:
+                raise SystemExit(f"empty template-bank cell tau{i} chi{j}")
+            pos.append(int(rng.choice(cell)))
+            cells.append([i, j])
+    pos = np.asarray(pos, dtype=np.int64)
+    if not h5_path.exists():
+        raise SystemExit(f"template-bank init needs snr_<det> from {h5_path}")
+    order = np.argsort(row_ids_train[pos])
+    with h5py.File(h5_path, "r") as f:
+        dets = str(f.attrs["detector_order"]).split(",")
+        snr = np.empty((K, len(dets)))
+        for d, name in enumerate(dets):
+            snr[order, d] = f[f"snr_{name}"][np.sort(row_ids_train[pos])]
+    Xc = np.load(mm_dir / "X_clean_train.npy", mmap_mode="r")
+    t_i, t_q, det, peak = np.zeros((K, L)), np.zeros((K, L)), [], []
+    for k in range(K):
+        d = int(np.argmax(snr[k]))
+        s = np.asarray(Xc[pos[k], d], dtype=np.float64)
+        z = (s - s.mean()) / (s.std() + AUG_ZSCORE_EPS)
+        p = int(np.argmax(np.abs(z + 1j * hilbert_quadrature(z))))
+        seg = z[max(0, p - L + 1):p + 1]
+        t_i[k, L - seg.size:] = seg
+        t_q[k] = hilbert_quadrature(t_i[k])
+        det.append(dets[d])
+        peak.append(p)
+    t_i /= np.linalg.norm(t_i, axis=1, keepdims=True)
+    t_q /= np.linalg.norm(t_q, axis=1, keepdims=True)
+    bank.set_templates(t_i, t_q)
+    return {"seed": seed, "n_tau_bins": n_tau, "n_chi_eff_bins": n_chi,
+            "rule": "train quantile bins of tau30, then of chi_eff within each tau30 bin; "
+                    "rng.choice per cell in (tau, chi) order; detector = argmax snr_<det>",
+            "memmap_dir": str(mm_dir), "tau30_edges_s": tau_edges.tolist(),
+            "templates": [{"k": k, "train_position": int(pos[k]), "row_id": int(row_ids_train[pos[k]]),
+                           "cell_tau_chi": cells[k], "detector": det[k], "merger_index": peak[k],
+                           "chirp_mass": float(y[pos[k], 0]), "total_mass": float(y[pos[k], 1]),
+                           "chi_eff": float(y[pos[k], 2]), "tau30_s": float(tau[pos[k]]),
+                           "snr": dict(zip(dets, snr[k].tolist()))} for k in range(K)]}
+
+
+def beta_nll_loss(out, y, beta):
+    """M14.1 beta-NLL on out = [mu, log_sigma] (B, 2K) and y (B, K), standardized units.
+
+    Per label 0.5 * (log sigma^2 + (y - mu)^2 / sigma^2) * stop_grad(sigma^2)^beta; mean over labels and batch.
+    """
+    k = y.shape[1]
+    mu, log_sigma = out[:, :k], out[:, k:]
+    log_var = 2.0 * log_sigma
+    nll = 0.5 * (log_var + (y - mu) ** 2 * torch.exp(-log_var))
+    if beta != 0.0:
+        nll = nll * torch.exp(beta * log_var).detach()
+    return nll.mean()
+
+
+def split_output(out, n_targets, heteroscedastic):
+    """Return (mu, sigma or None); sigma = exp(log_sigma), standardized units."""
+    if not heteroscedastic:
+        return out, None
+    return out[:, :n_targets], torch.exp(out[:, n_targets:])
+
+
 def make_loader(ds, sampler):
     return DataLoader(ds, sampler=sampler, batch_size=None, num_workers=NUM_WORKERS, pin_memory=True,
                       persistent_workers=False, prefetch_factor=PREFETCH_FACTOR)
@@ -283,14 +404,20 @@ def make_loader(ds, sampler):
 
 @torch.no_grad()
 def predict(model, loader, device):
+    # Returns (pred, emb, y) as before; heteroscedastic models return (mu, emb, y, sigma).
     model.eval()
-    preds, embs, ys = [], [], []
+    hetero = bool(getattr(model, "heteroscedastic", False))
+    preds, embs, ys, sigmas = [], [], [], []
     for xb, yb in loader:
-        pred, emb = model(xb.to(device, non_blocking=True).float(), return_embedding=True)
+        out, emb = model(xb.to(device, non_blocking=True).float(), return_embedding=True)
+        pred, sigma = split_output(out, yb.shape[1], hetero)
         preds.append(pred.cpu().numpy())
         embs.append(emb.cpu().numpy())
         ys.append(yb.numpy())
-    return np.concatenate(preds), np.concatenate(embs), np.concatenate(ys)
+        if hetero:
+            sigmas.append(sigma.cpu().numpy())
+    res = (np.concatenate(preds), np.concatenate(embs), np.concatenate(ys))
+    return res + (np.concatenate(sigmas),) if hetero else res
 
 
 def label_metrics(pred, y):
@@ -332,14 +459,17 @@ def check_against_hdf5(h5_path, ds, row_ids, split):
     return res
 
 
-def save_predictions(path, split, pred, emb, y, idx, common):
+def save_predictions(path, split, pred, emb, y, idx, common, sigma=None):
     # Same schema as scripts/predict_cnn_hdf5.py: standardized pred/y, original HDF5 row ids, ascending.
+    # Heteroscedastic models (M14.1) add sigma_<split> (standardized); pred_<split> is mu.
     payload = dict(common)
     payload["available_splits"] = np.array([split])
     payload[f"pred_{split}"] = pred
     payload[f"emb_{split}"] = emb
     payload[f"y_{split}"] = y
     payload[f"idx_{split}"] = idx
+    if sigma is not None:
+        payload[f"sigma_{split}"] = sigma
     with open(path, "xb") as fh:
         np.savez_compressed(fh, **payload)
     print(f"saved {path}", flush=True)
@@ -371,8 +501,13 @@ def main():
     tr_every = int(tcfg.get("monitor_train40k_every", 1))
     if sched.get("type") != "cosine":
         raise SystemExit(f"Only the cosine schedule is implemented, got {sched.get('type')}")
-    if int(tcfg["batch_size"]) != BATCH or tcfg.get("loss", "MSELoss") != "MSELoss":
-        raise SystemExit("Expected batch_size 256 and MSELoss")
+    hetero = bool(mcfg.get("heteroscedastic", False))
+    loss_name = tcfg.get("loss", "MSELoss")
+    if int(tcfg["batch_size"]) != BATCH:
+        raise SystemExit("Expected batch_size 256")
+    if loss_name != ("beta_nll" if hetero else "MSELoss"):
+        raise SystemExit(f"loss {loss_name!r}: expected MSELoss, or beta_nll with model.heteroscedastic = true")
+    beta = float(tcfg["beta_nll"]) if hetero else None
     if float(tcfg["learning_rate"]) != peak_lr:
         raise SystemExit("training.learning_rate must equal schedule.peak_lr")
     if tr_every < 1:
@@ -462,12 +597,37 @@ def main():
     steps_per_epoch = len(train_sampler)
     warmup_steps, total_steps = schedule_steps(tcfg, steps_per_epoch, max_epochs)
 
-    model = getattr(network, mcfg["class_name"])(**mcfg["kwargs"]).to(device)
+    model_kwargs = dict(mcfg["kwargs"])
+    if hetero:
+        # Stored in model_kwargs so predict_cnn_hdf5.py rebuilds the heteroscedastic head from the checkpoint.
+        model_kwargs["heteroscedastic"] = True
+    tb_cfg = mcfg.get("template_bank")
+    if tb_cfg is not None:
+        # Architecture keys go to model_kwargs (rebuilt by predict_cnn_hdf5.py); "init" only here.
+        model_kwargs["template_bank"] = {k: v for k, v in tb_cfg.items() if k != "init"}
+    model = getattr(network, mcfg["class_name"])(**model_kwargs).to(device)
+    if hetero and not getattr(model, "heteroscedastic", False):
+        raise SystemExit(f"{mcfg['class_name']} has no heteroscedastic option")
+    tb_info = None
+    if tb_cfg is not None:
+        if getattr(model, "template_bank", None) is None:
+            raise SystemExit(f"{mcfg['class_name']} has no template_bank option")
+        # Deterministic; on --resume the checkpoint state_dict below overwrites these values.
+        tb_info = init_template_bank(model.template_bank, tb_cfg.get("init", {}),
+                                     dataset_processed_dir(data_root, dataset_id), mm_dir, row_ids["train"], h5_path)
+        tb_info["architecture"] = model_kwargs["template_bank"]
+        tb_info["n_parameters_bank"] = sum(p.numel() for p in model.template_bank.parameters())
+        print(f"template bank: K={model.template_bank.n_templates}, L={model.template_bank.template_length}, "
+              f"rows {[t['row_id'] for t in tb_info['templates']]}", flush=True)
     optimizer = torch.optim.AdamW(model.parameters(), lr=peak_lr, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, make_lr_lambda(warmup_steps, total_steps))
-    criterion = nn.MSELoss()
+    if hetero:
+        def criterion(out, y):
+            return beta_nll_loss(out, y, beta)
+    else:
+        criterion = nn.MSELoss()
     model_config = {"class_name": mcfg["class_name"], "architecture_name": mcfg.get("architecture_name"),
-                    "model_kwargs": mcfg["kwargs"], "input_normalization": cfg.get("input_normalization")}
+                    "model_kwargs": model_kwargs, "input_normalization": cfg.get("input_normalization")}
     dropout_original = {n: float(m.p) for n, m in model.named_modules() if isinstance(m, nn.Dropout)}
 
     start_epoch, best_val, history, dropout_off = 0, float("inf"), {}, False
@@ -529,6 +689,13 @@ def main():
     }
     if use_aug:
         run_info["data"]["noise_augmentation"] = aug_info
+    if hetero:
+        run_info["procedure"]["loss"] = (f"beta_nll (beta={beta}, standardized labels; model outputs [mu, log_sigma], "
+                                         f"log_sigma clamped to [{type(model).LOG_SIGMA_MIN}, "
+                                         f"{type(model).LOG_SIGMA_MAX}]; logged mse/slope on mu)")
+        run_info["procedure"]["heteroscedastic"] = True
+    if tb_info is not None:
+        run_info["procedure"]["template_bank"] = tb_info
     if subset_pos is not None:
         # Hash of the HDF5 row ids (sorted int64 bytes), so the chosen rows can be checked without the rng.
         rows = np.sort(row_ids["train"][subset_pos]).astype(np.int64)
@@ -655,9 +822,10 @@ def main():
               "label_stats_path": str(stats_path), "model_config": np.array(model_config, dtype=object),
               "input_normalization": np.array(cfg.get("input_normalization"), dtype=object),
               "memmap_dir": str(mm_dir)}
-    (vp, ve, vy), (tp, te, ty) = last_eval
-    save_predictions(p_val, "val", vp, ve, vy, row_ids["val"], common)
-    save_predictions(p_tr, TRAIN_MONITOR_SPLIT, tp, te, ty, row_ids["train"][tr_pos], common)
+    (vp, ve, vy, *vs), (tp, te, ty, *ts) = last_eval
+    save_predictions(p_val, "val", vp, ve, vy, row_ids["val"], common, sigma=vs[0] if vs else None)
+    save_predictions(p_tr, TRAIN_MONITOR_SPLIT, tp, te, ty, row_ids["train"][tr_pos], common,
+                     sigma=ts[0] if ts else None)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 from __future__ import annotations
 import math
 import torch
+import torch.fft
 import torch.nn as nn
 import torch.utils.checkpoint
 
@@ -1260,6 +1261,91 @@ class TokenTransformer(nn.Module):
         return x[0]
 
 
+def _template_bank_chunk(X, h_i, h_q, n_samples):
+    # X: rfft of the input (B, D, F); h_i, h_q: (k, n_samples) templates in the circular layout of
+    # TemplateBank. Circular cross-correlation c[t] = sum_m x[t + m] h[m] <-> X * conj(H).
+    Xe = X.unsqueeze(2)
+    c_i = torch.fft.irfft(Xe * torch.fft.rfft(h_i, n=n_samples).conj(), n=n_samples)
+    c_q = torch.fft.irfft(Xe * torch.fft.rfft(h_q, n=n_samples).conj(), n=n_samples)
+    # |c| (matched-filter SNR scale: ~1 in noise), not |c|^2, so its scale is comparable to the input's.
+    return torch.sqrt(c_i * c_i + c_q * c_q + 1e-12)  # (B, D, k, n_samples)
+
+
+class TemplateBank(nn.Module):
+    """
+    M14.2: bank of K learnable matched filters in quadrature, applied before the backbone.
+
+    Parameters template_i, template_q: (K, L). Each is normalized to unit L2 norm in every forward.
+    Template sample j = L - 1 is the merger end of the template; the template is laid out circularly
+    in a length-N buffer so that sample L - 1 sits at index 0, hence the output at time t is the
+    match of the data ending at t (a signal merging at t peaks at t; L = N uses the whole window,
+    circularly). Same templates for every detector; each detector keeps its own correlation series,
+    so inter-detector delays survive in time:
+
+        out[b, d * K + k, t] = sqrt(c_I[b, d, k, t]^2 + c_Q[b, d, k, t]^2 + 1e-12)      (B, D * K, N)
+
+    Correlation by FFT (torch.fft, PyTorch >= 1.8). Memory: the (B, D, K, N) intermediates are
+    computed in chunks of chunk_templates templates; with checkpoint=True and grad enabled each chunk
+    is recomputed in backward, so only the (B, D * K, N) output is kept between forward and backward.
+    Templates are passed to checkpoint as inputs (needed by the PyTorch 1.9 reentrant checkpoint,
+    whose output would otherwise not require grad). Initial values are set by the trainer
+    (set_templates); the random init here is only a placeholder overwritten by it or by a checkpoint.
+    """
+
+    def __init__(self, n_templates=32, template_length=16384, n_samples=16384, chunk_templates=8,
+                 checkpoint=True):
+        super().__init__()
+        if not 0 < template_length <= n_samples:
+            raise ValueError(f"template_length={template_length} must be in (0, n_samples={n_samples}]")
+        if n_templates <= 0 or chunk_templates <= 0:
+            raise ValueError("n_templates and chunk_templates must be positive")
+        self.n_templates = int(n_templates)
+        self.template_length = int(template_length)
+        self.n_samples = int(n_samples)
+        self.chunk_templates = int(chunk_templates)
+        self.checkpoint = bool(checkpoint)
+        self.template_i = nn.Parameter(torch.randn(self.n_templates, self.template_length))
+        self.template_q = nn.Parameter(torch.randn(self.n_templates, self.template_length))
+
+    @torch.no_grad()
+    def set_templates(self, template_i, template_q):
+        for p, v in ((self.template_i, template_i), (self.template_q, template_q)):
+            v = torch.as_tensor(v, dtype=p.dtype)
+            if tuple(v.shape) != tuple(p.shape):
+                raise ValueError(f"template shape {tuple(v.shape)} != {tuple(p.shape)}")
+            p.copy_(v.to(p.device))
+
+    def _layout(self, h):
+        h = h / (h.norm(dim=-1, keepdim=True) + 1e-12)
+        if self.template_length < self.n_samples:
+            h = nn.functional.pad(h, (0, self.n_samples - self.template_length))
+        return torch.roll(h, shifts=1 - self.template_length, dims=-1)
+
+    def forward(self, x):
+        if x.ndim != 3 or x.shape[-1] != self.n_samples:
+            raise ValueError(f"TemplateBank expects (batch, detectors, {self.n_samples}), got {tuple(x.shape)}")
+        n = self.n_samples
+        X = torch.fft.rfft(x.float(), n=n)
+        h_i, h_q = self._layout(self.template_i), self._layout(self.template_q)
+        use_ckpt = self.checkpoint and torch.is_grad_enabled() and h_i.requires_grad
+
+        def run(X_, a, b):
+            return _template_bank_chunk(X_, a, b, n)
+
+        ck_kwargs = {"preserve_rng_state": False}
+        if tuple(int(v) for v in torch.__version__.split(".")[:2]) >= (1, 11):
+            ck_kwargs["use_reentrant"] = True  # the only mode of PyTorch 1.9; explicit to silence torch 2.x
+        parts = []
+        for s in range(0, self.n_templates, self.chunk_templates):
+            a, b = h_i[s:s + self.chunk_templates], h_q[s:s + self.chunk_templates]
+            if use_ckpt:
+                parts.append(torch.utils.checkpoint.checkpoint(run, X, a, b, **ck_kwargs))
+            else:
+                parts.append(run(X, a, b))
+        out = torch.cat(parts, dim=2)
+        return out.reshape(out.shape[0], out.shape[1] * out.shape[2], n)
+
+
 class SimpleCNN_ResidualDilatedTransformerAgg(SimpleCNN_ResidualDilated):
     """
     M13.4a: M11 (SimpleCNN_ResidualDilated) with transformer aggregation.
@@ -1268,16 +1354,40 @@ class SimpleCNN_ResidualDilatedTransformerAgg(SimpleCNN_ResidualDilated):
     AdaptiveAvgPool1d is replaced by AvgPool1d(agg_pool) -> (B, 128, ~256) tokens
     -> TokenTransformer(128) -> CLS (B, 128), followed by the base embedding_layer
     and head.
+
+    M14.1 option heteroscedastic=True (default False = the M13.4a model, unchanged):
+    the head gives 2 * n_outputs values per row, [mu (n_outputs), log_sigma (n_outputs)],
+    both in standardized label units; log_sigma is clamped to [LOG_SIGMA_MIN, LOG_SIGMA_MAX].
+    forward() still returns a single tensor (B, 2 * n_outputs), so return_embedding works as before.
+
+    M14.2 option template_bank={n_templates, template_length, n_samples, chunk_templates, checkpoint}
+    (default None = the M13.4a model, unchanged): a TemplateBank output (B, D * K, N) is concatenated
+    in channels after the unchanged input (B, D, N), and block1 takes D * (1 + K) input channels.
+    The bank and the new block1 are built after every other layer, so the other layers draw the
+    same initial weights as M13.4a for a given torch seed.
     """
+
+    TEMPLATE_BANK_KEYS = ("n_templates", "template_length", "n_samples", "chunk_templates", "checkpoint")
+
+    LOG_SIGMA_MIN = -7.0
+    LOG_SIGMA_MAX = 3.0
 
     def __init__(
         self,
         agg_pool: int = 8,
         agg_layers: int = 2,
         agg_heads: int = 4,
+        heteroscedastic: bool = False,
+        template_bank=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
+
+        self.heteroscedastic = bool(heteroscedastic)
+        if self.heteroscedastic:
+            n_out = self.head.out_features
+            self.head = nn.Linear(self.head.in_features, 2 * n_out)
+            self.n_targets = n_out
 
         if agg_pool <= 0:
             raise ValueError(f"agg_pool must be positive, got {agg_pool}")
@@ -1290,7 +1400,26 @@ class SimpleCNN_ResidualDilatedTransformerAgg(SimpleCNN_ResidualDilated):
             n_heads=agg_heads,
         )
 
+        self.template_bank = None
+        if template_bank is not None:
+            tb = dict(template_bank)
+            unknown = set(tb) - set(self.TEMPLATE_BANK_KEYS)
+            if unknown:
+                raise ValueError(f"Unknown template_bank keys: {sorted(unknown)}")
+            self.template_bank = TemplateBank(**tb)
+            n_det = self.block1.conv.in_channels
+            self.block1 = ConvBlock(
+                in_channels=n_det * (1 + self.template_bank.n_templates),
+                out_channels=self.block1.conv.out_channels,
+                kernel_size=16,
+                stride=2,
+                dropout=self.block1.dropout.p,
+            )
+
     def encode(self, x):
+        if self.template_bank is not None:
+            # (B, D, N) -> (B, D * (1 + K), N): input unchanged, then the bank energies.
+            x = torch.cat([x, self.template_bank(x)], dim=1)
         x = self.block1(x)
         x = self.block2(x)
         x = self.block3(x)
@@ -1304,6 +1433,18 @@ class SimpleCNN_ResidualDilatedTransformerAgg(SimpleCNN_ResidualDilated):
         x = self.aggregator(x)
 
         return x
+
+    def forward(self, x, return_embedding=False):
+        if not self.heteroscedastic:
+            return super().forward(x, return_embedding=return_embedding)
+        embedding = self.embed(x)
+        out = self.head(embedding)
+        k = self.n_targets
+        log_sigma = torch.clamp(out[:, k:], self.LOG_SIGMA_MIN, self.LOG_SIGMA_MAX)
+        y_pred = torch.cat([out[:, :k], log_sigma], dim=1)
+        if return_embedding:
+            return y_pred, embedding
+        return y_pred
 
 
 def _largest_group_divisor(channels, max_groups):

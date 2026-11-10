@@ -487,6 +487,13 @@ def main():
             device=device,
         )
 
+        sigma = None
+        if getattr(model, "heteroscedastic", False):
+            # M14.1: model output is [mu, log_sigma]; pred_<split> stays mu, sigma_<split> is added
+            # (both standardized).
+            k = y_eval.shape[1]
+            pred, sigma = pred[:, :k], np.exp(pred[:, k:])
+
         print("pred:", pred.shape)
         print("emb:", emb.shape)
         print("y:", y_eval.shape)
@@ -500,6 +507,8 @@ def main():
         save_payload[f"pred_{split_name}"] = pred
         save_payload[f"emb_{split_name}"] = emb
         save_payload[f"y_{split_name}"] = y_eval
+        if sigma is not None:
+            save_payload[f"sigma_{split_name}"] = sigma
 
         # Important: batch-level prediction yields data in sorted physical-index
         # order, so store indices in the same order.
