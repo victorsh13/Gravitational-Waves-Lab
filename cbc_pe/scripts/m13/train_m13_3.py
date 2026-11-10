@@ -302,17 +302,18 @@ def hilbert_quadrature(h):
     return np.fft.irfft(H, n=h.size)
 
 
-def init_template_bank(bank, icfg, base_dir, g3_mm_dir, row_ids_train, h5_path):
+def init_template_bank(bank, icfg, base_dir, g3_mm_dir, row_ids_train):
     """M14.2: deterministic template-bank initialization from clean train signals (train rows only).
 
     K = n_tau * n_chi cells: n_tau train quantile bins of tau30 (Newtonian, true chirp mass), each split
     into n_chi train quantile bins of chi_eff within it; one row per cell by default_rng(seed).choice.
-    Per row: detector with the largest snr_<det> of the trainio HDF5; X_clean_train (L(s) before the
-    z-score) of that detector, z-scored as the input (population std, + eps); merger = argmax of the
+    Per row: detector d = argmax_d sum(X_clean_train[pos, d]**2) in float64 (L(s) whitened, before the
+    z-score; proportional to the optimal SNR^2 in the window; M14.2 amendment 1, no HDF5 for G3T); detector
+    names only if a manifest has a "detector_order" key, else only the index d is recorded. X_clean_train of
+    that detector, z-scored as the input (population std, + eps); merger = argmax of the
     analytic-signal envelope; the L samples ending at the merger form template_i (merger at the end,
     zero-padded at the start if needed), template_q = Hilbert(template_i); both unit-norm.
     """
-    import h5py
     seed = int(icfg.get("seed", TB_INIT_SEED))
     n_chi = int(icfg.get("n_chi_eff_bins", 4))
     K, L = bank.n_templates, bank.template_length
@@ -342,38 +343,43 @@ def init_template_bank(bank, icfg, base_dir, g3_mm_dir, row_ids_train, h5_path):
             pos.append(int(rng.choice(cell)))
             cells.append([i, j])
     pos = np.asarray(pos, dtype=np.int64)
-    if not h5_path.exists():
-        raise SystemExit(f"template-bank init needs snr_<det> from {h5_path}")
-    order = np.argsort(row_ids_train[pos])
-    with h5py.File(h5_path, "r") as f:
-        dets = str(f.attrs["detector_order"]).split(",")
-        snr = np.empty((K, len(dets)))
-        for d, name in enumerate(dets):
-            snr[order, d] = f[f"snr_{name}"][np.sort(row_ids_train[pos])]
+    dets = None
+    for mpath in (mm_dir / "manifest.json", g3_mm_dir / "manifest.json"):
+        if mpath.exists() and "detector_order" in (m := json.loads(mpath.read_text())):
+            dets = [str(v) for v in (m["detector_order"].split(",") if isinstance(m["detector_order"], str)
+                                     else m["detector_order"])]
+            break
     Xc = np.load(mm_dir / "X_clean_train.npy", mmap_mode="r")
-    t_i, t_q, det, peak = np.zeros((K, L)), np.zeros((K, L)), [], []
+    t_i, t_q, det, peak, energy = np.zeros((K, L)), np.zeros((K, L)), [], [], []
     for k in range(K):
-        d = int(np.argmax(snr[k]))
-        s = np.asarray(Xc[pos[k], d], dtype=np.float64)
+        row = np.asarray(Xc[pos[k]], dtype=np.float64)
+        e = (row * row).sum(axis=1)
+        d = int(np.argmax(e))
+        s = row[d]
         z = (s - s.mean()) / (s.std() + AUG_ZSCORE_EPS)
         p = int(np.argmax(np.abs(z + 1j * hilbert_quadrature(z))))
         seg = z[max(0, p - L + 1):p + 1]
         t_i[k, L - seg.size:] = seg
         t_q[k] = hilbert_quadrature(t_i[k])
-        det.append(dets[d])
+        det.append(d)
+        energy.append(e.tolist())
         peak.append(p)
     t_i /= np.linalg.norm(t_i, axis=1, keepdims=True)
     t_q /= np.linalg.norm(t_q, axis=1, keepdims=True)
     bank.set_templates(t_i, t_q)
     return {"seed": seed, "n_tau_bins": n_tau, "n_chi_eff_bins": n_chi,
             "rule": "train quantile bins of tau30, then of chi_eff within each tau30 bin; "
-                    "rng.choice per cell in (tau, chi) order; detector = argmax snr_<det>",
+                    "rng.choice per cell in (tau, chi) order; detector = argmax sum X_clean^2 (whitened, pre-zscore)",
+            "detector_rule_amendment": "M14.2 enmienda 1: snr_<det> del HDF5 sustituido por la energía blanqueada "
+                                       "(no existe HDF5 de G3T)",
+            "detector_names": dets,
             "memmap_dir": str(mm_dir), "tau30_edges_s": tau_edges.tolist(),
             "templates": [{"k": k, "train_position": int(pos[k]), "row_id": int(row_ids_train[pos[k]]),
-                           "cell_tau_chi": cells[k], "detector": det[k], "merger_index": peak[k],
+                           "cell_tau_chi": cells[k], "detector_index": det[k],
+                           **({"detector": dets[det[k]]} if dets is not None else {}), "merger_index": peak[k],
                            "chirp_mass": float(y[pos[k], 0]), "total_mass": float(y[pos[k], 1]),
                            "chi_eff": float(y[pos[k], 2]), "tau30_s": float(tau[pos[k]]),
-                           "snr": dict(zip(dets, snr[k].tolist()))} for k in range(K)]}
+                           "clean_energy": energy[k]} for k in range(K)]}
 
 
 def beta_nll_loss(out, y, beta):
@@ -614,7 +620,7 @@ def main():
             raise SystemExit(f"{mcfg['class_name']} has no template_bank option")
         # Deterministic; on --resume the checkpoint state_dict below overwrites these values.
         tb_info = init_template_bank(model.template_bank, tb_cfg.get("init", {}),
-                                     dataset_processed_dir(data_root, dataset_id), mm_dir, row_ids["train"], h5_path)
+                                     dataset_processed_dir(data_root, dataset_id), mm_dir, row_ids["train"])
         tb_info["architecture"] = model_kwargs["template_bank"]
         tb_info["n_parameters_bank"] = sum(p.numel() for p in model.template_bank.parameters())
         print(f"template bank: K={model.template_bank.n_templates}, L={model.template_bank.template_length}, "

@@ -22,6 +22,13 @@
 - Coste estimado en P100 (batch 256): tensores guardados para backward 8,7 GiB frente a 6,2 GiB en 4a (medido en CPU con B = 2 y escalado), pico transitorio del banco ≈ 2–3 GiB; cabe en 16 GB. Tiempo estimado ≈ 0,55–0,7 s/paso frente a 0,345 s (≈ 15–19 min/época, ≈ 19–25 h para 80 épocas).
 - Salida del banco: |c| (no |c|²) para que su escala sea comparable a la de la entrada (decidido antes de lanzar). Con K = 32 plantillas, el banco es mucho menor que uno de búsqueda; un resultado nulo es evidencia débil contra la hipótesis B.
 
+## Enmienda 1 (antes de entrenar)
+
+- **Motivo:** la inicialización elegía el detector de cada plantilla por `snr_<det>` del HDF5 trainio, pero para el dataset G3T (`m13_13_g3t`) solo existen memmaps; no hay HDF5 de G3T y el entrenamiento fallaba al arrancar.
+- **Criterio nuevo:** detector de la plantilla k = argmax_d Σ_t X_clean_train[pos_k, d, t]² en float64 (L(s) blanqueada, antes del z-score). En `run_info.json → procedure.template_bank` se registra `clean_energy` (energía por detector) en lugar de `snr`, el índice `detector_index` y, solo si algún manifest trae la clave `detector_order`, el nombre del detector (los manifests actuales no la traen: solo se registra el índice).
+- **Justificación:** el ruido blanqueado tiene varianza unidad por muestra, así que Σ x² de la señal limpia blanqueada es proporcional a ρ² óptimo en la ventana. Además mide la señal G3T que ve la red en la ventana, no la de G3 con clic que describía `snr_<det>`.
+- Sin otros cambios: cuadrícula, semilla, selección de filas y extracción de la plantilla son las del pre-registro.
+
 ## Lanzamiento (GPU 2)
 
 ```
