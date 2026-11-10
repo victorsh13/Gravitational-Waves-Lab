@@ -8,7 +8,7 @@
     "label_stats_file": "../M11_final_G1_500k_label_stats_train_only_train400000_val40000_cal30000_test30000_seed123.npz"
   },
   "prediction": {
-    "checkpoint_file": "M13_13_4a_G3T_s123_final.pt",
+    "checkpoint_file": "M13_3/M13_13_4a_G3T_s123_final.pt",
     "splits": [
       "test"
     ],
