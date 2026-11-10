@@ -37,14 +37,35 @@ advance together; a new run with a larger --n-per-regime continues and does not 
 
 loglr_truth_aligned: exact loglr at the true parameters as they were injected. align_rom gives y(t) = h_ROM(t + tau),
 tau = rom_time_shift_s of rows.jsonl (coarse + fine lag - sub-sample offset of the epochs), so the merger of the
-injected signal is at t_c - tau; coa_phase is param_coa_phase + param_rom_coa_phase_shift. Marginalized over the phase
-as the posterior, hence independent of the coa_phase; loglr_truth_aligned_fixed_phase keeps Re<h|d> - <h|h>/2, the one
-that the coa_phase changes. loglr_max_posterior is the exact loglr at the nested sample of highest likelihood.
+injected signal is at t_c - tau; coa_phase is param_coa_phase + param_rom_coa_phase_shift, at f_ref = injection_f_lower
+(15 Hz), as the injection, not the 30 Hz of the band. Marginalized over the phase as the posterior, hence independent
+of the coa_phase; loglr_truth_aligned_fixed_phase keeps Re<h|d> - <h|h>/2, the one that the coa_phase changes.
+loglr_max_found is the same loglr at the nested sample of highest likelihood.
 truth_inconsistent: loglr_truth_aligned is more than TRUTH_MAX_DEFICIT below it (information only, not for the bank).
 A failure of these checks never stops a PE: the row is saved with truth_check_error in its .json.
 --check-truth adds these fields to the .json of finished rows, from their stored samples, without running the PE.
 
-Output: <rows_dir>/pe_8s_nlive<N>_walks<W>_eps<E>_d<prior>/
+Marginalization (amendment 5, --marginalize, the default; --no-marginalize is the model of the first timing PE).
+Model relative_time_dom of pycbc, which needs dominant-mode waveforms (SEOBNRv4_ROM is). dynesty samples mchirp, q,
+spin1z, spin2z and inclination. Inside each likelihood call, phase analytically, distance on the grid of pycbc through
+a 2d interpolant, and tc, ra, dec, polarization by importance Monte Carlo: --vector-samples points, drawn from the SNR
+time series of each detector for that template. The model admits the inclination in the Monte Carlo too, but the noise
+of loglr was 2-4 times larger at the same cost (rows 414223, 420548): 0.8-1.0 against 0.24-0.34 with 5000 points.
+The priors are the same; the sky is written as two independent distributions because pycbc removes marginalized
+parameters one by one. The interpolant depends only on the distance prior, not on the row:
+distance_interp_<prior>.npz in rows_dir, made once by --build-distance-grid.
+Absolute values are not comparable with the unmarginalized model, nor between values of --vector-samples: pycbc
+normalizes the weights over the drawn points, which adds about ln(N) to loglr and logz, and the grid of the distance
+adds -0.5 (posteriors are not affected as long as the distance stays far from 5 Mpc). relbin_check draws the
+extrinsic parameters of each sample with model.reconstruct and compares the plain model "relative" with the exact
+loglr, the same criterion as before.
+
+sampler_missed_mode: loglr_truth_aligned > loglr_max_found + 1, with the same loglr at both: with marginalization,
+the marginal likelihood at the true intrinsic parameters and at the best nested sample, each the mean of
+TRUTH_REPEATS evaluations (the maximum stored by the sampler is biased high by the noise); without it, the exact
+loglr marginalized over the phase. --test-marg runs the pre-registered test of amendment 5 in pe_test_marg_<config>/.
+
+Output: <rows_dir>/pe_8s[_marg_ns<S>]_nlive<N>_walks<W>_eps<E>_d<prior>/
   row_<index>.npz    posterior_<param> (equal weight), nested_<param>, nested_logwt, nested_logl, truth_<param>
   row_<index>.json   wall time, likelihood calls, logz, summaries, relbin_check, loglr_truth_aligned, provenance
                      (written last)
@@ -68,12 +89,23 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")
 
 REGIME_ORDER = ("short", "medium", "long")
 DEFAULT_N_PER_REGIME = 40
+TEST_POSITIONS = (40, 43)  # amendment 5: first 3 of positions 41-60 of each regime, plus the longest row
 
 
 def bank_rows(selection, n_per_regime):
     """{regime: first n_per_regime row indices, in the order of selection.json}."""
     return {name: [r["row_index"] for r in selection["rows"] if r["regime"] == name][:n_per_regime]
             for name in REGIME_ORDER}
+
+
+def test_rows(selection):
+    """{regime: rows of the test of amendment 5}."""
+    out = {name: [r["row_index"] for r in selection["rows"] if r["regime"] == name][slice(*TEST_POSITIONS)]
+           for name in REGIME_ORDER}
+    longest = selection["timing_row_longest_long_regime"]["row_index"]
+    if longest not in out["long"]:
+        out["long"].append(longest)
+    return out
 
 
 def lock_alive(path):
@@ -104,12 +136,14 @@ def run_status(rows_dir, n_per_regime):
     if not pe_dirs:
         print("No PE started.")
     for pe_dir in pe_dirs:
-        print(pe_dir.name)
+        is_test = pe_dir.name.startswith("pe_test_marg")
+        rows_of = test_rows(selection) if is_test else bank
+        print(pe_dir.name + (" (test of amendment 5)" if is_test else ""))
         print(f"  {'regime':<8}{'done':>6}{'running':>9}{'failed':>8}{'pending':>9}{'primary':>9}{'trunc/edge':>12}"
-              f"{'relbin>max':>12}{'mean h':>9}{'mean calls':>12}")
+              f"{'relbin>max':>12}{'missed':>8}{'mean h':>9}{'mean calls':>12}")
         total_h, orphans, running_rows, inconsistent = [], [], [], []
         for regime in REGIME_ORDER:
-            ids = bank[regime]
+            ids = rows_of[regime]
             done, running, failed = [], 0, 0
             for i in ids:
                 stem = pe_dir / f"row_{i:06d}"
@@ -131,10 +165,11 @@ def run_status(rows_dir, n_per_regime):
             calls = f"{sum(d['n_likelihood_calls'] for d in done) / len(done):.3g}" if done else "-"
             print(f"  {regime:<8}{len(done):>6}{running:>9}{failed:>8}{len(ids) - len(done) - running - failed:>9}"
                   f"{sum(d['primary'] for d in done):>9}{sum(d['row_class'] != 'primary' for d in done):>12}"
-                  f"{sum(not d['relbin_ok'] for d in done):>12}{mean_h:>9}{calls:>12}")
+                  f"{sum(not d['relbin_ok'] for d in done):>12}"
+                  f"{sum(bool(d.get('sampler_missed_mode')) for d in done):>8}{mean_h:>9}{calls:>12}")
         if total_h:
             print(f"  total: {len(total_h)} done, mean {sum(total_h) / len(total_h):.2f} h per row")
-        extra = [i for i in outside if (pe_dir / f"row_{i:06d}.json").exists()]
+        extra = [i for i in ([] if is_test else outside) if (pe_dir / f"row_{i:06d}.json").exists()]
         if extra:
             print(f"  done outside the bank, not counted above: {extra}")
         if inconsistent:
@@ -162,14 +197,15 @@ if __name__ == "__main__" and _early_args(sys.argv[1:]).status:
 
 import numpy as np
 from pycbc.conversions import chi_eff, mass1_from_mchirp_q, mass2_from_mchirp_q, mchirp_from_mass1_mass2
-from pycbc.distributions import (JointDistribution, MchirpfromUniformMass1Mass2, QfromUniformMass1Mass2, SinAngle,
-                                 Uniform, UniformAngle, UniformPowerLaw, UniformSky)
-from pycbc.inference.models.relbin import Relative
+from pycbc.distributions import (CosAngle, JointDistribution, MchirpfromUniformMass1Mass2, QfromUniformMass1Mass2,
+                                 SinAngle, Uniform, UniformAngle, UniformPowerLaw, UniformSky)
+from pycbc.inference.models.relbin import Relative, RelativeTimeDom
 from pycbc.transforms import MchirpQToMass1Mass2
 from pycbc.types import Array, FrequencySeries, TimeSeries
 from pycbc.waveform import get_fd_waveform_sequence
+from scipy.interpolate import RectBivariateSpline
 from scipy.signal.windows import tukey
-from scipy.special import ive
+from scipy.special import ive, logsumexp
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -189,7 +225,17 @@ N_CHECK = 8
 RELBIN_MAX_DIFF = 0.2
 TRUTH_MAX_DEFICIT = 10.0
 VARIABLE_PARAMS = ["mchirp", "q", "spin1z", "spin2z", "ra", "dec", "inclination", "polarization", "tc", "distance"]
+MARG_SAMPLED_PARAMS = ["mchirp", "q", "spin1z", "spin2z", "inclination"]
 WAVEFORM_PARAMS = ("mass1", "mass2", "spin1z", "spin2z", "distance", "inclination")
+MARG_VECTOR_PARAMS = "tc,ra,dec,polarization"
+MARG_SNR_SAMPLE_RATE = 4096
+MARG_SKY_INITIAL_SAMPLES = int(1e6)
+MARG_DISTANCE_SAMPLES = int(1e4)
+MARG_DISTANCE_SNR_RANGE = (1.0, 100.0)
+MARG_DISTANCE_DENSITY = 1000
+DEFAULT_VECTOR_SAMPLES = 5000
+TRUTH_REPEATS = 16
+MISSED_MODE_MARGIN = 1.0
 
 
 def require(condition, message):
@@ -205,7 +251,8 @@ def exact_sh_hh(model, params):
         k0, k1 = model.edges[ifo][0], model.edges[ifo][-1]
         f = model.f[ifo][k0:k1]
         hp, hc = get_fd_waveform_sequence(sample_points=Array(f.astype(np.float64)), approximant=APPROXIMANT,
-                                          **{k: params[k] for k in (*WAVEFORM_PARAMS, "coa_phase") if k in params})
+                                          **{k: params[k] for k in (*WAVEFORM_PARAMS, "coa_phase", "f_ref")
+                                             if k in params})
         det = model.det[ifo]
         fp, fc = det.antenna_pattern(params["ra"], params["dec"], params["polarization"], tc_ref)
         t_det = params["tc"] + det.time_delay_from_earth_center(params["ra"], params["dec"], tc_ref)
@@ -237,23 +284,42 @@ def truth_as_injected(row, rows_dir, truth):
     require(index in records, f"Row {index} is not in rows.jsonl")
     m1, m2 = scalar(row, "param_mass_1"), scalar(row, "param_mass_2")
     return {**truth, "mass1": m1, "mass2": m2, "tc": truth["tc"] - records[index]["rom_time_shift_s"],
-            "coa_phase": scalar(row, "param_coa_phase") + scalar(row, "param_rom_coa_phase_shift")}
+            "coa_phase": scalar(row, "param_coa_phase") + scalar(row, "param_rom_coa_phase_shift"),
+            "f_ref": scalar(row, "injection_f_lower")}
 
 
-def truth_check(model, injected, nested, nested_logl):
-    """Fields of the .json: loglr at the truth as injected against the exact loglr at the best nested sample."""
+def marginal_loglr(model, sampled):
+    """Mean likelihood over TRUTH_REPEATS evaluations of the marginalized model (each one has Monte Carlo noise)."""
+    values = []
+    for _ in range(TRUTH_REPEATS):
+        model.update(**sampled)
+        values.append(float(model.loglr))
+    return float(logsumexp(values) - np.log(TRUTH_REPEATS))
+
+
+def truth_check(model, injected, nested, nested_logl, marginalized=None):
+    """Fields of the .json: truth as injected against the best sample; model is the plain one, see the docstring."""
     sh, hh = exact_sh_hh(model, injected)
+    exact_truth = phase_marginal_loglr(sh, hh)
     i = int(np.argmax(nested_logl))
-    best = {k: float(nested[k][i]) for k in (*VARIABLE_PARAMS, "mass1", "mass2")}
-    aligned, top = phase_marginal_loglr(sh, hh), phase_marginal_loglr(*exact_sh_hh(model, best))
-    model.update(**{k: best[k] for k in VARIABLE_PARAMS})
-    loglr_relative = float(model.loglr)
-    through_model = exact_loglr(model, best)
-    return dict(loglr_truth_aligned=aligned, loglr_truth_aligned_fixed_phase=float(sh.real - 0.5 * hh),
-                loglr_max_posterior=top, loglr_max_posterior_model=through_model,
-                loglr_max_posterior_relative=loglr_relative, marginal_abs_diff=abs(top - through_model),
-                truth_alignment=dict(tc=injected["tc"], coa_phase=injected["coa_phase"]),
-                truth_inconsistent=bool(not top - aligned <= TRUTH_MAX_DEFICIT))
+    fields = dict(loglr_truth_aligned_fixed_phase=float(sh.real - 0.5 * hh),
+                  truth_alignment=dict(tc=injected["tc"], coa_phase=injected["coa_phase"], f_ref=injected["f_ref"]))
+    if marginalized is None:
+        best = {k: float(nested[k][i]) for k in (*VARIABLE_PARAMS, "mass1", "mass2")}
+        aligned, found = exact_truth, phase_marginal_loglr(*exact_sh_hh(model, best))
+        model.update(**{k: best[k] for k in VARIABLE_PARAMS})
+        loglr_relative = float(model.loglr)
+        through_model = exact_loglr(model, best)
+        fields.update(loglr_max_posterior_model=through_model, loglr_max_posterior_relative=loglr_relative,
+                      marginal_abs_diff=abs(found - through_model))
+    else:
+        best = {k: float(nested[k][i]) for k in MARG_SAMPLED_PARAMS}
+        aligned = marginal_loglr(marginalized, {k: injected[k] for k in MARG_SAMPLED_PARAMS})
+        found = marginal_loglr(marginalized, best)
+        fields.update(loglr_truth_exact_at_truth=exact_truth)
+    return dict(fields, loglr_truth_aligned=aligned, loglr_max_found=found,
+                sampler_missed_mode=bool(aligned > found + MISSED_MODE_MARGIN),
+                truth_inconsistent=bool(not found - aligned <= TRUTH_MAX_DEFICIT))
 
 
 def guarded_truth_as_injected(row, rows_dir, truth):
@@ -264,12 +330,12 @@ def guarded_truth_as_injected(row, rows_dir, truth):
         return None, traceback.format_exc()
 
 
-def guarded_truth_check(model, injected, error, nested, nested_logl):
+def guarded_truth_check(model, injected, error, nested, nested_logl, marginalized=None):
     """Fields of the .json; a failure is recorded as truth_check_error and the PE goes on to save its results."""
     if error is not None:
         return dict(truth_check_error=error)
     try:
-        return truth_check(model, injected, nested, nested_logl)
+        return truth_check(model, injected, nested, nested_logl, marginalized)
     except Exception:
         return dict(truth_check_error=traceback.format_exc())
 
@@ -280,14 +346,59 @@ def component_mass_limits(params):
             & (mass1_from_mchirp_q(params["mchirp"], params["q"]) <= MASS_RANGE[1]))
 
 
-def build_prior(tc, distance_prior):
+def distance_interpolant(model, path):
+    """Same function and grid as setup_distance_marg_interpolant of pycbc, shared by the rows through path.
+
+    pycbc rebuilds it for each model, one (sh, hh) at a time: about 19 min. It depends only on the distance prior.
+    """
+    rescale, weights = model.distance_marginalization
+    lo, hi = MARG_DISTANCE_SNR_RANGE
+    sh_range = lo ** 2 / rescale.max(), hi ** 2 / rescale.min()
+    hh_range = lo ** 2 / rescale.max() ** 2, hi ** 2 / rescale.min() ** 2
+    sh_grid = np.geomspace(*sh_range, MARG_DISTANCE_DENSITY)
+    hh_grid = np.geomspace(*hh_range, MARG_DISTANCE_DENSITY)
+    if not path.exists():
+        quadratic = -0.5 * np.outer(hh_grid, rescale ** 2)
+        table = np.empty((sh_grid.size, hh_grid.size))
+        for i, sh in enumerate(sh_grid):
+            x = sh * rescale
+            table[i] = logsumexp(np.log(ive(0, x)) + x + quadratic, b=weights, axis=1)
+        tmp = path.with_suffix(f".tmp_{os.getpid()}")
+        with tmp.open("wb") as f:
+            np.savez(f, table=table, sh_grid=sh_grid, hh_grid=hh_grid)
+        os.replace(tmp, path)
+    with np.load(path) as saved:
+        require(np.array_equal(saved["sh_grid"], sh_grid) and np.array_equal(saved["hh_grid"], hh_grid),
+                f"{path} was made with another grid")
+        spline = RectBivariateSpline(sh_grid, hh_grid, saved["table"])
+
+    def interpolate(sh, hh, bounds_check=True):
+        out = spline(sh, hh, grid=False)
+        if bounds_check:
+            out = np.where((sh > sh_range[1]) | (sh < sh_range[0]) | (hh > hh_range[1]) | (hh < hh_range[0]),
+                           -np.inf, out)
+        return float(out) if np.ndim(out) == 0 else out
+
+    return interpolate
+
+
+class SampledPrior(JointDistribution):
+    """Prior of the sampled parameters. current_params also holds the marginalized arrays, which a prior with
+    constraints would try to put in one table with the scalars."""
+
+    def __call__(self, **params):
+        return super().__call__(**{k: params[k] for k in self.variable_args})
+
+
+def build_prior(tc, distance_prior, separate_sky=False):
     lo, hi = MASS_RANGE
     mchirp = (float(mchirp_from_mass1_mass2(lo, lo)), float(mchirp_from_mass1_mass2(hi, hi)))
     return JointDistribution(
         VARIABLE_PARAMS,
         MchirpfromUniformMass1Mass2(mchirp=mchirp), QfromUniformMass1Mass2(q=(1.0, hi / lo)),
         Uniform(spin1z=(-SPIN_MAX, SPIN_MAX), spin2z=(-SPIN_MAX, SPIN_MAX)),
-        UniformSky(polar_angle="dec", azimuthal_angle="ra", azimuthal_cyclic_domain=True),
+        *((UniformAngle(ra=None), CosAngle(dec=None)) if separate_sky else
+          (UniformSky(polar_angle="dec", azimuthal_angle="ra", azimuthal_cyclic_domain=True),)),
         SinAngle(inclination=None), UniformAngle(cyclic_domain=True, polarization=None),
         Uniform(tc=(tc - TC_HALF_WIDTH_S, tc + TC_HALF_WIDTH_S)),
         UniformPowerLaw(dim=DISTANCE_PRIORS[distance_prior], distance=DISTANCE_RANGE_MPC),
@@ -303,7 +414,7 @@ def scalar(row, key):
     return row[key].item()
 
 
-def build_model(row, args):
+def build_model(row, args, marginalize=False):
     require("strain_8s" in row, "Row without the 8 s segment: rebuild it with the current m13_11_build_rom_rows.py")
     detectors = [str(d) for d in row["detectors"]]
     epoch, delta_t = float(row["epoch_8s"][0]), scalar(row, "delta_t")
@@ -326,14 +437,42 @@ def build_model(row, args):
             f"True distance {truth['distance']:.1f} Mpc too close to the limits of the prior")
     fiducial = {k: v for k, v in truth.items() if k not in ("mchirp", "q")}
     fiducial.update(mass1=m1, mass2=m2)
-    model = Relative(
+    extra = {}
+    if marginalize:
+        extra = dict(sample_rate=MARG_SNR_SAMPLE_RATE, marginalize_vector_params=MARG_VECTOR_PARAMS,
+                     marginalize_vector_samples=args.vector_samples,
+                     marginalize_sky_initial_samples=MARG_SKY_INITIAL_SAMPLES, marginalize_distance=True,
+                     marginalize_distance_samples=MARG_DISTANCE_SAMPLES)
+    model = (RelativeTimeDom if marginalize else Relative)(
         list(VARIABLE_PARAMS), data, {ifo: scalar(row, "f_lower") for ifo in detectors},
         fiducial_params=fiducial, epsilon=args.epsilon, marginalize_phase=True,
         psds=psds, high_frequency_cutoff={ifo: scalar(row, "f_upper") for ifo in detectors},
         static_params=dict(approximant=APPROXIMANT, f_lower=scalar(row, "f_lower")),
-        prior=build_prior(truth["tc"], args.distance_prior), waveform_transforms=[MchirpQToMass1Mass2()],
-        ignore_failed_waveforms=True, no_save_data=True)
+        prior=build_prior(truth["tc"], args.distance_prior, separate_sky=marginalize),
+        waveform_transforms=[MchirpQToMass1Mass2()], ignore_failed_waveforms=True, no_save_data=True, **extra)
     return model, truth
+
+
+def interpolant_path(rows_dir, args):
+    return rows_dir / f"distance_interp_{args.distance_prior}.npz"
+
+
+def build_marginalized(row, rows_dir, args):
+    model, _ = build_model(row, args, marginalize=True)
+    model.distance_interpolator = distance_interpolant(model, interpolant_path(rows_dir, args))
+    model.prior_distribution.__class__ = SampledPrior  # pycbc rebuilds the prior when it removes parameters
+    return model
+
+
+def with_extrinsic(marginalized, samples, n):
+    """First n samples of the sampled arrays, with the other parameters drawn by the marginalized model."""
+    rows = []
+    for i in range(min(n, len(samples["mchirp"]))):
+        sampled = {k: float(samples[k][i]) for k in MARG_SAMPLED_PARAMS}
+        marginalized.update(**sampled)
+        rec = marginalized.reconstruct()
+        rows.append({**sampled, **{k: float(rec[k]) for k in VARIABLE_PARAMS if k not in sampled}})
+    return {k: np.array([r[k] for r in rows]) for k in VARIABLE_PARAMS}
 
 
 def derived(samples):
@@ -368,17 +507,23 @@ def run_row(row_path, out_stem, args):
     row = load_row(row_path)
     index = scalar(row, "row_index")
     row_class = "truncated_or_edge" if scalar(row, "param_is_truncated") else "primary"
-    model, truth = build_model(row, args)
-    model.update(**truth)
-    loglr_truth = float(model.loglr)
+    plain, truth = build_model(row, args)
+    plain.update(**truth)
+    loglr_truth = float(plain.loglr)
+    model, sampled = plain, VARIABLE_PARAMS
+    marginalized = None
+    if args.marginalize:
+        np.random.seed([PE_SEED, index])  # the draws of the marginalization use the global generator
+        model = marginalized = build_marginalized(row, row_path.parent, args)
+        sampled = MARG_SAMPLED_PARAMS
     injected, truth_error = guarded_truth_as_injected(row, row_path.parent, truth)
     try:
-        aligned_text = "failed" if injected is None else f"{phase_marginal_loglr(*exact_sh_hh(model, injected)):.2f}"
+        aligned_text = "failed" if injected is None else f"{phase_marginal_loglr(*exact_sh_hh(plain, injected)):.2f}"
     except Exception:
         aligned_text, truth_error = "failed", traceback.format_exc()
     print(f"row {index} ({scalar(row, 'regime')}): loglr(truth) {loglr_truth:.2f}, loglr(truth aligned) "
           f"{aligned_text}, target SNR "
-          f"{scalar(row, 'param_target_network_snr'):.2f}, bins {[len(e) for e in model.edges.values()]}, "
+          f"{scalar(row, 'param_target_network_snr'):.2f}, bins {[len(e) for e in plain.edges.values()]}, "
           f"{row_class}, SNR^2 in flat zone {scalar(row, 'snr2_fraction_flat'):.5f}", flush=True)
 
     rng = np.random.default_rng([PE_SEED, index])
@@ -393,9 +538,9 @@ def run_row(row_path, out_stem, args):
         sampler.pool.close_pool()
     sampling_s = time.perf_counter() - t_sampler
     res = sampler._sampler.results
-    # Columns of the sampler are model.sampling_params, which here are the variable params.
+    # Columns of the sampler are model.sampling_params.
     names = list(model.sampling_params)
-    require(set(names) == set(VARIABLE_PARAMS), f"Unexpected sampling params: {names}")
+    require(set(names) == set(sampled), f"Unexpected sampling params: {names}")
     nested = {name: np.asarray(res.samples)[:, i] for i, name in enumerate(names)}
     weights = np.exp(np.asarray(res.logwt) - float(res.logz[-1]))
     weights /= weights.sum()
@@ -403,8 +548,9 @@ def run_row(row_path, out_stem, args):
     draw = rng.choice(weights.size, size=n_eff, p=weights)
     posterior = derived({k: v[draw] for k, v in nested.items()})
     nested = derived(nested)
-    check = relbin_check(model, posterior, N_CHECK)
-    truth_fields = guarded_truth_check(model, injected, truth_error, nested, res.logl)
+    check = relbin_check(plain, with_extrinsic(marginalized, posterior, N_CHECK) if args.marginalize else posterior,
+                         N_CHECK)
+    truth_fields = guarded_truth_check(plain, injected, truth_error, nested, res.logl, marginalized)
 
     labels = [str(x) for x in row["label_names"]]
     summary = {k: dict(mean=float(np.average(nested[k], weights=weights)),
@@ -430,7 +576,14 @@ def run_row(row_path, out_stem, args):
         row_class=row_class, snr2_fraction_flat=scalar(row, "snr2_fraction_flat"),
         snr2_fraction_final4s=scalar(row, "snr2_fraction_final4s"), is_truncated=scalar(row, "param_is_truncated"),
         relbin_ok=check["relbin_ok"], primary=bool(row_class == "primary" and check["relbin_ok"]),
-        settings=dict(nlive=args.nlive, walks=args.walks, epsilon=args.epsilon, dlogz=DLOGZ, workers=args.workers,
+        settings=dict(marginalize=args.marginalize, sampled_params=list(sampled),
+                      marginalization=dict(vector_params=MARG_VECTOR_PARAMS, vector_samples=args.vector_samples,
+                                           sky_initial_samples=MARG_SKY_INITIAL_SAMPLES,
+                                           distance_samples=MARG_DISTANCE_SAMPLES,
+                                           distance_snr_range=list(MARG_DISTANCE_SNR_RANGE),
+                                           distance_density=MARG_DISTANCE_DENSITY,
+                                           snr_sample_rate=MARG_SNR_SAMPLE_RATE) if args.marginalize else None,
+                      nlive=args.nlive, walks=args.walks, epsilon=args.epsilon, dlogz=DLOGZ, workers=args.workers,
                       distance_prior=args.distance_prior, distance_range_mpc=list(DISTANCE_RANGE_MPC),
                       tc_half_width_s=TC_HALF_WIDTH_S, segment_s=row["strain_8s"].shape[1] * scalar(row, "delta_t"),
                       tukey_ramp_s=scalar(row, "pe_tukey_ramp_s"), seed=[PE_SEED, index],
@@ -453,25 +606,26 @@ def truth_summary(fields):
     if "truth_check_error" in fields:
         return "truth check FAILED, see truth_check_error in the .json"
     return (f"loglr truth aligned {fields['loglr_truth_aligned']:.2f} (fixed phase "
-            f"{fields['loglr_truth_aligned_fixed_phase']:.2f}), max posterior {fields['loglr_max_posterior']:.2f} "
-            f"(through the model {fields['loglr_max_posterior_model']:.2f}, |diff| "
-            f"{fields['marginal_abs_diff']:.1e}; relative {fields['loglr_max_posterior_relative']:.2f}), "
-            f"truth_inconsistent {fields['truth_inconsistent']}")
+            f"{fields['loglr_truth_aligned_fixed_phase']:.2f}), max found {fields['loglr_max_found']:.2f}, "
+            f"sampler_missed_mode {fields['sampler_missed_mode']}, truth_inconsistent {fields['truth_inconsistent']}")
 
 
 def check_truth_row(row_path, out_stem, args):
     """Adds the fields of truth_check to a finished row, from its stored samples; no PE."""
     record = json.loads(out_stem.with_suffix(".json").read_text())
-    if "loglr_truth_aligned" in record:
-        print(f"row {record['row_index']}: already has loglr_truth_aligned, unchanged", flush=True)
+    if "sampler_missed_mode" in record:
+        print(f"row {record['row_index']}: already has sampler_missed_mode, unchanged", flush=True)
         return
     row = load_row(row_path)
     model, truth = build_model(row, args)
     model.update(**truth)
+    model.loglr  # creates the state of marginalize_loglr
+    marginalized = build_marginalized(row, row_path.parent, args) if args.marginalize else None
+    params = MARG_SAMPLED_PARAMS if args.marginalize else VARIABLE_PARAMS
     with np.load(out_stem.with_suffix(".npz"), allow_pickle=False) as a:
-        nested = {k: a[f"nested_{k}"] for k in (*VARIABLE_PARAMS, "mass1", "mass2")}
+        nested = {k: a[f"nested_{k}"] for k in (*params, "mass1", "mass2")}
         nested_logl = a["nested_logl"]
-    fields = truth_check(model, truth_as_injected(row, row_path.parent, truth), nested, nested_logl)
+    fields = truth_check(model, truth_as_injected(row, row_path.parent, truth), nested, nested_logl, marginalized)
     tmp_json = out_stem.with_suffix(f".jsontmp_{os.getpid()}")
     tmp_json.write_text(json.dumps({**record, **fields}, indent=2))
     os.replace(tmp_json, out_stem.with_suffix(".json"))
@@ -500,6 +654,14 @@ def main():
     parser.add_argument("--walks", type=int, default=100, help="Minimum steps of the dynesty random walk")
     parser.add_argument("--epsilon", type=float, default=0.03, help="Tuning of the relative binning")
     parser.add_argument("--distance-prior", choices=sorted(DISTANCE_PRIORS), default="inverse_square")
+    parser.add_argument("--marginalize", action=argparse.BooleanOptionalAction, default=True,
+                        help="Marginalize time, sky, polarization, distance (amendment 5)")
+    parser.add_argument("--vector-samples", type=int, default=DEFAULT_VECTOR_SAMPLES,
+                        help="Monte Carlo points of the marginalization, per likelihood call")
+    parser.add_argument("--test-marg", action="store_true",
+                        help="Rows of the test of amendment 5, in pe_test_marg_<config>/")
+    parser.add_argument("--build-distance-grid", action="store_true",
+                        help="Make distance_interp_<prior>.npz in --rows-dir and exit")
     parser.add_argument("--workers", type=int, default=1, help="Processes inside one PE")
     parser.add_argument("--data-root", type=Path)
     parser.add_argument("--n-per-regime", type=int, default=DEFAULT_N_PER_REGIME,
@@ -522,7 +684,16 @@ def main():
 
     selection = json.loads((args.rows_dir / "selection.json").read_text())
     ordered = [r["row_index"] for r in selection["rows"]]
-    if args.row == "longest":
+    if args.build_distance_grid:
+        first = next(i for i in ordered if (args.rows_dir / f"row_{i:06d}.npz").exists())
+        build_marginalized(load_row(args.rows_dir / f"row_{first:06d}.npz"), args.rows_dir, args)
+        print(f"Distance grid in {interpolant_path(args.rows_dir, args)}", flush=True)
+        return
+    require(not args.test_marg or (args.marginalize and args.row is None), "--test-marg needs --marginalize, no --row")
+    if args.test_marg:
+        rows = test_rows(selection)
+        todo = [i for triple in zip(*(rows[name] for name in REGIME_ORDER)) for i in triple] + rows["long"][3:]
+    elif args.row == "longest":
         todo = [selection["timing_row_longest_long_regime"]["row_index"]]
     elif args.row is not None:
         todo = [int(args.row)]
@@ -532,7 +703,10 @@ def main():
         bank = bank_rows(selection, args.n_per_regime)
         todo = [i for triple in zip(*(bank[name] for name in REGIME_ORDER)) for i in triple]
 
-    pe_dir = args.rows_dir / f"pe_8s_nlive{args.nlive}_walks{args.walks}_eps{args.epsilon:g}_d{args.distance_prior}"
+    config = f"nlive{args.nlive}_walks{args.walks}_eps{args.epsilon:g}_d{args.distance_prior}"
+    pe_dir = args.rows_dir / (f"pe_test_marg_8s_ns{args.vector_samples}_{config}" if args.test_marg
+                              else f"pe_8s_marg_ns{args.vector_samples}_{config}" if args.marginalize
+                              else f"pe_8s_{config}")
     if args.check_truth:
         require(pe_dir.is_dir(), f"No PE directory: {pe_dir}")
         for index in todo:
