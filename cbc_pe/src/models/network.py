@@ -1365,9 +1365,21 @@ class SimpleCNN_ResidualDilatedTransformerAgg(SimpleCNN_ResidualDilated):
     in channels after the unchanged input (B, D, N), and block1 takes D * (1 + K) input channels.
     The bank and the new block1 are built after every other layer, so the other layers draw the
     same initial weights as M13.4a for a given torch seed.
+
+    M14.5 option covariance="full" (default "diag" = the M14.1 head, unchanged; used only with
+    heteroscedastic=True): the head gives K + K (K + 1) / 2 values per row (9 for K = 3),
+        [mu (K), log L_ii (K), L_ij for i > j in row-major order (L21, L31, L32 for K = 3)],
+    standardized label units. L is the lower Cholesky factor of Sigma = L L^T; log L_ii is clamped to
+    [LOG_SIGMA_MIN, LOG_SIGMA_MAX] as log_sigma is in M14.1, off-diagonal entries are unconstrained.
+    With L diagonal, L_ii = sigma_i (the M14.1 parametrization). The head keeps the name "head" (same
+    state_dict keys, only its shape changes). Its first 2K rows are drawn where M14.1 draws its head
+    and copied into the final head, built after every other layer: for a given torch seed every other
+    layer and the [mu, log L_ii] rows start from the M14.1 initial weights; only the off-diagonal rows
+    are new. full_covariance_from_output() turns the output into (mu, L, Sigma).
     """
 
     TEMPLATE_BANK_KEYS = ("n_templates", "template_length", "n_samples", "chunk_templates", "checkpoint")
+    COVARIANCE_OPTIONS = ("diag", "full")
 
     LOG_SIGMA_MIN = -7.0
     LOG_SIGMA_MAX = 3.0
@@ -1379,10 +1391,16 @@ class SimpleCNN_ResidualDilatedTransformerAgg(SimpleCNN_ResidualDilated):
         agg_heads: int = 4,
         heteroscedastic: bool = False,
         template_bank=None,
+        covariance: str = "diag",
         **kwargs,
     ):
         super().__init__(**kwargs)
 
+        if covariance not in self.COVARIANCE_OPTIONS:
+            raise ValueError(f"covariance must be one of {self.COVARIANCE_OPTIONS}, got {covariance!r}")
+        if covariance == "full" and not heteroscedastic:
+            raise ValueError('covariance="full" requires heteroscedastic=True')
+        self.covariance = covariance
         self.heteroscedastic = bool(heteroscedastic)
         if self.heteroscedastic:
             n_out = self.head.out_features
@@ -1416,6 +1434,15 @@ class SimpleCNN_ResidualDilatedTransformerAgg(SimpleCNN_ResidualDilated):
                 dropout=self.block1.dropout.p,
             )
 
+        if self.covariance == "full":
+            # Built last (see class docstring): rows [mu, log L_ii] copied from the M14.1-position head.
+            k = self.n_targets
+            head_2k = self.head
+            self.head = nn.Linear(head_2k.in_features, k + k * (k + 1) // 2)
+            with torch.no_grad():
+                self.head.weight[: 2 * k].copy_(head_2k.weight)
+                self.head.bias[: 2 * k].copy_(head_2k.bias)
+
     def encode(self, x):
         if self.template_bank is not None:
             # (B, D, N) -> (B, D * (1 + K), N): input unchanged, then the bank energies.
@@ -1440,11 +1467,31 @@ class SimpleCNN_ResidualDilatedTransformerAgg(SimpleCNN_ResidualDilated):
         embedding = self.embed(x)
         out = self.head(embedding)
         k = self.n_targets
-        log_sigma = torch.clamp(out[:, k:], self.LOG_SIGMA_MIN, self.LOG_SIGMA_MAX)
-        y_pred = torch.cat([out[:, :k], log_sigma], dim=1)
+        # diag: out[:, k:2k] is log sigma; full: log L_ii, followed by the unclamped off-diagonal L_ij.
+        log_sigma = torch.clamp(out[:, k:2 * k], self.LOG_SIGMA_MIN, self.LOG_SIGMA_MAX)
+        y_pred = torch.cat([out[:, :k], log_sigma, out[:, 2 * k:]], dim=1)
         if return_embedding:
             return y_pred, embedding
         return y_pred
+
+
+def full_covariance_from_output(out, n_targets):
+    """M14.5: split a covariance="full" output (B, K + K (K + 1) / 2) into (mu, L, Sigma).
+
+    mu (B, K); L (B, K, K) lower triangular with L_ii = exp(out[:, K + i]) and L_ij (i > j) taken in
+    row-major order from out[:, 2K:]; Sigma = L L^T (B, K, K). Standardized label units.
+    """
+    k = n_targets
+    if out.shape[1] != k + k * (k + 1) // 2:
+        raise ValueError(f"expected {k + k * (k + 1) // 2} outputs for K={k}, got {out.shape[1]}")
+    mu = out[:, :k]
+    L = torch.diag_embed(torch.exp(out[:, k:2 * k]))
+    pos = 2 * k
+    for i in range(k):
+        for j in range(i):
+            L[:, i, j] = out[:, pos]
+            pos += 1
+    return mu, L, torch.bmm(L, L.transpose(1, 2))
 
 
 def _largest_group_divisor(channels, max_groups):

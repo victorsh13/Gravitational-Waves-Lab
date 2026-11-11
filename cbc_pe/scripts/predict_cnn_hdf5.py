@@ -488,7 +488,18 @@ def main():
         )
 
         sigma = None
-        if getattr(model, "heteroscedastic", False):
+        cov = None
+        if getattr(model, "heteroscedastic", False) and getattr(model, "covariance", "diag") == "full":
+            # M14.5: model output is [mu, log L_ii, L_ij (i > j)]; pred_<split> stays mu, sigma_<split> is
+            # sqrt(diag Sigma) and cov_<split> is Sigma = L L^T (N, K, K) float32 (all standardized).
+            from src.models.network import full_covariance_from_output
+
+            k = y_eval.shape[1]
+            mu_t, _, cov_t = full_covariance_from_output(torch.from_numpy(np.asarray(pred, dtype=np.float32)), k)
+            pred = mu_t.numpy()
+            cov = cov_t.numpy().astype(np.float32)
+            sigma = np.sqrt(np.diagonal(cov, axis1=1, axis2=2)).astype(np.float32)
+        elif getattr(model, "heteroscedastic", False):
             # M14.1: model output is [mu, log_sigma]; pred_<split> stays mu, sigma_<split> is added
             # (both standardized).
             k = y_eval.shape[1]
@@ -509,6 +520,8 @@ def main():
         save_payload[f"y_{split_name}"] = y_eval
         if sigma is not None:
             save_payload[f"sigma_{split_name}"] = sigma
+        if cov is not None:
+            save_payload[f"cov_{split_name}"] = cov
 
         # Important: batch-level prediction yields data in sorted physical-index
         # order, so store indices in the same order.

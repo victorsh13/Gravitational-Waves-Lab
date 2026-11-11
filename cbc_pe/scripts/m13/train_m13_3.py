@@ -17,6 +17,12 @@ training.beta_nll = beta): the model outputs [mu, log_sigma] per label (standard
 in the model) and is trained with beta-NLL (Seitzer et al. 2022): per label
 0.5 * (log sigma^2 + (y - mu)^2 / sigma^2) * stop_grad(sigma^2)^beta, mean over labels and batch. Logged
 val/train40k mse and slope are computed on mu; prediction npz files add sigma_<split> (standardized).
+Optional full covariance (M14.5; model.covariance = "full" with model.heteroscedastic = true, requires
+training.loss = "beta_nll_full" and training.beta_nll = beta): the model outputs [mu, log L_ii, L21, L31, L32]
+(Sigma = L L^T, L lower triangular, standardized units); e = L^-1 (y - mu) by forward substitution and per
+label (e_i^2 / 2 + log L_ii) * stop_grad(L_ii^2)^beta, mean over labels and batch (equals beta_nll for L
+diagonal). Prediction npz files: pred_<split> = mu, sigma_<split> = sqrt(diag Sigma), cov_<split> = Sigma
+(N, 3, 3) float32, standardized.
 Optional template bank (M14.2; model.template_bank = {n_templates, template_length, n_samples, chunk_templates,
 checkpoint, init}): network.TemplateBank amplitudes sqrt(c_I^2 + c_Q^2) per (detector, template) are concatenated
 after the input before block1; templates initialized by init_template_bank (train rows, default_rng(142001)),
@@ -396,11 +402,40 @@ def beta_nll_loss(out, y, beta):
     return nll.mean()
 
 
-def split_output(out, n_targets, heteroscedastic):
-    """Return (mu, sigma or None); sigma = exp(log_sigma), standardized units."""
+def beta_nll_full_loss(out, y, beta):
+    """M14.5 beta-NLL with full covariance on out = [mu, log L_ii, L21, L31, L32] (B, 9), y (B, 3).
+
+    r = y - mu, e = L^-1 r by explicit forward substitution (no torch.linalg; PyTorch 1.9.1). Per label
+    (e_i^2 / 2 + log L_ii) * stop_grad(L_ii^2)^beta; mean over labels and batch, as beta_nll_loss.
+    Sum over labels with beta = 0: 0.5 r^T Sigma^-1 r + 0.5 log det Sigma, Sigma = L L^T.
+    """
+    if y.shape[1] != 3 or out.shape[1] != 9:
+        raise ValueError(f"beta_nll_full_loss expects K = 3 (out 9, y 3), got out {out.shape}, y {y.shape}")
+    r = y - out[:, :3]
+    log_d = out[:, 3:6]
+    inv_d = torch.exp(-log_d)
+    l21, l31, l32 = out[:, 6], out[:, 7], out[:, 8]
+    e1 = r[:, 0] * inv_d[:, 0]
+    e2 = (r[:, 1] - l21 * e1) * inv_d[:, 1]
+    e3 = (r[:, 2] - l31 * e1 - l32 * e2) * inv_d[:, 2]
+    e = torch.stack([e1, e2, e3], dim=1)
+    nll = 0.5 * e ** 2 + log_d
+    if beta != 0.0:
+        nll = nll * torch.exp(2.0 * beta * log_d).detach()
+    return nll.mean()
+
+
+def split_output(out, n_targets, heteroscedastic, full_cov=False):
+    """Return (mu, sigma or None, cov or None), standardized units.
+
+    diag: sigma = exp(log_sigma); full (M14.5): sigma = sqrt(diag Sigma), cov = Sigma (B, K, K).
+    """
     if not heteroscedastic:
-        return out, None
-    return out[:, :n_targets], torch.exp(out[:, n_targets:])
+        return out, None, None
+    if full_cov:
+        mu, _, cov = network.full_covariance_from_output(out, n_targets)
+        return mu, torch.sqrt(torch.diagonal(cov, dim1=1, dim2=2)), cov
+    return out[:, :n_targets], torch.exp(out[:, n_targets:]), None
 
 
 def make_loader(ds, sampler):
@@ -410,19 +445,25 @@ def make_loader(ds, sampler):
 
 @torch.no_grad()
 def predict(model, loader, device):
-    # Returns (pred, emb, y) as before; heteroscedastic models return (mu, emb, y, sigma).
+    # Returns (pred, emb, y) as before; heteroscedastic models return (mu, emb, y, sigma);
+    # full-covariance models (M14.5) return (mu, emb, y, sigma, cov).
     model.eval()
     hetero = bool(getattr(model, "heteroscedastic", False))
-    preds, embs, ys, sigmas = [], [], [], []
+    full_cov = hetero and getattr(model, "covariance", "diag") == "full"
+    preds, embs, ys, sigmas, covs = [], [], [], [], []
     for xb, yb in loader:
         out, emb = model(xb.to(device, non_blocking=True).float(), return_embedding=True)
-        pred, sigma = split_output(out, yb.shape[1], hetero)
+        pred, sigma, cov = split_output(out, yb.shape[1], hetero, full_cov)
         preds.append(pred.cpu().numpy())
         embs.append(emb.cpu().numpy())
         ys.append(yb.numpy())
         if hetero:
             sigmas.append(sigma.cpu().numpy())
+        if full_cov:
+            covs.append(cov.float().cpu().numpy())
     res = (np.concatenate(preds), np.concatenate(embs), np.concatenate(ys))
+    if full_cov:
+        return res + (np.concatenate(sigmas), np.concatenate(covs).astype(np.float32))
     return res + (np.concatenate(sigmas),) if hetero else res
 
 
@@ -465,9 +506,10 @@ def check_against_hdf5(h5_path, ds, row_ids, split):
     return res
 
 
-def save_predictions(path, split, pred, emb, y, idx, common, sigma=None):
+def save_predictions(path, split, pred, emb, y, idx, common, sigma=None, cov=None):
     # Same schema as scripts/predict_cnn_hdf5.py: standardized pred/y, original HDF5 row ids, ascending.
     # Heteroscedastic models (M14.1) add sigma_<split> (standardized); pred_<split> is mu.
+    # Full-covariance models (M14.5) also add cov_<split> (N, K, K) float32, standardized.
     payload = dict(common)
     payload["available_splits"] = np.array([split])
     payload[f"pred_{split}"] = pred
@@ -476,6 +518,8 @@ def save_predictions(path, split, pred, emb, y, idx, common, sigma=None):
     payload[f"idx_{split}"] = idx
     if sigma is not None:
         payload[f"sigma_{split}"] = sigma
+    if cov is not None:
+        payload[f"cov_{split}"] = cov
     with open(path, "xb") as fh:
         np.savez_compressed(fh, **payload)
     print(f"saved {path}", flush=True)
@@ -508,11 +552,17 @@ def main():
     if sched.get("type") != "cosine":
         raise SystemExit(f"Only the cosine schedule is implemented, got {sched.get('type')}")
     hetero = bool(mcfg.get("heteroscedastic", False))
+    covariance = mcfg.get("covariance", "diag")
+    if covariance not in ("diag", "full") or (covariance == "full" and not hetero):
+        raise SystemExit(f"model.covariance {covariance!r}: expected diag, or full with model.heteroscedastic = true")
+    full_cov = covariance == "full"
     loss_name = tcfg.get("loss", "MSELoss")
     if int(tcfg["batch_size"]) != BATCH:
         raise SystemExit("Expected batch_size 256")
-    if loss_name != ("beta_nll" if hetero else "MSELoss"):
-        raise SystemExit(f"loss {loss_name!r}: expected MSELoss, or beta_nll with model.heteroscedastic = true")
+    expected_loss = "beta_nll_full" if full_cov else ("beta_nll" if hetero else "MSELoss")
+    if loss_name != expected_loss:
+        raise SystemExit(f"loss {loss_name!r}: expected {expected_loss} for heteroscedastic={hetero}, "
+                         f"covariance={covariance}")
     beta = float(tcfg["beta_nll"]) if hetero else None
     if float(tcfg["learning_rate"]) != peak_lr:
         raise SystemExit("training.learning_rate must equal schedule.peak_lr")
@@ -607,6 +657,9 @@ def main():
     if hetero:
         # Stored in model_kwargs so predict_cnn_hdf5.py rebuilds the heteroscedastic head from the checkpoint.
         model_kwargs["heteroscedastic"] = True
+    if full_cov:
+        # Only for M14.5, so diag checkpoints keep their model_kwargs unchanged.
+        model_kwargs["covariance"] = "full"
     tb_cfg = mcfg.get("template_bank")
     if tb_cfg is not None:
         # Architecture keys go to model_kwargs (rebuilt by predict_cnn_hdf5.py); "init" only here.
@@ -614,6 +667,8 @@ def main():
     model = getattr(network, mcfg["class_name"])(**model_kwargs).to(device)
     if hetero and not getattr(model, "heteroscedastic", False):
         raise SystemExit(f"{mcfg['class_name']} has no heteroscedastic option")
+    if full_cov and getattr(model, "covariance", "diag") != "full":
+        raise SystemExit(f"{mcfg['class_name']} has no full covariance option")
     tb_info = None
     if tb_cfg is not None:
         if getattr(model, "template_bank", None) is None:
@@ -627,7 +682,10 @@ def main():
               f"rows {[t['row_id'] for t in tb_info['templates']]}", flush=True)
     optimizer = torch.optim.AdamW(model.parameters(), lr=peak_lr, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, make_lr_lambda(warmup_steps, total_steps))
-    if hetero:
+    if full_cov:
+        def criterion(out, y):
+            return beta_nll_full_loss(out, y, beta)
+    elif hetero:
         def criterion(out, y):
             return beta_nll_loss(out, y, beta)
     else:
@@ -700,6 +758,12 @@ def main():
                                          f"log_sigma clamped to [{type(model).LOG_SIGMA_MIN}, "
                                          f"{type(model).LOG_SIGMA_MAX}]; logged mse/slope on mu)")
         run_info["procedure"]["heteroscedastic"] = True
+    if full_cov:
+        run_info["procedure"]["loss"] = (f"beta_nll_full (beta={beta}, standardized labels; model outputs "
+                                         f"[mu, log L_ii, L21, L31, L32], Sigma = L L^T, log L_ii clamped to "
+                                         f"[{type(model).LOG_SIGMA_MIN}, {type(model).LOG_SIGMA_MAX}]; "
+                                         f"logged mse/slope on mu)")
+        run_info["procedure"]["covariance"] = "full"
     if tb_info is not None:
         run_info["procedure"]["template_bank"] = tb_info
     if subset_pos is not None:
@@ -829,9 +893,10 @@ def main():
               "input_normalization": np.array(cfg.get("input_normalization"), dtype=object),
               "memmap_dir": str(mm_dir)}
     (vp, ve, vy, *vs), (tp, te, ty, *ts) = last_eval
-    save_predictions(p_val, "val", vp, ve, vy, row_ids["val"], common, sigma=vs[0] if vs else None)
+    save_predictions(p_val, "val", vp, ve, vy, row_ids["val"], common, sigma=vs[0] if vs else None,
+                     cov=vs[1] if len(vs) > 1 else None)
     save_predictions(p_tr, TRAIN_MONITOR_SPLIT, tp, te, ty, row_ids["train"][tr_pos], common,
-                     sigma=ts[0] if ts else None)
+                     sigma=ts[0] if ts else None, cov=ts[1] if len(ts) > 1 else None)
 
 
 if __name__ == "__main__":
