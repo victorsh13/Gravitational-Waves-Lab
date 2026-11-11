@@ -28,3 +28,8 @@
 
 ## Regla de parada
 Un entrenamiento por variante; sin variantes de β ni de parametrización.
+
+## Enmienda 1 (12-11-2026, antes de ver resultados de M14.5a y M14.5b)
+- **M14.5b se lanza por decisión del usuario** aunque M14.2 no cumplió su criterio primario (enmienda 2 de M14.2: sin mejora resuelta frente a 2 × ruido de semilla). Motivo: mejora del banco en las 13 celdas de M14.2, creciente en señales largas (χ_eff D7–D10 −3,6 a −5,6 %; chirp D10 −10 %), coherente con la hipótesis de acumulación de fase. El veredicto de M14.2 no cambia.
+- **Elección del modelo final entre M14.5a y M14.5b (val G3T), fijada ahora:** se elige M14.5b si cumple C1 frente a M14.2, es válido en C3, y en val tiene (i) RMSE de μ en D8–D10 menor o igual que M14.5a en chirp y en χ_eff (punto) y (ii) volumen medio geométrico del elipsoide conformal 3D menor o igual que M14.5a (punto). En otro caso, M14.5a.
+- **Limitación declarada:** es una elección por estimación puntual. Con una semilla por modelo, una diferencia del orden del ruido de semilla (3,5–4,7 % en D8–D10) no está resuelta. Se acepta porque los dos modelos son válidos, tienen latencia de inferencia similar (ms) y el coste extra del banco es solo de entrenamiento.
