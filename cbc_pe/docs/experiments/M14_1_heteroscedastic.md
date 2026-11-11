@@ -16,3 +16,11 @@
 - Modelo: `SimpleCNN_ResidualDilatedTransformerAgg(heteroscedastic=True)` en `src/models/network.py`; la capa final da [μ, log σ] (3 + 3, unidades estandarizadas), log σ con clamp [−7, 3].
 - Entrenador: `scripts/m13/train_m13_3.py` (`beta_nll_loss`); mse y pendiente registradas sobre μ.
 - Predicciones: `pred_<split>` = μ; se añade `sigma_<split>` (estandarizada) en `val_predictions_embeddings.npz`, `train40k_predictions.npz` y en las salidas de `scripts/predict_cnn_hdf5.py`.
+
+## Resultado (11-11-2026)
+- **C1 (salvaguarda) PASA:** ΔRMSE de μ +0,37 % [−0,03; +0,82] / +0,44 % [−0,04; +0,94] / +0,06 % [−0,35; +0,48].
+- **C2 (calibración) FALLA, 20/21 celdas:** chirp D1–D3 std(z) = 0,832. Global y por terciles de SNR, std(z) 0,977–1,011.
+- **Veredicto pre-registrado:** σ no se adopta para el Mondrian v2.
+- **Lectura post hoc (hipótesis):** los grupos de τ30 se definen con los parámetros verdaderos; ahí aparece la regresión a la media de μ (mean z = +0,40 en chirp D1–D3), que σ(X) no puede representar. En particiones que se calculan desde X (bins de σ, terciles de SNR), σ está bien calibrada: RMS(σ)/RMSE 0,99–1,01. Error de diseño del criterio 2: faltó un grupo equivalente definido por la predicción.
+- **Consecuencia:** M14.3, experimento nuevo con su propio pre-registro.
+- Notebook: `notebooks/m14/M14_1_evaluation.ipynb`; resumen: `results/M13_3/M14_1_4a_G3T_hetero_s123/M14_1_evaluation_summary_20261111T114355Z.json`.
