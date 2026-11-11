@@ -36,3 +36,11 @@ mkdir -p logs/m14 && CUDA_VISIBLE_DEVICES=2 nohup python scripts/m13/train_m13_3
   --config configs/experiments/m14/train_m14_2_4aG3T_tbank_s123.json \
   > logs/m14/M14_2_4a_G3T_tbank_s123.log 2>&1 &
 ```
+
+## Enmienda 2 (11-11-2026, antes de ver las predicciones de M14.2)
+- **Motivo:** el criterio primario usa "2 × ruido de semilla de la referencia en ese grupo", pero no fija su valor en D8–D10.
+- **Ruido de semilla en D8–D10:** por etiqueta, con el par 4a-aug G3 s123/s124 en val G3 y la definición de la sección 3b de M13_6_evaluation (aproximación: no hay dos semillas de 4a en G3T). Se calcula en el notebook antes de cargar M14.2 y se registra en el JSON.
+- **Primario:** ΔRMSE% de chirp y χ_eff en D8–D10 frente a 4a-G3T s123 (bootstrap emparejado, B = 2000, default_rng(142002)). Mejora resuelta en una etiqueta si −ΔRMSE% > 2 × ruido de semilla de esa etiqueta en D8–D10.
+- **Salvaguarda:** en cada celda no primaria (3 etiquetas × {global, D1–D3, D4–D7, D8–D10}), PASA si IC sup ≤ +4 %, FALLA si el punto > +4 %, INDETERMINADO en otro caso.
+- **Veredicto:** mejora resuelta si se cumple en al menos una etiqueta primaria y ninguna celda de la salvaguarda FALLA.
+- **Descriptivos:** ΔRMSE por decil D1–D10 y etiqueta; RMSE de χ_eff en D10 frente al suelo de 4a-G3T (0,207); solape normalizado entre plantillas iniciales y finales (si torch está disponible en local).
