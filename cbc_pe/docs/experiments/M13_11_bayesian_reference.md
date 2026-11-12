@@ -72,3 +72,9 @@ Análisis intermedio con 40 filas por régimen (para las Jornadas CPAN, 16–18-
 
 ## Enmienda 5 (6-11-2026, antes del banco)
 La PE de prueba (fila 414223) no encontró el modo: el log-likelihood en la verdad alineada (179,55) supera al máximo encontrado (174,27), con t_c y el cielo en otro modo (multimodalidad extrínseca). Se marginalizan los parámetros extrínsecos dentro del modelo relative (tiempo, cielo, polarización, fase y, si es posible, distancia) y se muestrean solo los intrínsecos; la posterior de chirp_mass, total_mass y chi_eff es la misma en teoría. Prueba antes del banco: 10 filas (3 por régimen de las posiciones 41–60 de la selección, fuera del banco intermedio, y la 414223). Criterio: en todas, el máximo encontrado ≥ loglr en la verdad alineada − 1. Las filas de prueba no se usan para comparar con la red ni para elegir la configuración por su resultado. Indicador sampler_missed_mode en todas las filas del banco.
+
+## Enmienda 6 (12-11-2026, antes de lanzar el banco y de ver resultados)
+- Redes comparadas: 4a-G3T s123 (primaria, como en la enmienda 2) y M14.5a (modelo final provisional; descriptiva). Si el 13-11 se elige M14.5b, se añade también como descriptiva.
+- Descriptivo nuevo: comparación de la varianza predicha por la red (Σ_ii de M14.5a) con la varianza posterior de la PE, fila a fila.
+- La inferencia de las redes sobre las filas con señal ROM (gate G-NET) se hace en la VM después de la CPAN; no condiciona el banco de PE.
+- Análisis intermedio con 40 filas por régimen después de la CPAN; el banco continúa hasta 60 por régimen con independencia del resultado intermedio (plan del 6-11).
