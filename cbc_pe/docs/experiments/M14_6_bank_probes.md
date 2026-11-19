@@ -77,3 +77,6 @@ Plantillas en local (CPU); correlaciones de val en la VM (1 GPU, ≲ 1 h); sonda
 - Plantillas (local, CPU): `scripts/m14/m14_6_make_templates.py` → `results/M13_3/M14_6/templates_<UTC>.npz`.
 - Variables (VM, GPU): `scripts/m14/m14_6_bank_features.py` → `results/M13_3/M14_6/features_val_<UTC>.npz`.
 - Sondas (local, CPU, 1 hilo): `notebooks/m14/M14_6_probes.ipynb` → `results/M13_3/M14_6/M14_6_summary_<UTC>.json` y `M14_6_oof_<UTC>.npz`.
+
+## Resultado (19-11-2026, run 20261119T172902Z)
+Gates: G3 diferencia 0; G1 R² de 𝓜 con P512 0,813 (≥ 0,8); G2 |ΔR²| ≤ 0,0015. Criterio primario: **sin margen relevante**. M14.5b, P512, D8–D10: ΔR² −0,0014 [−0,0056; 0,0025] (𝓜) y −0,0043 [−0,0090; 0,0003] (χ_eff). ΔR² ∈ [−0,005; +0,004] en todas las celdas, bancos y en M14.5a; sin crecimiento con K; L32 ≈ P32; R²_A ≈ 0. Decisión: no se invierte más en el banco de filtros. Cota inferior: no demuestra ausencia de información en X. Resumen `results/M13_3/M14_6/M14_6_summary_20261119T172902Z.json`.
