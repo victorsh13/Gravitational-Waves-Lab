@@ -29,3 +29,10 @@ La configuración elegida debe cumplir 1–3 en test (bandas con el n de test). 
 
 ## Regla de parada
 Una ejecución por modelo final.
+
+## Resultado con M14.5b (13-11-2026, run 20261113T152305Z)
+- Configuraciones válidas en val: 34 (𝓜), 32 (M_tot) y 33 (χ_eff) de 68; todas las de score r son condicionalmente inválidas.
+- Seleccionada para las tres etiquetas: 1 bin, simétrica, r/σ (la misma que con M14.5a). Confirmada en test: cobertura 0,904 / 0,901 / 0,904; desviación condicional máxima 0,010 / 0,007 / 0,010; anchura media 13,72 / 25,05 / 0,513.
+- Mondrian de M11 en test: con score r, inválido (desviación 0,035 / 0,077 / 0,041); con r/σ, válido y con anchura casi igual (< 0,5 %).
+- Eventos reales con 5b (run 20261113T154408Z, n = 9, descriptivo): mediana de LVK dentro del intervalo 9/9 en las tres etiquetas y dentro del elipsoide S 9/9 (3D y 2D).
+- Run con M14.5a: 20261112T161005Z (M14.7) y 20261112T170136Z (eventos reales).

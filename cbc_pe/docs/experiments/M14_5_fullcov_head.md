@@ -40,3 +40,11 @@ Un entrenamiento por variante; sin variantes de β ni de parametrización.
 - **Confirmación en test (30 000 filas; M14.5a en test no se ha mirado):** se adopta S si en test (i) la cobertura 3D de S no está por debajo del límite inferior de la banda corregida y (ii) el IC superior de Δ volumen 3D de S frente a P (P con M14.1, como en val) es < 0. En otro caso, P con la D del nuevo modelo.
 - **Para M14.5b y para la regla de la enmienda 1:** se aplica el mismo criterio corregido de validez.
 - Decisión post hoc, documentada como tal; el veredicto pre-registrado (P) queda registrado.
+## Resultado de la regla de la enmienda 1 (13-11-2026)
+M14.5b cumple las cuatro condiciones de la enmienda 1:
+- C1 frente a M14.2: +0,42 / +0,33 / +2,19 % (pasa).
+- C3 con la banda de la enmienda 2: S válida (val 0,9024; test 0,9010; Δ volumen 3D frente a P −30,5 % en val y −30,2 % en test).
+- RMSE de μ en D8–D10 (val): 3,841 frente a 3,968 (𝓜) y 0,1739 frente a 0,1782 (χ_eff).
+- Volumen medio geométrico del elipsoide 3D (val): 49,7 frente a 51,4.
+
+**Modelo final: M14.5b.** Las diferencias frente a M14.5a están por debajo del ruido de semilla: la elección es puntual. Notebook `notebooks/m14/M14_5_evaluation_5b.ipynb`; resumen `results/M13_3/M14_5/M14_5b_4a_G3T_tbank_fullcov_s123/M14_5_summary_..._20261113T150740Z.json`.
