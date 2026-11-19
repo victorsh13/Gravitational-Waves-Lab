@@ -143,6 +143,8 @@ def main():
     t_load = time.perf_counter()
     with np.load(args.templates, allow_pickle=False) as z:
         tmeta = json.loads(str(z["metadata_json"]))
+        require(str(z["row_ids_val_sha256"]) == sha256_file(memmap_dir / "row_ids_val.npy"),
+                "templates row_ids_val_sha256 != sha256 of row_ids_val.npy of the memmap read here")
         require(np.array_equal(z["val_row_ids"], row_ids), "templates val_row_ids != row_ids_val of the memmap")
         block_index = np.asarray(z["val_block_index"], dtype=np.int64)
         p = int(z["peak_sample"])

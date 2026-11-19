@@ -47,6 +47,8 @@ MERGER_MARGIN = 512          # samples after the h+ peak kept in the window (0.1
 SYNTH_PROCESSING_START = 1.0e9  # synthetic GPS start of the processing segment (processing is time invariant)
 TRAIN_CFG = PROJECT_ROOT / "configs/experiments/m14/train_m14_5b_4aG3T_tbank_fullcov_s123.json"
 OUT_SUBDIR = "results/M13_3/M14_6"
+# Same val memmap as m14_6_bank_features.py (MEMMAP_REL there); relative to the data root.
+MEMMAP_REL = "processed/M13_G3_band1024_w16_500k/m13_13_g3t/fp16_memmap"
 
 
 def require(condition, message):
@@ -68,6 +70,8 @@ def parse_args():
     p.add_argument("--data-root", type=Path)
     p.add_argument("--manifest", type=Path, help="Override G1 manifest_path; still verified by hash")
     p.add_argument("--allow-version-mismatch", action="store_true")
+    p.add_argument("--memmap-dir", type=Path, default=Path(MEMMAP_REL),
+                   help="G3T val fp16 memmap with row_ids_val.npy (relative to the data root unless absolute)")
     p.add_argument("--n-templates", type=int, default=N_TEMPLATES,
                    help="First K of the seed-20261119 draw (512 is the pre-registered bank; fewer only for a test)")
     return p.parse_args()
@@ -98,14 +102,17 @@ def main():
     require((m11.CLICK_F_LOWER, m11.CLICK_TAPER_END_HZ) == (S15_F_LOWER, S15_TAPER_END_HZ),
             "S15 band not set by m13_13_build_g3t")
     args.mode = "m14_6_templates"  # recorded by g6.attrs_for (not used here)
-    root, spec_g1, df, _trainio, directory, _ = g6.setup(args)
+    root, spec_g1, df, _trainio, _directory, _ = g6.setup(args)
     N = int(g1.CONFIG.length)
     dt = float(g1.CONFIG.delta_t)
     p_peak = N - 1 - MERGER_MARGIN
 
     # Val rows and PSD environments (blocks), in fp16_memmap row order.
-    memmap_dir = directory / "fp16_memmap"
-    val_ids = np.load(memmap_dir / "row_ids_val.npy").astype(np.int64)
+    memmap_dir = args.memmap_dir if args.memmap_dir.is_absolute() else root / args.memmap_dir
+    row_ids_path = memmap_dir / "row_ids_val.npy"
+    require(row_ids_path.is_file(), f"{row_ids_path} missing")
+    row_ids_sha256 = sha256_file(row_ids_path)
+    val_ids = np.load(row_ids_path).astype(np.int64)
     val = df.loc[val_ids]
     require((val["split"] == "val").all(), "row_ids_val are not all val rows of the manifest")
     block_ids = sorted(val["block_id"].astype(str).unique())
@@ -179,14 +186,15 @@ def main():
         processor=g1.PROCESSOR.metadata(), layout=dict(n_samples=N, peak_sample=p_peak, merger_margin=MERGER_MARGIN,
                                                        synthetic_processing_start=SYNTH_PROCESSING_START),
         normalization="unit L2 norm per (template, block, detector) of the whitened h+; quadrature = Hilbert",
-        detectors=list(DETECTORS), memmap_dir=str(memmap_dir), g3_config=str(args.config.resolve()),
+        detectors=list(DETECTORS), memmap_dir=str(memmap_dir), row_ids_val_sha256=row_ids_sha256, g3_config=str(args.config.resolve()),
         script_sha256=sha256_file(__file__), elapsed_s=time.perf_counter() - t0)
     with out_path.open("xb") as f:
         np.savez(f, templates=T, block_ids=np.array(block_ids), detectors=np.array(DETECTORS),
                  source_row=pick, params_m1_m2_s1z_s2z=params,
                  labels_chirp_total_chieff=rows[["chirp_mass", "total_mass", "chi_eff"]].to_numpy(np.float64),
                  taper_s=taper_s, edge_samples=edge_samples, peak_index=peak_index, peak_sample=np.int64(p_peak),
-                 val_row_ids=val_ids, val_block_index=val_block_index, metadata_json=np.array(json.dumps(meta)))
+                 val_row_ids=val_ids, val_block_index=val_block_index, row_ids_val_sha256=np.array(row_ids_sha256),
+                 metadata_json=np.array(json.dumps(meta)))
     del T
     with np.load(out_path) as z:  # the npz is complete before the work file is removed
         require(z["templates"].shape == (K, len(block_ids), 3, N), "npz templates shape")
