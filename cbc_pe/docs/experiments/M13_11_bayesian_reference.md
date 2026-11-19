@@ -78,3 +78,7 @@ La PE de prueba (fila 414223) no encontró el modo: el log-likelihood en la verd
 - Descriptivo nuevo: comparación de la varianza predicha por la red (Σ_ii de M14.5a) con la varianza posterior de la PE, fila a fila.
 - La inferencia de las redes sobre las filas con señal ROM (gate G-NET) se hace en la VM después de la CPAN; no condiciona el banco de PE.
 - Análisis intermedio con 40 filas por régimen después de la CPAN; el banco continúa hasta 60 por régimen con independencia del resultado intermedio (plan del 6-11).
+## Enmienda 7 (19-11-2026, antes de lanzar el banco y de ver resultados)
+- Prueba de la enmienda 5 superada: 10/10 filas con sampler_missed_mode = False, relbin max|Δloglr| ≤ 0,03 y todas primarias; 3,1 / 3,7 / 5,5 h por fila en los regímenes corto / medio / largo (media 4,2 h; máximo 8,7 h en la 414223).
+- El modelo final de M14 es M14.5b (regla de la enmienda 1 de M14.5, aplicada el 13-11). Se añade M14.5b a las redes comparadas. El resultado para el modelo final se informa con M14.5b; las comparaciones con 4a-G3T y M14.5a se mantienen como estaban pre-registradas.
+- Banco con la configuración de la prueba: --marginalize, --vector-samples 5000, nlive 500, --n-per-regime 40, en el PC local con 2 copias de 1 proceso cada una. Las filas del directorio sin marginalizar (pe_8s_nlive500_…, primera PE de tiempo) no entran en el análisis.
