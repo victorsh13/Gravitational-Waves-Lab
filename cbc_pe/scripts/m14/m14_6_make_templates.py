@@ -103,6 +103,10 @@ def main():
             "S15 band not set by m13_13_build_g3t")
     args.mode = "m14_6_templates"  # recorded by g6.attrs_for (not used here)
     root, spec_g1, df, _trainio, _directory, _ = g6.setup(args)
+    # Work arrays of an interrupted earlier run are never reused: removed before anything is computed.
+    for stale in sorted((root / OUT_SUBDIR).glob("templates_*.work.npy")):
+        print(f"Removing work file of an earlier unfinished run: {stale}", flush=True)
+        stale.unlink()
     N = int(g1.CONFIG.length)
     dt = float(g1.CONFIG.delta_t)
     p_peak = N - 1 - MERGER_MARGIN
@@ -183,7 +187,25 @@ def main():
                                                   inclination=0.0, coa_phase=0.0, distance=1.0,
                                                   edge_taper_s=g3t.EDGE_TAPER_S),
         whitening="m13_11_prepare_rows.process_clean with g1.PROCESSOR (G3 spec) and the block processing PSD",
-        processor=g1.PROCESSOR.metadata(), layout=dict(n_samples=N, peak_sample=p_peak, merger_margin=MERGER_MARGIN,
+        # Not g1.PROCESSOR.metadata(): it calls usable_duration_after_processing_margins, which raises for G3 (8.15 s
+        # corrupted margin per side > 4 s window); with crop_to_config those margins live in the processing context.
+        processor=dict(whitening_method=g1.PROCESSOR.whitening_method,
+                       whitening_max_filter_duration=float(g1.PROCESSOR.whitening_max_filter_duration),
+                       whitening_trunc_method=g1.PROCESSOR.whitening_trunc_method,
+                       whitening_low_frequency_cutoff=float(g1.PROCESSOR.whitening_low_frequency_cutoff),
+                       apply_highpass=bool(g1.PROCESSOR.apply_highpass),
+                       highpass_frequency=float(g1.PROCESSOR.highpass_frequency),
+                       apply_lowpass=bool(g1.PROCESSOR.apply_lowpass),
+                       lowpass_frequency=float(g1.PROCESSOR.lowpass_frequency),
+                       fir_order=int(g1.PROCESSOR.fir_order), fir_beta=float(g1.PROCESSOR.fir_beta),
+                       remove_corrupted=bool(g1.PROCESSOR.remove_corrupted),
+                       apply_standardization=bool(g1.PROCESSOR.apply_standardization),
+                       output_mode=g1.PROCESSOR.output_mode,
+                       sampling_frequency=float(g1.CONFIG.sampling_frequency),
+                       processing_context_start_samples=int(g1.CONFIG.processing_context_start_samples),
+                       processing_context_end_samples=int(g1.CONFIG.processing_context_end_samples),
+                       processing_length=int(g1.CONFIG.processing_length), output_length=int(g1.CONFIG.length)),
+        layout=dict(n_samples=N, peak_sample=p_peak, merger_margin=MERGER_MARGIN,
                                                        synthetic_processing_start=SYNTH_PROCESSING_START),
         normalization="unit L2 norm per (template, block, detector) of the whitened h+; quadrature = Hilbert",
         detectors=list(DETECTORS), memmap_dir=str(memmap_dir), row_ids_val_sha256=row_ids_sha256, g3_config=str(args.config.resolve()),
