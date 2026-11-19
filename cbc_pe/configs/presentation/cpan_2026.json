@@ -1,0 +1,524 @@
+{
+  "_comment": "CPAN 2026 talk (English). Deep-merged over labels.json by scripts/m13/presentation/cpan_results_figures.py: keys here win, everything else is inherited. No middle dot in any figure text (use parentheses, a dash or a colon). Every colour drawn in F06-F12 and the contact sheet comes from 'colors' / 'cmap' below; the code has no colour literals.",
+  "_doc": {
+    "colors.score_r": "F07 points, F08 points: residual score r",
+    "colors.score_r_sigma": "F07 points, F08 points: normalised score r/sigma",
+    "colors.selected": "F08 star (selected configuration)",
+    "colors.selected_edge": "F08 star edge",
+    "colors.m11_ring": "F08 ring (M11 Mondrian geometry)",
+    "colors.validity_band": "F07 band (|coverage - 0.90| <= 0.015), F08 band (max. conditional deviation <= 0.015)",
+    "colors.nominal_line": "F07 line at 0.90",
+    "colors.refline": "F06 y = x",
+    "colors.identity_line": "F10 y = x",
+    "colors.final_model": "F06 points (sigma groups), F11 mu and 90 % interval",
+    "colors.pair_mc_mtot": "F09a chirp mass and total mass correlation",
+    "colors.pair_mtot_chi": "F09a total mass and chi_eff correlation",
+    "colors.ellipse": "F09b, F12, F12_main conformal 2D ellipse (must differ from the two pair colours)",
+    "colors.box": "F09b, F12, F12_main box of the two intervals",
+    "colors.prediction": "F09b, F12, F12_main prediction mu",
+    "colors.truth": "F09b true value",
+    "colors.annotation": "F09b annotation text and arrow",
+    "colors.median_line": "F10 median prediction by bins of truth",
+    "colors.lvk_neutral": "F11 / F12 legend patch for LVK samples (the drawn samples use colors.events)",
+    "colors.lvk_summary": "F11 LVK median and 5-95 %",
+    "colors.neutral": "legend-only markers (F07 val / test, F08 not valid and bin sizes, F09a empirical / implied), F11 out-of-support tick label",
+    "colors.marker_edge": "F07, F08 marker edges",
+    "colors.grid": "grid lines (all figures)",
+    "colors.background": "figure and axes background (all figures, contact sheet)",
+    "colors.error_text": "contact sheet: list of figures not produced",
+    "colors.events.<GW>": "F11 half violins, F12 / F12_main LVK samples and 90 % contour",
+    "cmap.hexbin": "F10 hexbin colour map",
+    "real_events.main_events": "F12_main: the three events in one row, in this order",
+    "contact_sheet_ids": "figures shown in contact_sheet.png, in this order",
+    "style.single": "per-variable figures (F06, F07, F08, F10, F11 _<label>) and F09a: size and font sizes; F09b and F12_main use style.fig_wide with these fonts",
+    "colors.network": "everything that is our network (prediction, normalised selected method, conformal ellipse, F06m/F06mv2 group curve, F08sv2 selected star); v1 slide versions (F03v2, F06m, F07b, F08s, F09c, F10m, F11v2, F12v2) use it too when re-run",
+    "colors.mondrian_raw": "F07b: Mondrian bins with raw score (geometry of the previous pipeline)",
+    "colors.region_*": "F09c points: inside both / ellipse only / box only / outside",
+    "methods.raw_single / mondrian_raw / normalised_selected / normalised": "F07b and F08s legend names",
+    "figure_options.F11v2.ylim": "F11v2 y limits per variable, [low, high], null = automatic",
+    "style.slide": "slide versions: size (in), font sizes (pt) and legend background alpha; style.slide_full is the F11v2 size",
+    "contact_sheet_ids (results)": "only the _chirp_mass slide versions and the single figures (latest version of each)",
+    "colors.signal": "F03v3: clean signal (H1)",
+    "colors.true_fill": "F10mv2 / F06mv2 marginals: filled histogram of the true values (|y - mu| in F06mv2), alpha = alpha.true_fill, no edge",
+    "colors.pred_line": "F10mv2 / F06mv2 marginals: line histogram of the network prediction (predicted sigma in F06mv2)",
+    "colors.lvk_fill": "F11v3 LVK violins (alpha = alpha.lvk_fill), F12v3 LVK samples (alpha = alpha.lvk_samples)",
+    "colors.lvk_line": "F11v3 LVK median (solid) and 5 % / 95 % (dashed) across the violin width",
+    "colors.lvk_contour": "F12v3 LVK 90 % region contour (dark grey)",
+    "colors.mu": "F12v3 network mu marker (black)",
+    "colors.method_raw / method_mondrian / method_norm": "F07bv2 methods (one width for all / one width per bin / width prop. to sigma); F07q left (raw) and right (normalised) points. A value '@key' is an alias of colors.key",
+    "colors.config_r / config_r_sigma": "F08sv2 points: score r / score r/sigma (pastel; aliases of method_raw / method_mondrian)",
+    "alpha.*": "alpha of true_fill (F10mv2, F06mv2), lvk_fill (F11v3 violins), lvk_samples (F12v3 scatter)",
+    "methods.one_width_all / one_width_bin / width_sigma": "F07bv2 legend names",
+    "figure_options.F11v3.ylim": "F11v3 y limits per variable, [low, high], null = automatic",
+    "figure_options.<ID>.size": "figure size in inches of F03v3, F03asd, F07q, F12v3",
+    "figure_options.marginal_frac": "F10mv2 / F06mv2: height of the top marginal and width of the right marginal as a fraction of the main panel",
+    "style.legend_compact": "v2/v3 figures (F03v3, F03asd, F06mv2, F07bv2, F07q, F08sv2, F09av2, F10mv2, F11v3, F12v3): legend inside the axes, placed where it overlaps the fewest drawn artists",
+    "style.slide.pad_inches": "bbox tight padding of the v2/v3 figures",
+    "style.min_axes_pt": "v2/v3 figures: minimum font size of axis labels and tick labels (checked before saving)",
+    "colors.grid_soft / style.grid_soft_lw": "F10mv3, F06mv3, F13: soft grid at the major ticks (main panel and marginals), below the data",
+    "figure_options.hexbin_fine_factor": "F10mv3 / F06mv3 hexbin gridsize = round(factor x the v2 gridsize: 55 / 50)",
+    "figure_options.F06mv3.abs_error_percentile": "F06mv3: both axes from 0 to max(this percentile of |y - mu|, max sigma); rows outside counted in the manifest",
+    "figure_options.F11v4.ylim / F11h.xlim": "F11v4 y limits per variable and F11h x limits (chirp mass), [low, high], null = automatic",
+    "F11v4 / F11h colours": "LVK half violins in colors.events (as F11v2, alpha 0.65 with edge); median (thicker) and 5 / 95 % solid lines in colors.lvk_line; network in colors.network",
+    "F12v4 colours": "LVK samples (alpha 0.25) and 90 % contour in colors.events (as F12v2); ellipse colors.network; mu colors.mu",
+    "figure_options.F12v4.legend_max_headroom_steps": "F12v4: if no legend location of the three panels has overlap 0, the y range grows by 10 % per step, at most this many steps",
+    "colors.f13_*": "F13 points inside the box (grey), outside the box and inside the ellipse (teal), outside both (dark grey); box (black, dashed); bands of the two 90 % intervals (f13_band, alpha.f13_band)",
+    "figure_options.F13": "F13 axis limit (+-lim on both axes, equal aspect) and size",
+    "figure_options.F06mv4": "F06mv4: both axes from 0 to fixed_limit (if not null) or max(abs_error_percentile of |y - mu|, max sigma); rows outside counted in the manifest",
+    "colors.f13v2_ellipse_only": "F13v2 points outside the box and inside the ellipse (blue)",
+    "figure_options.F06c": "F06c: x from 0 and y symmetric, both to fixed_limit (if not null) or max(abs_error_percentile of |y - mu|, max sigma); rows outside counted",
+    "colors.f14_line": "F14a, F14c, F14d, F15b, F15c: grey lines (strain, noise, data)",
+    "figure_options.F14 / F15": "F14a-d and F15a-c sizes (each PNG the same size); F14d inset bounds (axes fraction)",
+    "colors.sigma_line_dark / figure_options.F06cv2": "F06cv2: +-sigma line colour, line widths and white outline extra width",
+    "colors.rms_sigma / alpha.f16_band / figure_options.F16": "F16 / F16b: RMS(sigma) dashed line, RMSE bootstrap band alpha, size",
+    "colors.train_curve / chosen_epoch / param_*": "F17: train loss curve, chosen-checkpoint line, per-parameter val RMSE curves",
+    "figure_options.F14v2 / F15v2": "F14v2a-d landscape size and F14v2d inset bounds (axes fraction); F15v2a/b size_ab, F15v2c size_c",
+    "colors.dropout_off_epoch / figure_options.F17v2": "F17v2: dotted mark at the dropout switch-off epoch; line_lw / marker_ms scale the M13_6 notebook style (lw 1.2, ms 3) to the slide",
+    "figure_options.F18": "F18a/b: as F12v4 (size, legend headroom steps) in the chi_eff planes",
+    "figure_options.F17v3 / F18grid": "F17v3 as F17v2; F18c/F18d 3 x 3 grid size and legend headroom steps"
+  },
+  "variables": {
+    "chirp_mass": {
+      "label": "$\\mathcal{M}$",
+      "unit": "$M_\\odot$"
+    },
+    "total_mass": {
+      "label": "$M_\\mathrm{tot}$",
+      "unit": "$M_\\odot$"
+    },
+    "chi_eff": {
+      "label": "$\\chi_\\mathrm{eff}$",
+      "unit": ""
+    }
+  },
+  "methods": {
+    "r": {
+      "label": "Residual score $r$"
+    },
+    "r_sigma": {
+      "label": "Normalised score $r/\\sigma$"
+    },
+    "mondrian_r": {
+      "label": "Mondrian ($r$)"
+    },
+    "mondrian_r_sigma": {
+      "label": "Mondrian ($r/\\sigma$)"
+    },
+    "single_bin_r_sigma": {
+      "label": "Single bin ($r/\\sigma$)"
+    },
+    "sigma_ellipsoid": {
+      "label": "Learned $\\Sigma$ ellipsoid"
+    },
+    "piecewise_corr": {
+      "label": "Piecewise correlation"
+    },
+    "box": {
+      "label": "Box of three intervals"
+    },
+    "final_model": {
+      "label": "Final model"
+    },
+    "raw_single": {
+      "label": "raw score $|y-\\mu|$"
+    },
+    "mondrian_raw": {
+      "label": "Mondrian bins, raw score"
+    },
+    "normalised_selected": {
+      "label": "normalised $|y-\\mu|/\\sigma$ (selected)"
+    },
+    "normalised": {
+      "label": "normalised $|y-\\mu|/\\sigma$"
+    },
+    "one_width_all": {
+      "label": "one width for all"
+    },
+    "one_width_bin": {
+      "label": "one width per bin (Mondrian)"
+    },
+    "width_sigma": {
+      "label": "width $\\propto \\sigma$ (normalised)"
+    }
+  },
+  "colors": {
+    "score_r": "#D95F02",
+    "score_r_sigma": "#7570B3",
+    "selected": "#E6AB02",
+    "selected_edge": "#000000",
+    "m11_ring": "#333333",
+    "validity_band": "#DCE3EA",
+    "nominal_line": "#333333",
+    "refline": "#8A98A6",
+    "identity_line": "#333333",
+    "final_model": "#1B9E77",
+    "pair_mc_mtot": "#1B9E77",
+    "pair_mtot_chi": "#7570B3",
+    "ellipse": "#E7298A",
+    "box": "#666666",
+    "prediction": "#333333",
+    "truth": "#000000",
+    "annotation": "#333333",
+    "median_line": "#D95F02",
+    "lvk_neutral": "#8C8C8C",
+    "lvk_summary": "#333333",
+    "neutral": "#8C8C8C",
+    "marker_edge": "#FFFFFF",
+    "grid": "#E1E6EC",
+    "background": "#FFFFFF",
+    "error_text": "#B22222",
+    "network": "#C8102E",
+    "mondrian_raw": "#A6761D",
+    "region_both": "#B8C2CC",
+    "region_ellipse_only": "#0057D9",
+    "region_box_only": "#E6AB02",
+    "region_outside": "#B22222",
+    "events": {
+      "GW200202_154313": "#332288",
+      "GW200316_215756": "#88CCEE",
+      "GW191215_223052": "#44AA99",
+      "GW200129_065458": "#117733",
+      "GW200311_115853": "#999933",
+      "GW200208_130117": "#DDCC77",
+      "GW200224_222234": "#CC6677",
+      "GW200219_094415": "#882255",
+      "GW191230_180458": "#AA4499"
+    },
+    "signal": "#0057D9",
+    "true_fill": "#B8C2C6",
+    "pred_line": "#C96F7B",
+    "lvk_fill": "#B8C2C6",
+    "lvk_line": "#1C1C1C",
+    "lvk_contour": "#4D4D4D",
+    "mu": "#000000",
+    "method_raw": "#9FC5E8",
+    "method_mondrian": "#B6D7A8",
+    "method_norm": "@network",
+    "config_r": "@method_raw",
+    "config_r_sigma": "@method_mondrian",
+    "grid_soft": "#E3E8EA",
+    "f13_in_box": "#A9B1B5",
+    "f13_ellipse_only": "#0F7C80",
+    "f13_outside": "#4D4D4D",
+    "f13_box": "#000000",
+    "f13_band": "#DCE3EA",
+    "f13v2_ellipse_only": "#2F6FD0",
+    "f14_line": "#7F7F7F",
+    "sigma_line_dark": "#4A5B5F",
+    "rms_sigma": "#4D4D4D",
+    "train_curve": "@signal",
+    "chosen_epoch": "#333333",
+    "param_chirp_mass": "@network",
+    "param_total_mass": "@signal",
+    "param_chi_eff": "#1B9E77",
+    "dropout_off_epoch": "#4D4D4D"
+  },
+  "cmap": {
+    "hexbin": "viridis"
+  },
+  "real_events": {
+    "main_events": [
+      "GW191215_223052",
+      "GW200311_115853",
+      "GW200219_094415"
+    ]
+  },
+  "figure_options": {
+    "F11v2": {
+      "ylim": {
+        "chirp_mass": [
+          null,
+          90
+        ],
+        "total_mass": [
+          null,
+          null
+        ],
+        "chi_eff": [
+          null,
+          null
+        ]
+      }
+    },
+    "F11v3": {
+      "ylim": {
+        "chirp_mass": [
+          null,
+          80
+        ],
+        "total_mass": [
+          null,
+          null
+        ],
+        "chi_eff": [
+          null,
+          null
+        ]
+      }
+    },
+    "F03v3": {
+      "size": [
+        12,
+        5
+      ]
+    },
+    "F03asd": {
+      "size": [
+        12,
+        6
+      ]
+    },
+    "F07q": {
+      "size": [
+        14,
+        6
+      ]
+    },
+    "F12v3": {
+      "size": [
+        15,
+        6
+      ]
+    },
+    "marginal_frac": 0.15,
+    "hexbin_fine_factor": 1.8,
+    "F06mv3": {
+      "abs_error_percentile": 99.5
+    },
+    "F11v4": {
+      "ylim": {
+        "chirp_mass": [
+          null,
+          80
+        ],
+        "total_mass": [
+          null,
+          null
+        ],
+        "chi_eff": [
+          null,
+          null
+        ]
+      }
+    },
+    "F11h": {
+      "xlim": {
+        "chirp_mass": [
+          null,
+          80
+        ]
+      },
+      "size": [
+        13,
+        8
+      ]
+    },
+    "F12v4": {
+      "size": [
+        15,
+        6
+      ],
+      "legend_max_headroom_steps": 6
+    },
+    "F13": {
+      "lim": 3.6,
+      "size": [
+        10,
+        9
+      ]
+    },
+    "F06mv4": {
+      "abs_error_percentile": 99.0,
+      "fixed_limit": {
+        "chirp_mass": 16,
+        "total_mass": null,
+        "chi_eff": null
+      }
+    },
+    "F06c": {
+      "abs_error_percentile": 99.0,
+      "fixed_limit": {
+        "chirp_mass": 16,
+        "total_mass": null,
+        "chi_eff": null
+      }
+    },
+    "F14": {
+      "size": [
+        6,
+        4.5
+      ],
+      "inset_bounds": [
+        0.56,
+        0.6,
+        0.42,
+        0.36
+      ]
+    },
+    "F15": {
+      "size": [
+        6,
+        3.2
+      ]
+    },
+    "F16": {
+      "size": [
+        18,
+        5.5
+      ]
+    },
+    "F17": {
+      "size": [
+        15,
+        5.5
+      ]
+    },
+    "F06cv2": {
+      "sigma_lw": 3.5,
+      "q_lw": 4.5,
+      "outline_extra_lw": 3
+    },
+    "F14v2": {
+      "size": [
+        8,
+        3.2
+      ],
+      "inset_bounds": [
+        0.7,
+        0.56,
+        0.28,
+        0.4
+      ]
+    },
+    "F15v2": {
+      "size_ab": [
+        8,
+        3.2
+      ],
+      "size_c": [
+        16,
+        3.2
+      ]
+    },
+    "F17v2": {
+      "size": [
+        15,
+        5.5
+      ],
+      "line_lw": 2.0,
+      "marker_ms": 8
+    },
+    "F18": {
+      "size": [
+        15,
+        6
+      ],
+      "legend_max_headroom_steps": 6
+    },
+    "F17v3": {
+      "size": [
+        15,
+        5.5
+      ],
+      "line_lw": 2.0,
+      "marker_ms": 8
+    },
+    "F18grid": {
+      "size": [
+        18,
+        16
+      ],
+      "legend_max_headroom_steps": 6
+    }
+  },
+  "contact_sheet_ids": [
+    "F10mv3_chirp_mass",
+    "F06mv4_chirp_mass",
+    "F06c_chirp_mass",
+    "F06cv2_chirp_mass",
+    "F07bv2_chirp_mass",
+    "F08sv2_chirp_mass",
+    "F09c",
+    "F13v2",
+    "F11v4_chirp_mass",
+    "F11h",
+    "F12v4",
+    "F07q_chirp_mass",
+    "F09av2",
+    "F16",
+    "F16b",
+    "F17",
+    "F17v2",
+    "F18a",
+    "F18b",
+    "F17v3",
+    "F18c",
+    "F18d"
+  ],
+  "style": {
+    "font": "DejaVu Sans",
+    "axes_size": 16,
+    "tick_size": 14,
+    "legend_size": 14,
+    "annot_size": 14,
+    "fig_full": [
+      11,
+      5.2
+    ],
+    "fig_half": [
+      5.5,
+      5.2
+    ],
+    "fig_tall": [
+      11,
+      6.2
+    ],
+    "fig_wide": [
+      11,
+      5.0
+    ],
+    "single": {
+      "size": [
+        8,
+        5
+      ],
+      "axes_size": 18,
+      "tick_size": 16,
+      "legend_size": 16
+    },
+    "slide": {
+      "size": [
+        12,
+        7.5
+      ],
+      "axes_size": 22,
+      "tick_size": 20,
+      "legend_size": 18,
+      "annot_size": 18,
+      "legend_alpha": 0.8,
+      "pad_inches": 0.03
+    },
+    "slide_full": [
+      13,
+      8
+    ],
+    "dpi": 300,
+    "formats": [
+      "pdf",
+      "png"
+    ],
+    "legend_compact": {
+      "fontsize": 18,
+      "framealpha": 0.85
+    },
+    "min_axes_pt": 20,
+    "grid_soft_lw": 0.8
+  },
+  "alpha": {
+    "true_fill": 0.5,
+    "lvk_fill": 1.0,
+    "lvk_samples": 0.6,
+    "f13_band": 0.6,
+    "f16_band": 0.2
+  }
+}

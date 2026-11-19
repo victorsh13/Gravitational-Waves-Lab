@@ -1,0 +1,33 @@
+{
+  "_comment": "Single place for every name, colour and line style shown in the presentation figures. Edit here and re-run the figure scripts. 'label' = full name (used where data/training differ between curves); 'short' = name used in the architecture and results sections, where every model uses W.B. + N.Aug. Do not use the middle dot as separator.",
+  "datasets": {
+    "legacy": "Legacy (30–512 Hz, 0.5 s whitening filter)",
+    "wb": "W.B. (30–1024 Hz, 16 s whitening filter)",
+    "naug": "N.Aug. (noise augmentation)"
+  },
+  "models": {
+    "M11":    {"label": "Baseline CNN (Legacy)",                  "short": "Baseline CNN (Legacy)",    "color": "#7F7F7F", "ls": "-"},
+    "R1":     {"label": "Baseline CNN (Legacy, dropout always on)", "short": "Dropout always on",      "color": "#E7298A", "ls": "-"},
+    "G1":     {"label": "Baseline CNN (Legacy, corrected training)", "short": "Corrected training",    "color": "#66A61E", "ls": "-"},
+    "3b":     {"label": "Baseline CNN (W.B.)",                    "short": "Baseline CNN (W.B.)",      "color": "#80B1D3", "ls": "-"},
+    "4a_s123":{"label": "CNN + Transformer (W.B., no N.Aug.)",    "short": "CNN + Transformer (no N.Aug.)", "color": "#E6AB02", "ls": "--"},
+    "6a":     {"label": "Baseline CNN (W.B. + N.Aug.)",           "short": "Baseline CNN (reference)", "color": "#1B5E8C", "ls": "-"},
+    "4a_aug": {"label": "CNN + Transformer (W.B. + N.Aug.)",      "short": "CNN + Transformer",        "color": "#D95F02", "ls": "-"},
+    "4b_aug": {"label": "DenseNet + Transformer (W.B. + N.Aug.)", "short": "DenseNet + Transformer",   "color": "#1B9E77", "ls": "-"},
+    "4c_aug": {"label": "Inception + Transformer (W.B. + N.Aug.)","short": "Inception + Transformer",  "color": "#7570B3", "ls": "-"},
+    "M13_7":  {"label": "DenseNet + Transformer + Mondrian",      "short": "DenseNet + Transformer + Mondrian", "color": "#1B9E77", "ls": "-"},
+    "LVK":    {"label": "LVK posterior, 5–95 % marked",            "short": "LVK posterior",            "color": "#9DB7D3", "ls": "-"},
+    "LVK_best": {"label": "GWOSC best estimate",                  "short": "GWOSC best",               "color": "#1F2D3A", "ls": "-"},
+    "LVK_prop": {"label": "LVK best ± propagated error",          "short": "LVK best",                 "color": "#1F2D3A", "ls": "-"}
+  },
+  "event_palette": ["#332288", "#88CCEE", "#44AA99", "#117733", "#999933", "#DDCC77", "#CC6677", "#882255", "#AA4499"],
+  "reference_model": "6a",
+  "reference_note": "Reference = Baseline CNN (W.B. + N.Aug.). Δ values relative to the reference; RMSE and bias in standardised units unless the axis says otherwise.",
+  "variables": {
+    "chirp_mass": {"label": "$\\mathcal{M}_c$", "unit": "M$_\\odot$"},
+    "total_mass": {"label": "$M$", "unit": "M$_\\odot$"},
+    "chi_eff":    {"label": "$\\chi_{\\rm eff}$", "unit": ""}
+  },
+  "style": {"font": "DejaVu Sans", "axes_size": 13, "tick_size": 12, "legend_size": 11, "grid": "#E1E6EC", "refline": "#8A98A6",
+            "seq3": ["#A6CEE3", "#1F78B4", "#08306B"], "fig13": [13, 4.2], "fig1": [6.5, 4.5], "dpi": 300}
+}
