@@ -82,3 +82,14 @@ La PE de prueba (fila 414223) no encontró el modo: el log-likelihood en la verd
 - Prueba de la enmienda 5 superada: 10/10 filas con sampler_missed_mode = False, relbin max|Δloglr| ≤ 0,03 y todas primarias; 3,1 / 3,7 / 5,5 h por fila en los regímenes corto / medio / largo (media 4,2 h; máximo 8,7 h en la 414223).
 - El modelo final de M14 es M14.5b (regla de la enmienda 1 de M14.5, aplicada el 13-11). Se añade M14.5b a las redes comparadas. El resultado para el modelo final se informa con M14.5b; las comparaciones con 4a-G3T y M14.5a se mantienen como estaban pre-registradas.
 - Banco con la configuración de la prueba: --marginalize, --vector-samples 5000, nlive 500, --n-per-regime 40, en el PC local con 2 copias de 1 proceso cada una. Las filas del directorio sin marginalizar (pe_8s_nlive500_…, primera PE de tiempo) no entran en el análisis.
+
+## Enmienda 8 (20-11-2026, antes de ver resultados del banco y de G-NET)
+Fija los puntos del análisis que el pre-registro dejaba abiertos:
+1. G-NET: |RMSE_ROM − RMSE_S15| / RMSE_S15 ≤ 0,02 (relativo), en unidades físicas, por red, régimen y etiqueta, sobre las 180 filas seleccionadas (G-NET no usa PE). Si falla, invalida solo esa red/régimen/etiqueta, que se informa como no válida.
+2. Numerador de R (primario): MSE de la red sobre todas las filas de val del régimen con señal S15 (pre-registro original); G-NET justifica la equivalencia con ROM. El R emparejado (secundario) usa las filas con PE y señal ROM.
+3. IC del 95 % por percentiles con 2000 réplicas de bootstrap; numerador y denominador remuestreados por separado en R; remuestreo conjunto de filas en el R emparejado.
+4. "Global": solo descriptivo, media de los tres regímenes con igual peso; los criterios se aplican por régimen.
+5. Gate de cobertura: intervalos creíbles centrales (colas iguales) del 50 % y el 90 % de 𝓜 y χ_eff; filas primarias del banco, agregadas sobre los regímenes (n según el banco); aceptación si el número de aciertos cae en la región de aceptación central de Binomial(n, p) al 98,75 % por prueba (Bonferroni sobre 4 pruebas: probabilidad conjunta de falso fallo 5 %). Bilateral (comprueba calibración de la posterior; nivel fijo, sin ruido de calibración). Por régimen, solo descriptivo.
+6. Completitud: intermedio con todas las filas del banco de 40 por régimen terminadas; final con las 60; en ambos casos se excluyen las filas del test de la enmienda 5.
+7. sampler_missed_mode = True: la PE de esa fila se repite una vez con nlive 1000 (resto igual); si persiste, la fila se excluye y se informa; con más de 2 filas excluidas en un régimen, ese régimen es no concluyente.
+8. El descriptivo Σ_ii frente a la varianza posterior se da para M14.5a y M14.5b.
