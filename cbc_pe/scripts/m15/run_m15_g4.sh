@@ -17,7 +17,7 @@ B=scripts/m15/m15_build_g4.py
 BASE=$CBC_PE_DATA_ROOT/processed/M15_G4
 GATE=$BASE/gate_taper/gate_taper.json
 L=$CBC_PE_DATA_ROOT/logs/m15
-WORKERS=3
+WORKERS=${WORKERS:-2}
 NUM_SHARDS=4
 
 mkdir -p "$L"

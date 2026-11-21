@@ -48,11 +48,13 @@ Subcommands (outputs under <data_root>/processed/M15_G4/; nothing is overwritten
 from __future__ import annotations
 
 import argparse
+import gc
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import resource
 import sys
 import time
 
@@ -456,14 +458,17 @@ def propose_split(split, offset, grid, prior, crops):
              "total_mass": m1 + m2, "a_R": a_r, "u": u, "acc_R": acc["R"], "acc_F": acc["F"],
              "in_R": cut["R"], "in_F": cut["F"]}
     sel = np.flatnonzero(cut["R"] | cut["F"])
-    rows = []
-    for i in sel:
+    # Preallocated float64 columns instead of a list of per-row dicts (memory); same values and column order.
+    cols = {name: np.empty(sel.size, dtype=np.float64) for name in (*PARAMETERS, "reference_distance_mpc")}
+    for j, i in enumerate(sel):
         p = CBCParameters(mass_1=float(m1[i]), mass_2=float(m2[i]),
                           **{k: float(ext[k][i]) for k in EXTRINSIC})
         require(p.mass_1 == m1[i] and p.mass_2 == m2[i], f"row {ids[i]}: masses reordered")
-        rows.append({**{name: float(getattr(p, name)) for name in PARAMETERS},
-                     "reference_distance_mpc": float(p.distance)})
-    frame = pd.DataFrame(rows)
+        for name in PARAMETERS:
+            cols[name][j] = float(getattr(p, name))
+        cols["reference_distance_mpc"][j] = float(p.distance)
+    frame = pd.DataFrame(cols)
+    del cols
     frame["source_index"] = ids[sel]
     frame["manifest_index"] = ids[sel]
     frame["source_id"] = [f"{SOURCE_ID_PREFIX}{i:07d}" for i in ids[sel]]
@@ -662,13 +667,33 @@ def setup(args):
     """G3 physics exactly as M13.13 (g6.setup on the G3 config), then the G4 proposal."""
     args.config, args.manifest = G3_CONFIG, None
     args.mode = f"m15_{args.command}"  # recorded by g6 attrs_for as m13_6_mode
-    root, spec_g1, _, trainio, _, attrs_for = g6.setup(args)
+    root, spec_g1, g1_frame, trainio, _, attrs_for = g6.setup(args)
+    # The G1 manifest is only validated by g6.setup; attrs_for does not close over it and g6 keeps no global copy.
+    del g1_frame
     ctx = Context()
     ctx.root, ctx.spec_g1, ctx.trainio, ctx.attrs_for_g3 = root, spec_g1, trainio, attrs_for
     ctx.base = dataset_processed_dir(root, DATASET_ID)
     ctx.report, ctx.report_sha, ctx.thetas, ctx.frame = load_proposal(ctx.base)
     g6.check_psd_key_per_block(ctx.frame)
+    # Memory before the fork (workers inherit the parent): keep only the rows the subcommand reads, in the same
+    # (ascending id) order. materialize and consistency keep every row. The constant columns below are not read
+    # by build_g1_row, capture_row, signal_chunk, run_signal, run_consistency, attrs_for or this script.
+    if args.command in ("gate-taper", "signal"):
+        keep = (ctx.frame.split == "train").to_numpy()
+    elif args.command == "noisy":
+        keep = ctx.frame.index.isin(noisy_row_ids(ctx, args.split))
+    else:
+        keep = None
+    if keep is not None:
+        ctx.frame = ctx.frame.loc[keep]
+    ctx.frame = ctx.frame.drop(columns=["experiment_id", "config_sha256", "geocentric_time_policy"])
+    gc.collect()
     return ctx
+
+
+def log_memory(ctx):
+    rss_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024  # Linux: kB
+    print(f"M15 G4 {len(ctx.frame)} rows in ctx.frame; parent max RSS {rss_mb:.0f} MB", flush=True)
 
 
 def require_g4_gate(path, ctx):
@@ -1232,6 +1257,8 @@ def main():
         require(args.num_shards >= 1 and 0 <= args.shard < args.num_shards, "Invalid shard index")
         require(not (args.limit and args.resume), "--limit does not resume")
     ctx = setup(args)
+    if args.command in ("gate-taper", "signal", "noisy"):
+        log_memory(ctx)
     if args.command == "gate-taper":
         run_gate_g4(args, ctx)
     elif args.command == "signal":
