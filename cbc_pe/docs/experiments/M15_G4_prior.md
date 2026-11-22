@@ -285,3 +285,59 @@ Si un grupo primario resultó no certificable en el paso 0, su fila de esta tabl
 - **GPU.** 5a: 538 s por época de 1562 pasos (0,344 s por paso), con espera de datos de ≈ 1 s por época; 11,9 h de entrenamiento en total.
   - G4 tiene los mismos 124 960 pasos: ≈ 11,9 h de entrenamiento más ≈ 0,4 h de val y monitor (40 épocas × 2 × 16 s).
   - Total ≈ 12,3 h por modelo, en una GPU.
+
+## Enmienda 1 (21-11-2026, antes de generar): puerta G-VIS
+
+Sobre la salida de `signal --limit 64` (filas espaciadas de un fragmento de la unión de train), para cada fila r:
+E_r = Σ_d Σ_t L(s)_{r,d,t}² (float64, desde el float16 guardado, antes del z-score) y κ_r = E_r / ρ_r²,
+con ρ_r el SNR objetivo de la fila (proposal/train.npz).
+- G-VIS PASA si (i) la mediana de κ por bin de M_tot (< 80, 80–180, 180–250) está dentro de ±10 % de la mediana global
+  y (ii) ninguna fila tiene κ < 0,5 × mediana global.
+- Descriptivo: κ en 64 filas de G3T (X_clean_train de m13_13_g3t, SNR objetivo de la fila de G3), y figuras de L(s) y del
+  X ruidoso de filas de masa baja, ~150 y > 220 M☉, por detector.
+- Si G-VIS falla, no se lanza la generación completa; se decide en el chat.
+Motivo: el blanqueado es lineal y normalizado, así que E ∝ ρ²; un κ que dependiera de la masa indicaría que el procesado
+pierde energía de la señal de forma dependiente de la masa (en especial a M_tot > 180, que G3T no cubría).
+
+## Enmienda 2 (22-11-2026, tras el FAIL de G-TAPER-G4 y antes de generar señales)
+
+**Hechos.** Informe del 21-11 (archivado como `gate_taper_v1_FAIL_20261121`); diagnóstico del 22-11.
+- M_tot ≤ 180: 9/1398 filas con mismatch > 1e-4 (0,64 %; G3T 0,7 %) y ninguna > 8e-4.
+- M_tot > 180: fracción > 1e-4 de 16 / 39 / 53 / 60 % en 180–200 / 200–220 / 220–235 / 235–251; 31 filas > 8e-4,
+  todas con χ_eff < −0,5 y M_tot > 220; con χ_eff ≥ 0,2, 0 %. El escalón inicial cumple en todas las filas.
+- 2 errores (M_tot 10,4 y 11,5; q ≈ 1; χ_eff +0,68 y +0,82): LAL «Ringdown frequency > Nyquist frequency»
+  con Δt = 1/4096 s y f_lower 30, 15 y 10 Hz. Es el mismo límite por el que G1 rechazó 4 de 500 000 fuentes
+  (`scripts/repair_m11_final_invalid_waveforms.py`).
+
+**Cambio 1: construcción de la señal según la masa.**
+- S15 (desde 15 Hz, taper hasta 25 Hz) si M_tot ≤ 180, idéntica a G3T.
+- S10 (desde 10 Hz, taper hasta 14 Hz, misma ventana de Kaiser β = 8 y misma alineación con A) si M_tot > 180.
+- Motivo: a q y espines fijos, la forma de onda depende de la frecuencia a través de M·f. S10 a M_tot ≤ 250 tiene
+  M·f del taper ≤ que S15 a M_tot = 140, donde la puerta pasó con todos los espines, y acaba 16 Hz por debajo
+  de la banda (S15, 5 Hz).
+- Corte en 180: dentro del rango de G3T, la construcción de G4 es la de G3T. En 150–180, el mismatch S15–Sref
+  tiene mediana 6,6e-6 y máximo 1,9e-4.
+- El corte depende solo de θ (M_tot en el sistema del detector).
+
+**Cambio 2: G-GEN, fuentes generables.**
+- Una fila es generable si SEOBNRv4_opt se genera con el Δt de producción. Se comprueba con f_lower = 100 Hz,
+  porque la condición de Nyquist no depende de f_lower (verificado a 30, 15 y 10 Hz).
+- Se comprueban todas las filas de la propuesta con M_tot < 16. Ajustes de remanente y QNM sitúan la última fila
+  no generable en M_tot ≈ 13,1. Por encima de 16 se supone generable; si una no lo fuera, la generación se para con error.
+- Objetivos efectivos: p_T · 1[generable] / Z_T. La aceptación de cada objetivo exige además que la fila sea
+  generable, y el corte toma las primeras N filas aceptadas y generables, en orden de propuesta.
+- G-PRIOR (KS) se calcula sobre el corte sin la exclusión. G-GEN informa, por objetivo y split, del número de filas
+  excluidas y de su región (M_tot, q, χ_eff).
+- Criterio: exclusión ≤ 0,5 % por objetivo. Esperado (ajustes aproximados): T_F ≈ 0,06 %, T_R ≈ 0,001 %,
+  G3T ≈ 0,001 % (G1: 0,0008 %).
+- La región excluida es la misma región física, ausente también de G3T, así que no sesga la comparación.
+  Trunca la uniformidad de T_F en 𝓜 ≈ 4,4–5,8; queda documentado.
+
+**Cambio 3: G-TAPER-G4b.**
+- La misma regla de selección de §2.5.2 (semilla 151105) sobre la propuesta nueva.
+- Cada fila compara su construcción de producción con su referencia: S15 frente a Sref (10 → 14 Hz) si M_tot ≤ 180;
+  S10 frente a S7 (7 → 9,8 Hz) si M_tot > 180.
+- Criterios de la enmienda 2 de M13.13: ≤ 8e-4 por fila, escalón ≤ 2e-3, como mucho un 2 % > 1e-4 en las 2000
+  filas; un error cuenta como fallo. Predicción: PASA. Si falla, se para.
+
+**Archivo.** La propuesta y la puerta v1 se renombran y se conservan. `sample` se repite con las mismas semillas.
