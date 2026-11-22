@@ -44,6 +44,10 @@ Subcommands (outputs under <data_root>/processed/M15_G4/; nothing is overwritten
                npz; rows are copied. The G1 label stats of model 5a are linked (not recomputed) at M15_G4/<name>.
   consistency  --target R|F: m13_13.run_consistency unchanged on <target>/ (64 monitor rows).
   status       read only, without the heavy imports.
+
+Amendment 2 (22-11-2026): S15 if M_tot <= 180, S10 (10 Hz, taper to 14 Hz) above, by wrapping g3t.s15_strains;
+G-GEN in sample (rows with M_tot < 16 must generate with delta_t = 1/4096 s; cut = first N accepted and generable;
+G-PRIOR on the cut without the exclusion); gate-taper is G-TAPER-G4b (S15 vs Sref, S10 vs S7 by M_tot).
 """
 from __future__ import annotations
 
@@ -179,6 +183,49 @@ GATE_MIN_HIGH = 600
 GATE_MIN_NEG_HIGH = 150
 GATE_MASS_BINS_G4 = tuple(g3t.GATE_MASS_BINS) + (220.0, 250.0)
 
+# Amendment 2, change 1: construction by mass. S15 (15 Hz, taper to 25 Hz, as G3T) if M_tot <= 180, S10 (10 Hz,
+# taper to 14 Hz; same Kaiser beta = 8 and alignment with A) above. M_tot = mass1 + mass2 of the row (detector
+# frame), so the rule depends on theta only. Gate references: Sref (10 -> 14 Hz) and S7 (7 -> 9.8 Hz).
+M_SWITCH = 180.0
+BAND_LOW = (15.0, 25.0)
+BAND_HIGH = (10.0, 14.0)
+REF_LOW = (g3t.SREF_F_LOWER, g3t.SREF_TAPER_END_HZ)
+REF_HIGH = (7.0, 9.8)
+require(BAND_LOW == (g3t.S15_F_LOWER, g3t.S15_TAPER_END_HZ), "BAND_LOW is not the S15 band of m13_13")
+require(REF_LOW == (10.0, 14.0), "REF_LOW is not the Sref band of m13_13")
+BAND_RULE = {"M_switch": M_SWITCH, "band_low": list(BAND_LOW), "band_high": list(BAND_HIGH)}
+BAND_RULE_JSON = json.dumps(BAND_RULE, sort_keys=True)  # HDF5 attrs take scalars
+
+
+def band_for(total_mass):
+    return BAND_LOW if float(total_mass) <= M_SWITCH else BAND_HIGH
+
+
+def ref_for(total_mass):
+    return REF_LOW if float(total_mass) <= M_SWITCH else REF_HIGH
+
+
+_S15_STRAINS_G3T = g3t.s15_strains
+
+
+def s15_strains_g4(opt_args, cap, processing_start):
+    """g3t.s15_strains with the band of band_for(mass1 + mass2); opt_args are the get_td_waveform kwargs of A."""
+    with g3t.taper_band(*band_for(float(opt_args["mass1"]) + float(opt_args["mass2"]))):
+        return _S15_STRAINS_G3T(opt_args, cap, processing_start)
+
+
+# Once, at import (before any fork): signal_chunk and run_consistency of m13_13 resolve the global name
+# s15_strains of their module at call time, and noisy_row_g4 calls g3t.s15_strains, so all three use this.
+g3t.s15_strains = s15_strains_g4
+
+# Amendment 2, change 2: G-GEN. Rows with M_tot < GEN_M_CHECK are generated with the production delta_t from
+# GEN_F_LOWER (the Nyquist condition of the ringdown does not depend on f_lower).
+GEN_M_CHECK = 16.0
+GEN_F_LOWER = 100.0
+GEN_MAX_FRACTION = 0.005
+GEN_CHUNK = 64
+require(m11.INTRINSIC_DELTA_T == 1.0 / 4096, "Production delta_t is not 1/4096 s")
+
 NOISY_DIR = "noisy_union"
 NOISY_SPLITS_G4 = ("val", "cal", "test", "train40k")
 HELDOUT_MEMMAP = {"val": "fp16_memmap", "cal": "fp16_memmap_heldout", "test": "fp16_memmap_heldout"}
@@ -208,7 +255,10 @@ SPEC = {
     "gate_taper": {"seed": GATE_SEED_G4, "rows": g3t.GATE_ROWS, "high_bins": [list(b) for b in GATE_HIGH_BINS],
                    "high_per_bin": GATE_HIGH_PER_BIN, "neg_chi_eff": GATE_NEG_CHI, "neg_per_bin": GATE_NEG_PER_BIN,
                    "top_mass_rows": g3t.GATE_TOP_MASS_ROWS, "low_strata": GATE_LOW_STRATA,
-                   "mass_bins": list(GATE_MASS_BINS_G4)},
+                   "mass_bins": list(GATE_MASS_BINS_G4), "ref_low": list(REF_LOW), "ref_high": list(REF_HIGH)},
+    "band_rule": BAND_RULE,
+    "g_gen": {"m_check": GEN_M_CHECK, "f_lower": GEN_F_LOWER, "delta_t": m11.INTRINSIC_DELTA_T,
+              "max_fraction": GEN_MAX_FRACTION},
     "g1_config": str(G1_CONFIG.relative_to(PROJECT_ROOT)), "g3_config": str(Path(G3_CONFIG).relative_to(PROJECT_ROOT)),
     "reference_train_config": str(REFERENCE_TRAIN_CONFIG.relative_to(PROJECT_ROOT)),
 }
@@ -424,7 +474,42 @@ def cut_mask(accepted, n):
     return mask
 
 
-def propose_split(split, offset, grid, prior, crops):
+def gen_chunk(task):
+    """G-GEN worker: [(position, error or None)] for get_td_waveform of each row of the chunk (face-on, 1 Mpc)."""
+    from pycbc.waveform import get_td_waveform
+    approximant, rows = task
+    out = []
+    for pos, mass1, mass2, spin1z, spin2z in rows:
+        try:
+            get_td_waveform(approximant=approximant, mass1=mass1, mass2=mass2, spin1z=spin1z, spin2z=spin2z,
+                            inclination=0.0, coa_phase=0.0, distance=1.0, delta_t=m11.INTRINSIC_DELTA_T,
+                            f_lower=GEN_F_LOWER)
+            out.append((pos, None))
+        except Exception as exc:
+            out.append((pos, f"{type(exc).__name__}: {exc}"))
+    return out
+
+
+def generable(m1, m2, s1, s2, approximant, workers):
+    """G-GEN (amendment 2): gen = True, except rows with M_tot < GEN_M_CHECK whose waveform raises."""
+    gen = np.ones(m1.size, dtype=bool)
+    checked = (m1 + m2) < GEN_M_CHECK
+    pos = np.flatnonzero(checked)
+    rows = [(int(i), float(m1[i]), float(m2[i]), float(s1[i]), float(s2[i])) for i in pos]
+    tasks = [(approximant, rows[lo:lo + GEN_CHUNK]) for lo in range(0, len(rows), GEN_CHUNK)]
+    errors = {}
+
+    def consume(results):
+        for i, err in results:
+            if err is not None:
+                gen[i] = False
+                errors[i] = err
+
+    g3t.run_tasks(gen_chunk, tasks, workers, consume)
+    return gen, checked, errors
+
+
+def propose_split(split, offset, grid, prior, crops, approximant, workers):
     n, seed = N_PROPOSAL[split], SPLIT_SEED[split]
     rng = {k: np.random.default_rng(np.random.SeedSequence([seed, v])) for k, v in STREAMS.items()}
     comp_f = rng["masses"].random(n) < 0.5
@@ -439,8 +524,9 @@ def propose_split(split, offset, grid, prior, crops):
     a_r = grid.a_r(mc)
     u = rng["acceptance"].random(n)
     acc = {"R": u < a_r, "F": u < 1.0 - a_r}
-    cut = {t: cut_mask(acc[t], N_TARGET[split]) for t in TARGETS}
 
+    # The parameters (own stream k=3) are drawn before the cut because G-GEN needs the spins; the draws are the
+    # same as before amendment 2, only the order of the computation changes.
     sampler = ParameterSampler(prior_config=prior, rng=rng["parameters"])
     ext = {k: np.empty(n) for k in EXTRINSIC}
     for i in range(n):
@@ -448,6 +534,10 @@ def propose_split(split, offset, grid, prior, crops):
         for k in EXTRINSIC:
             ext[k][i] = getattr(p, k)
     require(bool((ext["distance"] == REFERENCE_DISTANCE_MPC).all()), "Reference distance is not 1000 Mpc")
+    gen, gen_checked, gen_errors = generable(m1, m2, ext["spin_1z"], ext["spin_2z"], approximant, workers)
+    # Cut: the first N rows accepted by T and generable, in proposal order. G-PRIOR uses the cut without G-GEN.
+    cut = {t: cut_mask(acc[t] & gen, N_TARGET[split]) for t in TARGETS}
+    cut_no_gen = {t: cut_mask(acc[t], N_TARGET[split]) for t in TARGETS}
     snr = rng["snr"].uniform(*SNR_RANGE, size=n)
     counts = {s: (n if s == split else 0) for s in SPLITS}
     assign = sample_assignments(crops, counts, np.random.SeedSequence([seed, STREAMS["assignment"]]))
@@ -456,7 +546,9 @@ def propose_split(split, offset, grid, prior, crops):
     ids = offset + np.arange(n, dtype=np.int64)
     theta = {"row_id": ids, "component_F": comp_f, "mass_1": m1, "mass_2": m2, "chirp_mass": mc, "q": m2 / m1,
              "total_mass": m1 + m2, "a_R": a_r, "u": u, "acc_R": acc["R"], "acc_F": acc["F"],
-             "in_R": cut["R"], "in_F": cut["F"]}
+             "in_R": cut["R"], "in_F": cut["F"], "gen": gen, "gen_checked": gen_checked,
+             "in_R_no_gen": cut_no_gen["R"], "in_F_no_gen": cut_no_gen["F"],
+             "chi_eff": (m1 * ext["spin_1z"] + m2 * ext["spin_2z"]) / (m1 + m2)}
     sel = np.flatnonzero(cut["R"] | cut["F"])
     # Preallocated float64 columns instead of a list of per-row dicts (memory); same values and column order.
     cols = {name: np.empty(sel.size, dtype=np.float64) for name in (*PARAMETERS, "reference_distance_mpc")}
@@ -484,7 +576,30 @@ def propose_split(split, offset, grid, prior, crops):
     frame["u"], frame["a_R"] = u[sel], a_r[sel]
     frame["in_R"], frame["in_F"] = cut["R"][sel], cut["F"][sel]
     require(bool(frame.target_network_snr.between(*SNR_RANGE).all()), "Invalid SNR target")
-    return theta, frame
+    return theta, frame, gen_errors
+
+
+def g_gen_split(theta, errors, split):
+    """Per target: rows accepted by T, not generable, before the last row of the cut (i.e. skipped by the cut)."""
+    out = {}
+    for t in TARGETS:
+        last = int(np.flatnonzero(theta[f"in_{t}"])[-1])
+        excl = np.flatnonzero(theta[f"acc_{t}"] & ~theta["gen"])
+        excl = excl[excl <= last]
+        n_cut = int(theta[f"in_{t}"].sum())
+
+        def rng_of(name):
+            v = theta[name][excl]
+            return [float(v.min()), float(v.max())] if v.size else None
+        out[t] = {"n_excluded": int(excl.size), "n_cut": n_cut,
+                  "fraction": float(excl.size / (n_cut + excl.size)),
+                  "total_mass_range": rng_of("total_mass"), "q_range": rng_of("q"), "chi_eff_range": rng_of("chi_eff"),
+                  "row_ids": theta["row_id"][excl].tolist(),
+                  "messages": sorted({errors[int(i)] for i in excl})}
+    out["proposal"] = {"n_rows": int(theta["gen"].size), "n_checked": int(theta["gen_checked"].sum()),
+                       "n_not_generable": int((~theta["gen"]).sum()),
+                       "messages": sorted(set(errors.values()))}
+    return out
 
 
 def save_split(path, theta, frame):
@@ -547,18 +662,23 @@ def run_sample(args):
     grid = PriorGrid()
     print(f"G4 sample: grid F(1) = {grid.F1:.12g}, Mc in [{MC_MIN:.6g}, {MC_MAX:.6g}]", flush=True)
 
+    approximant = spec_g1["simulation"]["waveform_approximant"]
+    require(1 <= args.workers <= g3t.MAX_WORKERS, f"--workers must be in 1..{g3t.MAX_WORKERS}")
     tmp = base / f"proposal.tmp_{os.getpid()}"
     tmp.mkdir(parents=True, exist_ok=False)
-    thetas, frames, offset = {}, {}, 0
+    thetas, frames, g_gen, offset = {}, {}, {}, 0
     for split in SPLITS:
         ts = time.time()
-        thetas[split], frames[split] = propose_split(split, offset, grid, prior, allowed)
+        thetas[split], frames[split], errors = propose_split(split, offset, grid, prior, allowed, approximant,
+                                                             args.workers)
+        g_gen[split] = g_gen_split(thetas[split], errors, split)
         used = set(frames[split].block_id.astype(str))
         require(used <= g1_blocks[split], f"{split}: blocks not used by G1 (no cached PSD strain): "
                                           f"{sorted(used - g1_blocks[split])[:5]}")
         save_split(tmp / f"{split}.npz", thetas[split], frames[split])
         offset += N_PROPOSAL[split]
-        print(f"  {split}: {N_PROPOSAL[split]} proposed, {len(frames[split])} rows in a cut, "
+        print(f"  {split}: {N_PROPOSAL[split]} proposed, {len(frames[split])} rows in a cut, G-GEN "
+              f"{g_gen[split]['proposal']['n_not_generable']}/{g_gen[split]['proposal']['n_checked']} not generable, "
               f"{time.time() - ts:.0f} s", flush=True)
 
     # G-PRIOR (2.5.1)
@@ -577,7 +697,8 @@ def run_sample(args):
         return lambda x: np.interp(x, gx, gy)
 
     th = thetas["train"]
-    ks = {t: {name: ks_test(th[name][th[f"in_{t}"]], cdf_of(t, name))
+    # Amendment 2: G-PRIOR on the cut without the G-GEN exclusion (first N rows accepted by T).
+    ks = {t: {name: ks_test(th[name][th[f"in_{t}_no_gen"]], cdf_of(t, name))
               for name in ("chirp_mass", "q", "total_mass", "mass_1")} for t in TARGETS}
     acceptance = {}
     for split in SPLITS:
@@ -587,12 +708,18 @@ def run_sample(args):
             rate = float(thetas[split][f"acc_{t}"].mean())
             acceptance[f"{t}_{split}"] = {"rate": rate, "sigma": sigma, "z": (rate - 0.5) / sigma,
                                           "ok": abs(rate - 0.5) <= ACCEPT_SIGMAS * sigma}
-    in_r = th["in_R"]
+    in_r = th["in_R_no_gen"]
     square = float(((th["mass_1"][in_r] <= G3T_M_HI) & (th["mass_2"][in_r] <= G3T_M_HI)).mean())
     checks = {"ks": all(v["p"] > KS_P_MIN for t in TARGETS for v in ks[t].values()),
               "acceptance": all(v["ok"] for v in acceptance.values()),
               "square_fraction_T_R": SQUARE_FRACTION[0] <= square <= SQUARE_FRACTION[1]}
     verdict = "PASS" if all(checks.values()) else "FAIL"
+    gen_fraction = {}
+    for t in TARGETS:
+        n_ex = sum(g_gen[s][t]["n_excluded"] for s in SPLITS)
+        gen_fraction[t] = n_ex / (sum(g_gen[s][t]["n_cut"] for s in SPLITS) + n_ex)
+    gen_checks = {f"fraction_{t}": gen_fraction[t] <= GEN_MAX_FRACTION for t in TARGETS}
+    gen_verdict = "PASS" if all(gen_checks.values()) else "FAIL"
 
     grid_path = tmp / "prior_grid.npz"
     with open(grid_path, "xb") as fh:
@@ -617,7 +744,13 @@ def run_sample(args):
         "row_id_offsets": {s: int(sum(N_PROPOSAL[x] for x in SPLITS[:SPLITS.index(s)])) for s in SPLITS},
         "rows_in_cut": shared, "noise_seed_audit": noise_seed_audit(union, spec_g1),
         "G_PRIOR": {"verdict": verdict, "checks": checks, "ks_train": ks, "acceptance": acceptance,
-                    "square_fraction_T_R_train": square, "cdf_self_check": self_check},
+                    "square_fraction_T_R_train": square, "cdf_self_check": self_check,
+                    "cut": "first N rows accepted by T, without the G-GEN exclusion (amendment 2)"},
+        "G_GEN": {"verdict": gen_verdict, "checks": gen_checks, "fraction_by_target": gen_fraction,
+                  "max_fraction": GEN_MAX_FRACTION, "m_check": GEN_M_CHECK, "f_lower": GEN_F_LOWER,
+                  "delta_t": m11.INTRINSIC_DELTA_T, "approximant": approximant,
+                  "excluded": "rows accepted by T and not generable, before the last row of the cut",
+                  "by_split": g_gen},
         "outputs_sha256": {f"{s}.npz": sha256_file(tmp / f"{s}.npz") for s in SPLITS},
         "total_time_s": time.time() - t0,
     }
@@ -625,8 +758,11 @@ def run_sample(args):
     os.rename(tmp, out)
     print(f"G-PRIOR {verdict}: {checks}; square {square:.4f}; "
           f"KS p min {min(v['p'] for t in TARGETS for v in ks[t].values()):.3g} -> {out}", flush=True)
+    print(f"G-GEN {gen_verdict}: excluded fraction {gen_fraction}", flush=True)
     if verdict != "PASS":
         raise SystemExit("G-PRIOR did not pass; stop (pre-registered).")
+    if gen_verdict != "PASS":
+        raise SystemExit("G-GEN did not pass; stop (pre-registered).")
 
 
 # ---------------------------------------------------------------- common setup of the generation subcommands
@@ -641,6 +777,7 @@ def load_proposal(base):
     require(report_path.exists(), f"Missing {report_path}; run sample first")
     report = json.loads(report_path.read_text())
     require(report["G_PRIOR"]["verdict"] == "PASS", "G-PRIOR did not pass")
+    require(report.get("G_GEN", {}).get("verdict") == "PASS", "G-GEN did not pass (or proposal before amendment 2)")
     thetas, frames = {}, []
     for split in SPLITS:
         path = base / "proposal" / f"{split}.npz"
@@ -703,6 +840,9 @@ def require_g4_gate(path, ctx):
     require(r.get("generator") == GENERATOR, f"{path} is not a G-TAPER-G4 report")
     require(r.get("proposal_report_sha256") == ctx.report_sha, f"{path} was made for another proposal")
     require(path == (ctx.base / "gate_taper" / "gate_taper.json").resolve(), f"{path} is not the M15_G4 gate")
+    require(r.get("band_rule") == BAND_RULE and r.get("high_mass") == dict(
+        M_switch=M_SWITCH, band_high=list(BAND_HIGH), ref_high=list(REF_HIGH)),
+        f"{path} is not a G-TAPER-G4b report for the band rule {BAND_RULE}")
     return path
 
 
@@ -711,7 +851,9 @@ def attrs_for_g4(ctx, gate_path):
         attrs = ctx.attrs_for_g3(n_rows, selection)
         attrs.update({"m15_generator_sha256": sha256_file(__file__), "m15_proposal_report_sha256": ctx.report_sha,
                       "m15_dataset_id": DATASET_ID, "m15_gate_taper_report": str(gate_path),
-                      "m15_note": "G1/G3 attrs describe the reused physics; the rows are the M15_G4 proposal"})
+                      "m15_band_rule": BAND_RULE_JSON,
+                      "m15_note": ("G1/G3 attrs describe the reused physics; the rows are the M15_G4 proposal; "
+                                   "s15_f_lower/s15_taper_end_hz are nominal, the band is m15_band_rule")})
         return attrs
     return attrs_for
 
@@ -751,6 +893,61 @@ def gate_rows_g4(train):
     return np.sort(ids[taken]), info
 
 
+def gate_row_g4(index):
+    """g3t.gate_row with the production band band_for(M_tot) and the reference ref_for(M_tot) of the row.
+
+    The keys mismatch_sref_* hold the mismatch with the reference of the row (Sref or S7), so g3t.gate_ok,
+    above_soft and worst_mismatch apply unchanged. The ROM stays informative and starts at the production f_lower.
+    """
+    from pycbc.filter import match
+    from pycbc.psd import aLIGOZeroDetHighPower
+    from pycbc.waveform import get_td_waveform
+    t0 = time.perf_counter()
+    row = g3t._CTX["frame"].loc[index]
+    m_tot = float(row["mass_1"]) + float(row["mass_2"])  # as s15_strains_g4 (mass1 + mass2 of the kwargs)
+    band, ref = band_for(m_tot), ref_for(m_tot)
+    rec = dict(row_index=int(index), total_mass=float(row["total_mass"]), chi_eff=float(row["chi_eff"]),
+               band=list(band), ref_band=list(ref))
+    # Face-on, unit distance, as the intrinsic part of m13_11.diagnose_click.
+    common = dict(mass1=float(row["mass_1"]), mass2=float(row["mass_2"]), spin1z=float(row["spin_1z"]),
+                  spin2z=float(row["spin_2z"]), inclination=0.0, coa_phase=0.0, distance=1.0,
+                  delta_t=m11.INTRINSIC_DELTA_T)
+    try:
+        kwargs = dict(approximant=g1.CONFIG.waveform_approximant, f_lower=m11.INTRINSIC_F_LOWER, **common)
+        with g3t.taper_band(*band):
+            hp, hc, align = m11._opt_click_free_aligned(kwargs)
+        with g3t.taper_band(*ref):
+            sp, sc, align_ref = m11._opt_click_free_aligned(kwargs)
+        dt = float(hp.delta_t)
+        try:
+            rp, rc = get_td_waveform(approximant=m11.ROM_APPROXIMANT, f_lower=band[0], **common)
+        except Exception as exc:
+            rp, rc = None, None
+            rec["rom_error"] = f"{type(exc).__name__}: {exc}"
+        h = np.abs(hp.numpy() - 1j * hc.numpy())
+        n_max = max(len(hp), len(sp), 0 if rp is None else len(rp))
+        n_fft = 2 * int(2 ** np.ceil(np.log2(n_max)))  # 2x: no wrap of the cyclic shift
+        psd = aLIGOZeroDetHighPower(n_fft // 2 + 1, 1.0 / (n_fft * dt), m11.INTRINSIC_PSD_F_LOW)
+
+        def mismatch(x, y):
+            x, y = x.copy(), y.copy()
+            x.resize(n_fft)
+            y.resize(n_fft)
+            return 1.0 - float(match(x, y, psd=psd, low_frequency_cutoff=m11.BAND_HZ[0],
+                                     high_frequency_cutoff=m11.BAND_HZ[1])[0])
+
+        rec.update(mismatch_sref_hp=mismatch(hp, sp), mismatch_sref_hc=mismatch(hc, sc),
+                   mismatch_rom_hp=None if rp is None else mismatch(hp, rp),
+                   mismatch_rom_hc=None if rp is None else mismatch(hc, rc),
+                   step=float(h[0] / h.max()), duration_s=len(hp) * dt, sref_duration_s=len(sp) * dt,
+                   residual_rad=float(align["residual_rad"]), residual_ok=bool(align["residual_ok"]),
+                   sref_residual_rad=float(align_ref["residual_rad"]), sref_residual_ok=bool(align_ref["residual_ok"]))
+    except Exception as exc:  # a row that cannot be evaluated counts as a failure of the gate
+        rec["error"] = f"{type(exc).__name__}: {exc}"
+    rec["time_s"] = time.perf_counter() - t0
+    return rec
+
+
 def gate_bins(records, keep):
     edges = GATE_MASS_BINS_G4
     out = []
@@ -773,13 +970,15 @@ def run_gate_g4(args, ctx):
     require(abs(g1.CONFIG.delta_t - m11.INTRINSIC_DELTA_T) < 1e-12, "delta_t differs from the G3 one")
     out_dir = ctx.base / "gate_taper"
     out_dir.mkdir(exist_ok=False)
-    train = ctx.frame.loc[ctx.frame.split == "train"]
+    th = ctx.thetas["train"]
+    gen_ids = th["row_id"][th["gen"]].astype(np.int64)
+    train = ctx.frame.loc[(ctx.frame.split == "train").to_numpy() & ctx.frame.index.isin(gen_ids)]
     ids, selection = gate_rows_g4(train)
     log = g3t.Log(out_dir / "gate_taper.log")
-    band = (g3t.S15_F_LOWER, g3t.S15_TAPER_END_HZ)
-    log(f"G-TAPER-G4: {len(ids)} train rows {selection}, S15 {band[0]:g} Hz, taper to {band[1]:g} Hz, "
+    band = BAND_LOW  # nominal fields read by m13_13.require_gate_passed
+    log(f"G-TAPER-G4b: {len(ids)} train rows {selection}, rule {BAND_RULE}, references {REF_LOW} / {REF_HIGH}, "
         f"{args.workers} worker(s) -> {out_dir}")
-    g3t._CTX.update(frame=train, band=band)
+    g3t._CTX.update(frame=train)
     records = []
 
     def consume(rec):
@@ -787,11 +986,11 @@ def run_gate_g4(args, ctx):
         status = f"ERROR {rec['error']}" if "error" in rec else (
             f"mismatch Sref {g3t.worst_mismatch(rec, 'sref'):.2e}, step {rec['step']:.2e}"
             + ("" if g3t.gate_ok(rec) else "  FAIL"))
-        log(f"row {rec['row_index']} M {rec['total_mass']:.2f} chi_eff {rec['chi_eff']:+.2f} {rec['time_s']:.1f} s: "
-            f"{status}  [{len(records)}/{len(ids)}]")
+        log(f"row {rec['row_index']} M {rec['total_mass']:.2f} chi_eff {rec['chi_eff']:+.2f} band {rec['band']} "
+            f"ref {rec['ref_band']} {rec['time_s']:.1f} s: {status}  [{len(records)}/{len(ids)}]")
 
     t0 = time.perf_counter()
-    g3t.run_tasks(g3t.gate_row, [int(i) for i in ids], args.workers, consume)
+    g3t.run_tasks(gate_row_g4, [int(i) for i in ids], args.workers, consume)
     good = [r for r in records if "error" not in r]
     failed = [r for r in records if not g3t.gate_ok(r)]
     n_soft = sum(g3t.above_soft(r) for r in records)
@@ -805,8 +1004,11 @@ def run_gate_g4(args, ctx):
         n_failed=len(failed), n_errors=len(records) - len(good), rows_from=None,
         s15_f_lower=band[0], s15_taper_end_hz=band[1], seed=GATE_SEED_G4, selection=selection,
         sref_f_lower=g3t.SREF_F_LOWER, sref_taper_end_hz=g3t.SREF_TAPER_END_HZ,
-        decides="mismatch(S15, Sref) and step (m13_13.gate_ok); mismatch with the ROM is informative",
-        generates="per row A (SEOBNRv4_opt from 30 Hz, phase and time reference), S15 and Sref (m13_13.gate_row)",
+        high_mass=dict(M_switch=M_SWITCH, band_high=list(BAND_HIGH), ref_high=list(REF_HIGH)),
+        band_rule=BAND_RULE, ref_low=list(REF_LOW),
+        decides=("mismatch(production band, reference) and step (m13_13.gate_ok): S15 vs Sref if M_tot <= 180, "
+                 "S10 vs S7 above; mismatch with the ROM is informative"),
+        generates="per row A (SEOBNRv4_opt from 30 Hz, phase and time reference), band and ref_band (gate_row_g4)",
         mismatch_max_allowed=g3t.GATE_MISMATCH_MAX, step_max_allowed=g3t.GATE_STEP_MAX,
         mismatch_soft=g3t.GATE_MISMATCH_SOFT, soft_fraction_max=g3t.GATE_SOFT_FRACTION_MAX,
         n_above_soft=n_soft, fraction_above_soft=soft_fraction,
@@ -821,9 +1023,9 @@ def run_gate_g4(args, ctx):
     for b in report["by_total_mass"]:
         log(f"M {b['mass_bin']}: n {b['n']}, failed {b['n_failed']} (errors {b['n_errors']}), "
             f"mismatch Sref max {b['mismatch_sref_max']}, step max {b['step_max']}")
-    log(f"G-TAPER-G4 {verdict}: {len(failed)} failed of {len(records)}; above soft {n_soft} ({soft_fraction:.4f})")
+    log(f"G-TAPER-G4b {verdict}: {len(failed)} failed of {len(records)}; above soft {n_soft} ({soft_fraction:.4f})")
     if verdict == "FAIL":
-        raise SystemExit("G-TAPER-G4 did not pass; stop (pre-registered).")
+        raise SystemExit("G-TAPER-G4b did not pass; stop (pre-registered).")
 
 
 # ---------------------------------------------------------------- noisy (variant of m13_13 noisy without G-REC)
@@ -918,7 +1120,8 @@ def run_noisy_g4(args, ctx):
     x_shape = (row_ids.size, len(DETECTORS), g1.CONFIG.length)
     meta = dict(split=split, script_sha256=sha256_file(__file__), m13_13_sha256=sha256_file(g3t.__file__),
                 proposal_report_sha256=ctx.report_sha, row_ids_sha256=sha_bytes(row_ids), x_shape=list(x_shape),
-                n_positions=int(positions.size), limit=args.limit, s15=g3t.s15_record(gate_path))
+                n_positions=int(positions.size), limit=args.limit, s15=g3t.s15_record(gate_path),
+                band_rule=BAND_RULE)
     if args.resume:
         require((work / "meta.json").exists(), f"Nothing to resume in {work}")
         require(json.loads((work / "meta.json").read_text()) == jsonable(meta), "Resume with another script or selection")
@@ -989,6 +1192,7 @@ def run_noisy_g4(args, ctx):
         g3t.overwrite_json(work / "gates_FAIL.json", jsonable(summary["G_ALIGN"]))
         raise SystemExit(f"G-ALIGN: {summary['G_ALIGN']['stop']}; stop (amendment 3).")
     summary["s15"] = g3t.s15_record(gate_path)
+    summary["band_rule"] = BAND_RULE
     summary["provenance"] = {k: (v if isinstance(v, (str, int, float, bool)) else str(v)) for k, v in
                              attrs_for_g4(ctx, gate_path)(positions.size, {"selection_policy": f"m15_noisy_{split}",
                                                                            "limit": args.limit or 0}).items()}
@@ -1009,12 +1213,15 @@ def run_noisy_g4(args, ctx):
     path = out_dir / "manifest.json"
     manifest = json.loads(path.read_text()) if path.exists() else dict(
         kind="m15_g4_noisy_union", dataset_id=DATASET_ID, x_dtype="float16", y_dtype="float32 (unstandardized)",
-        x="zscore(process_network(inject(n, S15)), psd_proc); n = Gaussian noise of the G4 row (gaussian_seed)",
-        splits={})
+        x="zscore(process_network(inject(n, S)), psd_proc); S = S15 or S10 by band_rule; n = Gaussian noise of the "
+          "G4 row (gaussian_seed)",
+        band_rule=BAND_RULE, splits={})
+    require(manifest.get("band_rule") == BAND_RULE, f"{path}: another band rule")
     manifest["splits"][split] = dict(n_rows=int(row_ids.size), shape_X=list(x_shape),
                                      row_ids_sha256=sha256_file(out_dir / f"row_ids_{split}.npy"),
                                      script_sha256=sha256_file(__file__), proposal_report_sha256=ctx.report_sha,
-                                     s15=summary["s15"], gates=f"gates_{split}.json", rows=f"rows_{split}.jsonl")
+                                     s15=summary["s15"], band_rule=BAND_RULE, gates=f"gates_{split}.json",
+                                     rows=f"rows_{split}.jsonl")
     g3t.overwrite_json(path, jsonable(manifest))
     os.rename(work / "X.npy", final_x)
     log(f"Published {final_x}")
@@ -1111,8 +1318,8 @@ def run_materialize(args, ctx):
         g3t.overwrite_json(tmp / mm / "manifest.json", jsonable(dict(
             kind="m15_g4_inputs", dataset_id=f"{DATASET_ID}/{target}", x_dtype="float16",
             y_dtype="float32 (unstandardized)", detector_order=list(DETECTORS),
-            x="zscore(process_network(inject(n, S15)), psd_proc), copied from noisy_union",
-            script_sha256=sha256_file(__file__), proposal_report_sha256=ctx.report_sha, splits=splits)))
+            x="zscore(process_network(inject(n, S)), psd_proc), S = S15 or S10 by band_rule, copied from noisy_union",
+            band_rule=BAND_RULE, script_sha256=sha256_file(__file__), proposal_report_sha256=ctx.report_sha, splits=splits)))
     print(f"[{target}] fp16 memmaps written | {time.time() - t_start:.0f} s", flush=True)
 
     # memmap: X_clean_train from the signal shards (rows copied), psd_key_train, links to the M13.6 bank
@@ -1131,7 +1338,7 @@ def run_materialize(args, ctx):
             reference = check_shard(h, path, "m15_signal", reference)
             versions.add((h.attrs["m15_generator_sha256"], h.attrs["m15_proposal_report_sha256"],
                           h.attrs["m15_gate_taper_report"], float(h.attrs["s15_f_lower"]),
-                          float(h.attrs["s15_taper_end_hz"])))
+                          float(h.attrs["s15_taper_end_hz"]), str(h.attrs["m15_band_rule"])))
             ri = h["row_index"][:]
             pos = np.searchsorted(train_ids, ri)
             hit = (pos < train_ids.size) & (train_ids[np.minimum(pos, train_ids.size - 1)] == ri)
@@ -1154,7 +1361,8 @@ def run_materialize(args, ctx):
     require(len(versions) == 1, f"Signal shards from different versions or gates: {versions}")
     version = next(iter(versions))
     require(version[1] == ctx.report_sha and Path(version[2]).resolve() == gate_path
-            and version[3:] == (g3t.S15_F_LOWER, g3t.S15_TAPER_END_HZ), f"Shards made for another setup: {version}")
+            and version[3:] == (g3t.S15_F_LOWER, g3t.S15_TAPER_END_HZ, BAND_RULE_JSON),
+            f"Shards made for another setup: {version}")
     X.flush()
     del X
     g_align = g3t.align_summary(np.concatenate(merged), np.concatenate(residuals))
@@ -1169,8 +1377,9 @@ def run_materialize(args, ctx):
     manifest = {
         "script": str(Path(__file__).resolve().relative_to(PROJECT_ROOT)), "script_sha256": sha256_file(__file__),
         "config": str(Path(G3_CONFIG)), "config_sha256": sha256_file(G3_CONFIG), "dataset_id": f"{DATASET_ID}/{target}",
-        "content": "L(s_S15) before the per-sample per-detector z-score; noise bank of M13.6 by symlink",
-        "s15": g3t.s15_record(gate_path), "proposal_report_sha256": ctx.report_sha,
+        "content": ("L(s_S) before the per-sample per-detector z-score, S = S15 or S10 by band_rule; "
+                    "noise bank of M13.6 by symlink"),
+        "s15": g3t.s15_record(gate_path), "band_rule": BAND_RULE, "proposal_report_sha256": ctx.report_sha,
         "shard_provenance": reference, "signal_generator_sha256": version[0],
         "signal_shards": [stat_entry(p) for p in paths],
         # Read by train_m13_3.load_noise_aug: compared with <target>/fp16_memmap/row_ids_train.npy.
@@ -1190,7 +1399,7 @@ def run_materialize(args, ctx):
         "generator": GENERATOR, "script_sha256": sha256_file(__file__), "target": target,
         "proposal_report_sha256": ctx.report_sha, "gate_taper_report": str(gate_path),
         "split_file": {"name": split_file_name(target), "sha256": sha256_file(tmp / split_file_name(target))},
-        "label_stats": stats_link, "n_rows": {s: int(ids[s].size) for s in SPLITS},
+        "label_stats": stats_link, "band_rule": BAND_RULE, "n_rows": {s: int(ids[s].size) for s in SPLITS},
         "monitor": {"n": int(monitor.size), "rule": "m13_13.monitor_positions(800000) on row_ids_train"},
         "shared_rows_with_other_target": {s: int(np.intersect1d(ids[s], cut_ids(ctx, 'F' if target == 'R' else 'R', s)).size)
                                           for s in SPLITS},
@@ -1233,7 +1442,8 @@ def main():
     run.add_argument("--resume", action="store_true")
 
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("sample", parents=[common])
+    sample = sub.add_parser("sample", parents=[common])
+    sample.add_argument("--workers", type=int, default=2, help="Worker processes (fork) of G-GEN")
     sub.add_parser("gate-taper", parents=[physics, workers])
     signal = sub.add_parser("signal", parents=[run])
     signal.add_argument("--shard", type=int, default=0)
