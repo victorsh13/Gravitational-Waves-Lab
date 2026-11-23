@@ -47,8 +47,8 @@ proyecto de origen. Esta es la correspondencia:
 | `tools/maintenance/check_equivalence_reference.py` | (fase 1: `tools/check_equivalence_g3t.py`); compara con `M13_G3_band1024_w16_500k/m13_13_g3t/fp16_memmap` |
 | referencia de la prueba de equivalencia | val de G3T (`X_val.npy`, `row_ids_val.npy`) y manifest de G1 (`M11_final_G1_500k`) |
 
-Hay una constante interna que conserva su nombre de origen porque se usa dentro de una función
-copiada: `M10_INPUT_ZSCORE_EPS = 1e-6`, el ε del z-score, en `physics/steps.py`.
+El ε del z-score, `INPUT_ZSCORE_EPS = 1e-6` (`physics/steps.py`), se llama `M10_INPUT_ZSCORE_EPS` en el
+origen; se renombró también dentro de la función copiada `stack_and_normalize_network`, con el mismo valor.
 
 ## Módulos copiados enteros (`gwsim/physics/`)
 

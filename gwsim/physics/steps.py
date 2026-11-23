@@ -11,11 +11,11 @@ import numpy as np
 from pycbc.noise import gaussian
 from pycbc.psd import interpolate
 
-# Copiado de scripts/generate_m11_final_G1.py (constantes DETECTORS, LABELS, PSD_SEGMENT_DURATION_S, M10_INPUT_ZSCORE_EPS) @ 4b34677; cambios: ninguno
+# Copiado de scripts/generate_m11_final_G1.py (constantes DETECTORS, LABELS, PSD_SEGMENT_DURATION_S, M10_INPUT_ZSCORE_EPS) @ 4b34677; cambios: M10_INPUT_ZSCORE_EPS -> INPUT_ZSCORE_EPS (mismo valor)
 DETECTORS = ("H1", "L1", "V1")
 LABELS = ("chirp_mass", "total_mass", "chi_eff")
 PSD_SEGMENT_DURATION_S = 8.0
-M10_INPUT_ZSCORE_EPS = 1e-6
+INPUT_ZSCORE_EPS = 1e-6
 # Copiado de scripts/m13/generate_m13_6_clean.py (constante FP16_ABS_LIMIT) @ 4b34677.
 FP16_ABS_LIMIT = 6e4  # float16 max is 65504
 
@@ -185,7 +185,7 @@ def build_gaussian_processing_noise(
 
 
 # Copiado de scripts/generate_m11_final_G1.py:stack_and_normalize_network @ 4b34677; cambios: CONFIG
-# global -> phys.config.
+# global -> phys.config; M10_INPUT_ZSCORE_EPS -> INPUT_ZSCORE_EPS (mismo valor, 1e-6).
 def stack_and_normalize_network(phys, network: dict):
     X_raw = np.stack(
         [np.asarray(network[ifo]) for ifo in DETECTORS],
@@ -205,7 +205,7 @@ def stack_and_normalize_network(phys, network: dict):
 
     X = normalize_input_per_sample_per_detector_zscore(
         X_raw,
-        eps=M10_INPUT_ZSCORE_EPS,
+        eps=INPUT_ZSCORE_EPS,
     )
 
     return X_raw, X
