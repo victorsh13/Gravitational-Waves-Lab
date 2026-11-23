@@ -263,8 +263,9 @@ def validate(cfg):
         if m_hi > M_TOT_UNVALIDATED:
             warnings.append(f"M_tot puede llegar a {m_hi:.1f} > {M_TOT_UNVALIDATED:g}: región sin validar")
         if m_hi > M_SWITCH:
-            warnings.append(f"M_tot puede superar {M_SWITCH:g}: se usará la banda de arranque alta (10 Hz), "
-                            "cuya validación de la forma de onda está pendiente")
+            warnings.append(f"M_tot puede superar {M_SWITCH:g}: se usa la banda de arranque alta (10→14 Hz), "
+                            "validada a nivel de forma de onda hasta M_tot = 250; equivalencia con la producción "
+                            "no comprobada en esta región")
         if m_lo < M_TOT_MAY_NOT_GENERATE:
             warnings.append(f"M_tot puede bajar a {m_lo:.1f} < {M_TOT_MAY_NOT_GENERATE:g}: algunas formas de onda "
                             "pueden no generarse (esas filas quedarán con status = 2)")

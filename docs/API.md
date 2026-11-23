@@ -168,7 +168,7 @@ Devuelve un dict con:
 
 Con `only_ok=True` (por defecto), solo las filas con `status == 1`; con `outputs=()`, solo los
 metadatos, sin cargar los arrays grandes. Lo carga todo en memoria: para ficheros grandes, lee por
-bloques con h5py (SALIDAS.md y el tutorial 05).
+bloques con h5py (SALIDAS.md y el tutorial 06).
 
 ## `gwsim.estimate_size`: cuánto ocupará
 

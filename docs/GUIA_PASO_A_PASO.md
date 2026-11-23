@@ -7,7 +7,24 @@ datos. En cada paso tienes:
 - la salida que deberías ver;
 - el porqué de lo que haces.
 
-Si algo no sale como se describe, ve al paso 10 («Problemas frecuentes»).
+Si algo no sale como se describe, ve al paso 11 («Problemas frecuentes»).
+
+## El flujo de trabajo, de un vistazo
+
+```
+configuración JSON  →  python -m gwsim generate  →  fichero HDF5  →  gwsim.load / h5py  →  tu análisis
+```
+
+1. **Edita una configuración** (`configs/*.json`): qué fuentes (prior), cuántas, qué ruido y qué
+   salidas quieres (paso 8).
+2. **Lanza la generación** con `python -m gwsim generate --config … --output …` (pasos 6 y 9).
+3. **Se crea un fichero HDF5**, el `--output` que tú elijas: un array por salida pedida (`X`, `X_noise`…),
+   los metadatos de cada señal y la configuración completa (paso 7).
+4. **Léelo** con `gwsim.load("fichero.h5")` o, si es grande, por bloques con h5py (pasos 6 y 7).
+
+Si prefieres empezar por un ejemplo completo que funciona y en el que solo tienes que cambiar
+parámetros, ve a [`examples/full_pipeline_example/`](../examples/full_pipeline_example/README.md)
+(o a su versión notebook, `tutorials/00_full_pipeline_example.ipynb`) después del paso 5.
 
 Convenciones:
 
@@ -25,8 +42,8 @@ Convenciones:
   Linux), porque LALSuite y PyCBC no se distribuyen para Windows nativo. Para instalar WSL2, abre
   PowerShell como administrador, ejecuta `wsl --install` y reinicia; después trabaja siempre en la
   terminal de Ubuntu.
-- **conda o miniforge.** Recomendamos miniforge, que usa conda-forge por defecto. Si no tienes
-  ninguno:
+- **conda o miniforge** (ruta A del paso 3, la recomendada) **o Python 3.10** (ruta B, con `venv` y
+  `pip`). Recomendamos miniforge, que usa conda-forge por defecto. Si no tienes ninguno:
   ```bash
   $ curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
   $ bash Miniforge3-$(uname)-$(uname -m).sh       # acepta la licencia y deja que inicialice la shell
@@ -38,9 +55,9 @@ Convenciones:
   - unos **3 GB** para el entorno de conda;
   - **unos 105 MB** para el paquete de PSD;
   - lo que ocupen tus datos: con la salida `X`, cada señal ocupa **192 KiB** (3 × 16384 × 4 bytes),
-    es decir, unos 20 GB por cada 100 000 señales. El paso 8 explica cómo calcularlo.
+    es decir, unos 20 GB por cada 100 000 señales. El paso 9 explica cómo calcularlo.
 - **Memoria:** 2 GB libres bastan para un proceso; cada proceso extra (`--workers`) suma memoria
-  (paso 8).
+  (paso 9).
 
 ## 2. Descargar el código
 
@@ -55,7 +72,7 @@ $ ls
 Salida esperada (el orden puede variar):
 
 ```
-README.md  configs  docs  environment.yml  examples  gwsim  tools  tutorials
+README.md  configs  docs  environment.yml  examples  gwsim  requirements-notebooks.txt  requirements.txt  tools  tutorials
 ```
 
 `--single-branch --branch gwsim` descarga solo esa rama, y el último `gwsim` es el nombre de la carpeta
@@ -63,37 +80,85 @@ que se crea. A partir de aquí, **todos los comandos se ejecutan dentro de esta 
 
 ## 3. Crear el entorno
 
-Un *entorno* de conda es una instalación de Python aislada, con versiones fijas de cada paquete. Así
-gwsim usa exactamente las versiones con las que se verificó (ver VALIDEZ.md) y no rompe otros
-proyectos tuyos.
+Un *entorno* es una instalación de Python aislada, con versiones fijas de cada paquete. Así gwsim usa
+exactamente las versiones con las que se verificó (ver VALIDEZ.md) y no rompe otros proyectos tuyos.
+
+Hay dos rutas con **las mismas versiones**. Elige **una**:
+
+- **Ruta A, conda (recomendada):** funciona en cualquier Linux o macOS e instala también Python 3.10.
+- **Ruta B, venv + pip:** si ya tienes Python 3.10 y prefieres no usar conda.
+
+### Ruta A: conda (recomendada)
 
 ```bash
 $ conda env create -f environment.yml
 $ conda activate gwsim
-```
-
-El primer comando tarda varios minutos: descarga Python 3.10, numpy, scipy, h5py, pandas, astropy,
-lalsuite, PyCBC y matplotlib. Al terminar escribe algo como
-`To activate this environment, use $ conda activate gwsim`.
-
-Después de `conda activate gwsim`, el indicador de la terminal empieza por `(gwsim)`. **Tienes que
-activar el entorno cada vez que abras una terminal nueva.**
-
-Comprueba las versiones:
-
-```bash
 $ python -c "import pycbc, lal, numpy, h5py; print('pycbc', pycbc.__version__, '| lalsuite', lal.__version__, '| numpy', numpy.__version__, '| h5py', h5py.__version__)"
 ```
 
-Salida esperada:
+- **El primer comando** tarda varios minutos: descarga Python 3.10, numpy, scipy, h5py, pandas,
+  astropy, lalsuite, PyCBC y matplotlib. Al terminar escribe algo como
+  `To activate this environment, use $ conda activate gwsim`.
+- **Después de `conda activate gwsim`**, el indicador de la terminal empieza por `(gwsim)`. **Tienes
+  que activar el entorno cada vez que abras una terminal nueva.**
+- **El tercer comando** comprueba las versiones. Salida esperada:
 
-```
-pycbc 2.9.0 | lalsuite 7.26.11 | numpy 2.2.6 | h5py 3.16.0
+  ```
+  pycbc 2.9.0 | lalsuite 7.26.11 | numpy 2.2.6 | h5py 3.16.0
+  ```
+
+### Ruta B: venv + pip (opcional)
+
+Solo si ya tienes **Python 3.10** (exactamente esa versión menor). Primero compruébalo:
+
+```bash
+$ python3.10 --version
 ```
 
-Puede aparecer antes un aviso que menciona `pkg_resources` (`UserWarning: pkg_resources is deprecated
-…`). **Es inofensivo**: PyCBC usa un módulo antiguo de setuptools para algo que gwsim no necesita.
-Puedes ignorarlo; aparecerá también en otros comandos.
+Debe responder `Python 3.10.x`. Si dice `command not found`, usa la ruta A.
+
+```bash
+$ python3.10 -m venv .venv
+$ source .venv/bin/activate
+$ python -m pip install --upgrade pip
+$ pip install -r requirements.txt
+$ python -c "import pycbc, lal, numpy, h5py; print('pycbc', pycbc.__version__, '| lalsuite', lal.__version__, '| numpy', numpy.__version__, '| h5py', h5py.__version__)"
+```
+
+- **`python3.10 -m venv .venv`** crea el entorno en la carpeta `.venv/` dentro del repositorio
+  (`.gitignore` ya la excluye).
+- **`source .venv/bin/activate`** lo activa: el indicador empieza por `(.venv)`. Como en la ruta A, hay
+  que activarlo en cada terminal nueva.
+- **`requirements.txt`** tiene exactamente las mismas versiones que `environment.yml`.
+- **La última línea** debe dar la misma salida que en la ruta A.
+
+lalsuite y PyCBC se instalan como *wheels* (paquetes ya compilados) solo en **Linux x86_64 y macOS**. En
+otra plataforma (Linux ARM, como una Raspberry Pi o algunos servidores, o Windows nativo), pip intentará
+compilarlos y fallará. En ese caso usa la ruta A, o WSL2 en Windows.
+
+### En las dos rutas: el aviso de `pkg_resources`
+
+Puede aparecer un aviso que menciona `pkg_resources` (`UserWarning: pkg_resources is deprecated …`).
+**Es inofensivo**: PyCBC usa un módulo antiguo de setuptools para algo que gwsim no necesita. Puedes
+ignorarlo; aparecerá también en otros comandos.
+
+### Opcional: Jupyter para los tutoriales
+
+Los notebooks de `tutorials/` necesitan Jupyter y un *kernel* (el proceso de Python que ejecuta las
+celdas) que use este entorno. Con el entorno activado, en cualquiera de las dos rutas:
+
+```bash
+$ pip install -r requirements-notebooks.txt
+$ python -m ipykernel install --user --name gwsim --display-name "Python (gwsim)"
+$ jupyter lab
+```
+
+- **El segundo comando** registra el entorno como kernel con el nombre «Python (gwsim)».
+- **En JupyterLab**, abre un notebook y elige ese kernel en *Kernel → Change Kernel…* (o arriba a la
+  derecha).
+- **En VS Code**, abre el notebook, pulsa *Select Kernel* (arriba a la derecha) → *Jupyter Kernel…* →
+  «Python (gwsim)». Si no aparece, elige *Python Environments…* y la carpeta del entorno: `.venv`, o el
+  entorno `gwsim` de conda.
 
 ## 4. Autoprueba
 
@@ -119,7 +184,7 @@ OK
 ```
 
 Lo importante es la última línea: **`OK`**. Si sale `FALLO:` seguido de una lista, cada línea dice qué
-fila y qué comprobación ha fallado (ver el paso 10).
+fila y qué comprobación ha fallado (ver el paso 11).
 
 ## 5. El paquete de PSD
 
@@ -219,7 +284,70 @@ Para leerlo desde Python (ejecuta `python` en la raíz del repositorio):
 SALIDAS.md describe cada campo. `X` está normalizado por detector (media 0 y desviación 1 en cada uno
 de los tres canales); FISICA.md §8 explica por qué.
 
-## 7. Tu propia configuración
+## 7. Qué hay dentro del fichero
+
+**Dónde está.** El fichero es exactamente el `--output` que eliges: si escribes
+`--output salidas/train.h5`, se crea `salidas/train.h5`, y la carpeta también, si no existe. gwsim
+**nunca sobrescribe**: si el fichero ya existe, se niega a empezar (o continúa con `--resume`, paso 9).
+
+**Qué contiene.** Un HDF5 es un fichero con «carpetas» y arrays con nombre (*datasets*) y atributos.
+El de gwsim tiene esta forma (con `outputs: ["X", "X_noise"]` y n señales):
+
+```
+senales.h5
+├── X                      (n, 3, 16384) float32   una entrada por salida pedida en "outputs"
+├── X_noise                (n, 3, 16384) float32
+├── status                 (n,) uint8              0 pendiente · 1 hecha · 2 fallida
+├── error                  (n,) texto              por qué falló la fila (vacío si no)
+├── y                      (n, 3) float32          [chirp_mass, total_mass, chi_eff]
+├── mass_1, mass_2, spin_1z, …, chi_eff            (n,)  parámetros y derivados de cada señal
+├── target_network_snr, final_network_snr, snr_H1, … (n,)  SNR objetivo y obtenidas
+├── final_distance, gps, actual_geocentric_time, … (n,)  distancia y tiempos
+├── block_id, noise_crop_id, noise_split           (n,)  de dónde sale el ruido
+└── placement_seed, gaussian_seed, …               (n,)  semillas (reproducibilidad)
+atributos: config_json (la configuración completa), gwsim_version, created_utc, outputs, warnings, …
+```
+
+SALIDAS.md tiene la lista completa de campos.
+
+**Verlo desde la terminal.** Si tienes las herramientas de HDF5 (`h5ls`):
+
+```bash
+$ h5ls -r senales.h5
+```
+
+Si no, estas 5 líneas de Python recorren el árbol e imprimen nombre, forma y tipo de cada dataset:
+
+```bash
+$ python - <<'EOF'
+import h5py
+with h5py.File("senales.h5", "r") as h:
+    h.visititems(lambda name, obj: print(f"{name:<28} {str(obj.shape):<18} {obj.dtype}") if isinstance(obj, h5py.Dataset) else None)
+    print({k: v for k, v in h.attrs.items() if k != "config_json"})
+EOF
+```
+
+**Recuperar la configuración exacta.** La configuración completa, con los valores por defecto
+aplicados, se guarda dentro del fichero. Para sacarla como JSON y poder repetir o variar la
+generación:
+
+```bash
+$ python -c "import h5py, json; cfg = json.loads(h5py.File('senales.h5', 'r').attrs['config_json']); open('config_recuperada.json', 'w').write(json.dumps(cfg, indent=2))"
+```
+
+`config_recuperada.json` se puede pasar tal cual a `generate --config`.
+
+**Tamaño y compresión.** Cada salida ocupa 192 KiB por señal sin comprimir (3 × 16384 × 4 bytes).
+gwsim comprime con lzf, que es rápido y sin pérdidas; el ahorro es modesto, porque el ruido apenas se
+comprime. Para estimar el tamaño antes de generar, usa `gwsim.estimate_size` (paso 9).
+
+**Un fichero por split.** Conviene un fichero para train, otro para val y otro para test (paso 10):
+
+- cada uno lleva su propia configuración (con su split de ruido y su semilla);
+- se pueden regenerar o compartir por separado;
+- es imposible mezclarlos por error al leer.
+
+## 8. Tu propia configuración
 
 Copia la configuración por defecto y edítala:
 
@@ -280,7 +408,7 @@ Si hay un error (una clave mal escrita, un rango al revés…), sale un `ConfigE
 falla y por qué. Por ejemplo, con `"range": [60.0, 20.0]`:
 `ConfigError: prior.masses.range debe estar ordenado [mín, máx]; recibido [60.0, 20.0]`.
 
-## 8. Generar un conjunto grande
+## 9. Generar un conjunto grande
 
 ### Cuánto va a ocupar
 
@@ -328,7 +456,7 @@ sorteó y guardó al crear el fichero, el resultado es idéntico al de una ejecu
 Para sesiones largas por SSH, lanza la generación dentro de `tmux` o `screen`, o con `nohup … &`, para
 que no muera al cerrar la conexión.
 
-## 9. Splits sin fuga de ruido
+## 10. Splits sin fuga de ruido
 
 Si entrenas o calibras con unos datos y evalúas con otros, el ruido de la evaluación no debe venir de
 los mismos tramos de datos de O3b. Si no, el estadístico podría «aprenderse» las particularidades de
@@ -372,7 +500,7 @@ set()
 las realizaciones de ruido también sean distintas. El split `cal` queda libre por si necesitas un
 cuarto conjunto (por ejemplo, para calibrar umbrales).
 
-## 10. Problemas frecuentes
+## 11. Problemas frecuentes
 
 **Algunas filas tienen `status = 2`.** La generación no se para por una fila que falla: la marca y
 sigue. Para ver por qué ha fallado:
@@ -396,7 +524,7 @@ prior.
 **Avisos de M_tot.** Al empezar, gwsim avisa si tu prior puede producir:
 
 - masas totales < 16 M☉: la forma de onda puede no generarse;
-- masas totales > 180 M☉: se usa la banda de arranque alta, cuya validación está pendiente;
+- masas totales > 180 M☉: se usa la banda de arranque alta (10→14 Hz), validada a nivel de forma de onda hasta 250 M☉, pero sin comprobar la equivalencia con la producción en esa región;
 - masas totales > 250 M☉: región sin validar.
 
 No son errores, pero esas regiones no están validadas (VALIDEZ.md). Si tu estudio no las necesita,
@@ -404,9 +532,9 @@ ajusta el prior para no entrar en ellas.
 
 **Falta de memoria** (`MemoryError`, `Killed` o el ordenador muy lento). Baja `--workers`. Al leer, no
 cargues un fichero enorme de golpe con `gwsim.load`: lee por bloques con h5py (SALIDAS.md y el
-tutorial 05).
+tutorial 06).
 
-**Un HDF5 a medias** (se cortó la generación). Continúa con `--resume` (paso 8). Si el corte ocurrió
+**Un HDF5 a medias** (se cortó la generación). Continúa con `--resume` (paso 9). Si el corte ocurrió
 justo al crear el fichero, `--resume` dice `El HDF5 no terminó de inicializarse`: bórralo y vuelve a
 generar sin `--resume`.
 
@@ -425,5 +553,5 @@ antiguo si de verdad no lo quieres.
 
 ---
 
-Siguiente paso: los tutoriales de `tutorials/`, en orden. Para abrirlos, necesitas un Jupyter que use
-el entorno `gwsim` (ver ENTORNO.md).
+Siguiente paso: los tutoriales de `tutorials/`, en orden, empezando por `00_full_pipeline_example.ipynb`. Para
+abrirlos, necesitas Jupyter con el kernel «Python (gwsim)» (paso 3, «Opcional: Jupyter para los tutoriales»).

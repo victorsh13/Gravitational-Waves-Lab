@@ -1,0 +1,5 @@
+# Opcional: Jupyter para los notebooks de tutorials/ (en cualquiera de las dos rutas, con el entorno activado).
+# ipykernel: la versión del entorno de verificación.
+ipykernel==7.2.0
+# jupyterlab: sin fijar, porque no formaba parte del entorno de verificación (no afecta a los resultados).
+jupyterlab

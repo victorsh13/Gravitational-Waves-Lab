@@ -108,8 +108,10 @@ con una subida suave (media ventana de Kaiser, β = 8) desde su inicio hasta que
 instantánea alcanza el final del taper:
 
 - **banda de arranque baja**: desde 15 Hz, con taper hasta 25 Hz, si M ≤ 180 M☉;
-- **banda de arranque alta**: desde 10 Hz, con taper hasta 14 Hz, si M > 180 M☉. Las masas grandes
-  fusionan a frecuencias más bajas, así que su señal útil empieza antes.
+- **banda de arranque alta**: desde 10 Hz, con taper hasta 14 Hz, si M > 180 M☉. En sistemas pesados la
+  frecuencia sube tan deprisa que un taper breve (15 → 25 Hz) ensancha su espectro y deja parte de
+  la deformación por encima de 30 Hz; arrancar a 10 Hz lo aleja de la banda analizada. Validada a nivel
+  de forma de onda hasta M = 250 M☉ (ver VALIDEZ.md).
 
 S se alinea con A en fase y en tiempo submuestra (`_align_to_A`). Para ello se generan las dos de
 cara (ι = 0), se busca el máximo de la correlación compleja sobre su tramo común, se adelanta S esa

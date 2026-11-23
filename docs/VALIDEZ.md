@@ -26,6 +26,31 @@ alineación de S con A y el taper de borde, con estos umbrales:
 `align_residual_rad` te permite filtrar. Una fila con |residuo| > 0,5 rad se considera un fallo de la
 alineación y se guarda con `status = 2`.
 
+## La banda de arranque alta (M_tot > 180 M☉)
+
+**Validada a nivel de forma de onda en el proyecto de origen hasta M_tot = 250 M☉.** Para estos
+sistemas, la señal sin clic arranca a 10 Hz con un taper hasta 14 Hz, y en el proyecto de origen se
+comparó con una referencia que arranca a más baja frecuencia, con el mismo criterio que la banda baja.
+Superó la comprobación en todo el rango, hasta M_tot = 250 M☉.
+
+Lo que **no** se ha comprobado es la equivalencia bit a bit de gwsim con la producción en esta región.
+La prueba de equivalencia solo cubre M_tot ≤ 180 M☉, porque no hay datos de producción con la banda
+alta con los que comparar. Por encima de 250 M☉ no hay ninguna validación.
+
+**Por qué el taper tiene que quedar por debajo de la banda analizada.** El taper es la subida suave con
+la que la señal sin clic pasa de cero a su amplitud completa; mientras dura, la señal está «deformada»
+respecto a la física real. Esa deformación es inofensiva solo si ocurre a frecuencias que el análisis
+no mira. El procesado elimina todo lo que hay por debajo de 30 Hz, así que el taper tiene que haber
+terminado antes de que la frecuencia de la señal llegue a 30 Hz.
+
+Con la banda baja (15 → 25 Hz) esto se cumple para la mayoría de las masas. En un sistema pesado,
+en cambio, la frecuencia sube muy deprisa y la señal pasa de 15 a 25 Hz en muy pocos ciclos, así que el
+taper dura muy poco. Una modulación de amplitud tan rápida no se queda en las frecuencias en las que
+ocurre: cuanto más breve es, más se ensancha su espectro (la anchura es del orden de 1/duración). Por
+eso parte de la deformación del taper llegaba al rango de ≥ 30 Hz que ve el análisis. Para
+M_tot > 180 M☉ se aleja el taper: la señal arranca a 10 Hz y el taper termina a 14 Hz, con 16 Hz de
+margen hasta la banda analizada.
+
 ## Lo que la prueba NO cubre
 
 - **El modo `distance`.** Usa la misma cadena, pero sin el reescalado de la distancia, y no se ha
@@ -33,8 +58,9 @@ alineación y se guarda con `status = 2`.
 - **El modo `noise_only`.** El ruido y el procesado son los mismos que en las filas validadas, pero
   las muestras de solo ruido no se han comparado una a una.
 - **Las PSD analíticas** (`noise.source = "analytic"`). Son curvas de diseño, no las de O3b.
-- **La banda de arranque alta (M_tot > 180 M☉).** La regla de banda es la del proyecto de origen,
-  pero allí la validación de esa forma de onda está **pendiente**. gwsim avisa si el prior puede dar
+- **La banda de arranque alta (M_tot > 180 M☉), en cuanto a la equivalencia con la producción.** Su
+  forma de onda sí está validada hasta M_tot = 250 (sección anterior), pero la igualdad bit a bit de
+  gwsim con la producción solo se ha comprobado con M_tot ≤ 180. gwsim avisa si el prior puede dar
   M_tot > 180.
 - **Priors fuera de masas 5–90 M☉ y espines de −1 a 1** (y SNR fuera de [10, 25)). La física es la
   misma, pero:

@@ -184,8 +184,7 @@ def build_gaussian_processing_noise(
     return noises
 
 
-# Copiado de scripts/generate_m11_final_G1.py:stack_and_normalize_network @ 4b34677; cambios: CONFIG
-# global -> phys.config; M10_INPUT_ZSCORE_EPS -> INPUT_ZSCORE_EPS (mismo valor, 1e-6).
+# Copiado de scripts/generate_m11_final_G1.py:stack_and_normalize_network @ 4b34677; cambios: CONFIG global -> phys.config; M10_INPUT_ZSCORE_EPS -> INPUT_ZSCORE_EPS (mismo valor, 1e-6).
 def stack_and_normalize_network(phys, network: dict):
     X_raw = np.stack(
         [np.asarray(network[ifo]) for ifo in DETECTORS],

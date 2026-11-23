@@ -32,7 +32,7 @@ proyecto de origen. Esta es la correspondencia:
 | señal A | forma de onda de G1/G3 (SEOBNRv4_opt desde 30 Hz) |
 | señal S sin clic | S de M13.11/M13.12/M13.13 |
 | banda de arranque baja (15 Hz, taper hasta 25 Hz) | S15 (`S15_F_LOWER`, `S15_TAPER_END_HZ`; `BAND_LOW` de M15) |
-| banda de arranque alta (10 Hz, taper hasta 14 Hz) | S10 (`BAND_HIGH` de M15, enmienda 2; validación G-TAPER-G4b pendiente) |
+| banda de arranque alta (10 Hz, taper hasta 14 Hz) | S10 (`BAND_HIGH` de M15, enmienda 2; G-TAPER-G4b superada hasta M_tot = 250, confirmado el 23-11-2026) |
 | referencia de la señal sin clic (10 Hz → 14 Hz) | Sref (`SREF_F_LOWER`, `SREF_TAPER_END_HZ`) |
 | validación de la forma de onda (desajuste ≤ 8·10⁻⁴) | puerta G-TAPER |
 | alineación de S con A; error `"alineación: residuo <valor> rad"` | puerta G-ALIGN (`ALIGN_TOL = 0.04`, `ALIGN_ABORT = 0.5`, enmienda 3) |

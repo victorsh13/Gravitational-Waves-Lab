@@ -1,0 +1,22 @@
+{
+  "description": "Igual que config.json, pero con ruido analítico (curvas de diseño), para cuando no está el paquete de PSD.",
+  "n_samples": 20,
+  "seed": 20261123,
+  "mode": "snr",
+  "outputs": ["X", "X_noise"],
+  "click_free": true,
+  "noise": {
+    "source": "analytic",
+    "gps_range": [1256655618.0, 1269363618.0]
+  },
+  "prior": {
+    "masses": {"distribution": "components_uniform", "range": [20.0, 60.0]},
+    "spin_1z": {"distribution": "uniform", "range": [-0.5, 0.5]},
+    "spin_2z": {"distribution": "uniform", "range": [-0.5, 0.5]},
+    "inclination": {"distribution": "isotropic"},
+    "ra": {"distribution": "uniform"},
+    "dec": {"distribution": "isotropic"},
+    "polarization_angle": {"distribution": "uniform"},
+    "target_network_snr": {"distribution": "uniform", "range": [10.0, 25.0]}
+  }
+}

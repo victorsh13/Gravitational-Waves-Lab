@@ -1,0 +1,11 @@
+# gwsim, ruta B (venv + pip): las mismas versiones fijadas que environment.yml.
+# Si cambias una versión aquí, cámbiala también en environment.yml.
+# lalsuite y PyCBC solo tienen wheels para Linux x86_64 y macOS; en otra plataforma, usa conda (environment.yml).
+numpy==2.2.6
+scipy==1.15.3
+h5py==3.16.0
+pandas==2.3.3
+astropy==6.1.7
+lalsuite==7.26.11
+PyCBC==2.9.0
+matplotlib==3.10.9   # solo para los tutoriales y las figuras del ejemplo

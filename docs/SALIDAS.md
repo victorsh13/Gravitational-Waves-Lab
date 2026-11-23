@@ -2,6 +2,50 @@
 
 Un fichero contiene n filas, una por muestra. Todos los datasets tienen n como primera dimensión.
 
+## Dónde y cómo se guardan los datos
+
+- **Dónde.** El fichero es el `--output` que eliges en `python -m gwsim generate`; la carpeta se crea si
+  no existe. gwsim **nunca sobrescribe**: si el fichero existe, se niega a empezar, salvo con `--resume`,
+  que continúa uno a medias con la misma configuración.
+- **Qué hay dentro**, en forma de árbol (ejemplo con `outputs: ["X", "X_noise"]`):
+
+  ```
+  fichero.h5
+  ├── X, X_noise, …          (n, 3, 16384) float32   una entrada por salida pedida (tabla de abajo)
+  ├── status                 (n,) uint8              0 pendiente · 1 hecha · 2 fallida
+  ├── error                  (n,) texto              mensaje si status = 2
+  ├── y                      (n, 3) float32          [chirp_mass, total_mass, chi_eff]
+  └── metadatos por fila     (n,)                    parámetros, SNR, distancia, tiempos, ruido, semillas
+  atributos: config_json, gwsim_version, created_utc, outputs, detectors, labels, n_rows, warnings
+  ```
+
+- **Verlo desde la terminal:** `h5ls -r fichero.h5`, si tienes las herramientas de HDF5. Si no, en Python:
+
+  ```python
+  import h5py
+  with h5py.File("fichero.h5", "r") as h:
+      h.visititems(lambda name, obj: print(f"{name:<28} {str(obj.shape):<18} {obj.dtype}")
+                   if isinstance(obj, h5py.Dataset) else None)
+      print({k: v for k, v in h.attrs.items() if k != "config_json"})
+  ```
+
+- **Recuperar la configuración exacta** con la que se generó, para repetirla o variarla:
+
+  ```python
+  import h5py, json
+  with h5py.File("fichero.h5", "r") as h:
+      cfg = json.loads(h.attrs["config_json"])
+  with open("config_recuperada.json", "w") as f:
+      json.dump(cfg, f, indent=2)      # se puede pasar tal cual a generate --config
+  ```
+
+- **Tamaño y compresión.** Cada salida ocupa 192 KiB por fila sin comprimir (3 × 16384 × 4 bytes).
+  gwsim usa compresión lzf, sin pérdidas y rápida, en bloques de una fila. El ruido apenas se comprime,
+  así que planifica con `gwsim.estimate_size(config, n)`.
+- **Un fichero por split** (train, val, test). Cada uno lleva su propia configuración, con su split de
+  ruido y su semilla, se puede regenerar o compartir por separado y no hay forma de mezclarlos por
+  error al leer.
+
 ## Arrays de entrada (solo los pedidos en `outputs`)
 
 Todos son float32 con forma `(n, 3, 16384)` (detectores H1, L1, V1 × 4 s a 4096 Hz). Se guardan
