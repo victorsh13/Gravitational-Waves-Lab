@@ -1,0 +1,8 @@
+{
+  "description": "Parámetros fijados desde un CSV (una fila por señal); semillas y recortes de ruido del CSV si vienen, si no del seed global.",
+  "seed": 3,
+  "mode": "snr",
+  "outputs": ["X", "X_noise", "signal_projected"],
+  "parameters_file": "../examples/params_example.csv",
+  "noise": {"source": "psd_pack", "psd_pack": null, "splits": ["train", "val", "cal", "test"]}
+}

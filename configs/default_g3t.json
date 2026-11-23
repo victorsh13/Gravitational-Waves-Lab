@@ -1,0 +1,55 @@
+{
+  "description": "G3T exacto: prior de G1 (masas U[5, 90], espines U[-1, 1], SNR U[10, 25)), ruido gaussiano con PSD empíricas de O3b, señal S15/S10 sin clic, blanqueado 16 s, banda 30-1024 Hz.",
+  "n_samples": 10,
+  "seed": 20261123,
+  "mode": "snr",
+  "outputs": ["X"],
+  "click_free": true,
+  "noise": {
+    "source": "psd_pack",
+    "psd_pack": null,
+    "splits": ["train", "val", "cal", "test"]
+  },
+  "prior": {
+    "masses": {"distribution": "components_uniform", "range": [5.0, 90.0]},
+    "spin_1z": {"distribution": "uniform", "range": [-1.0, 1.0]},
+    "spin_2z": {"distribution": "uniform", "range": [-1.0, 1.0]},
+    "inclination": {"distribution": "isotropic"},
+    "ra": {"distribution": "uniform"},
+    "dec": {"distribution": "isotropic"},
+    "polarization_angle": {"distribution": "uniform"},
+    "target_network_snr": {"distribution": "uniform", "range": [10.0, 25.0]}
+  },
+  "simulation": {
+    "simulation_regime": "BBH",
+    "waveform_family": "IMR",
+    "waveform_approximant": "SEOBNRv4_opt",
+    "sampling_frequency": 4096,
+    "duration": 4.0,
+    "processing_context_start_samples": 33408,
+    "processing_context_end_samples": 33408,
+    "low_frequency_cutoff": 30.0,
+    "snr_high_frequency_cutoff": 1024.0,
+    "snr_on_truncated_signal": true,
+    "snr_relative_tolerance": 0.05,
+    "truncation_policy": "keep_last_segment",
+    "required_final_duration": 1.0,
+    "safe_margin_start": 0.0,
+    "safe_margin_end": 0.0
+  },
+  "signal_processor": {
+    "whitening_method": "psd",
+    "apply_highpass": true,
+    "apply_lowpass": true,
+    "apply_standardization": false,
+    "output_mode": "crop_to_config",
+    "whitening_low_frequency_cutoff": 30.0,
+    "whitening_max_filter_duration": 16.0,
+    "whitening_trunc_method": "hann",
+    "highpass_frequency": 30.0,
+    "lowpass_frequency": 1024.0,
+    "fir_order": 256,
+    "fir_beta": 5.0,
+    "remove_corrupted": true
+  }
+}

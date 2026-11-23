@@ -1,0 +1,16 @@
+# Entorno de gwsim: versiones de gw-env (pip list, /tmp/gwenv_versions.txt), solo los paquetes que usa gwsim.
+# conda env create -f environment.yml && conda activate gwsim
+name: gwsim
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - numpy==2.2.6
+      - scipy==1.15.3
+      - h5py==3.16.0
+      - pandas==2.3.3
+      - astropy==6.1.7
+      - lalsuite==7.26.11
+      - PyCBC==2.9.0

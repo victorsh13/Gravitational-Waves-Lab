@@ -1,0 +1,8 @@
+{
+  "description": "Solo ruido, procesado como G3T, con los entornos de ruido del split 'train' del paquete.",
+  "n_samples": 100,
+  "seed": 1,
+  "mode": "noise_only",
+  "outputs": ["X", "X_unnormalized"],
+  "noise": {"source": "psd_pack", "psd_pack": null, "splits": ["train"]}
+}

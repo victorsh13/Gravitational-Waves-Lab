@@ -1,0 +1,14 @@
+{
+  "description": "Prior propio (masa de chirp y q uniformes, espines nulos, SNR log-uniforme), ruido analítico de diseño; pares señal + ruido y solo ruido con la misma realización.",
+  "n_samples": 50,
+  "seed": 7,
+  "mode": "snr",
+  "outputs": ["X", "X_noise", "signal_whitened"],
+  "noise": {"source": "analytic", "gps_range": [1256655618.0, 1269363618.0]},
+  "prior": {
+    "masses": {"distribution": "chirp_mass_q_uniform", "chirp_mass_range": [10.0, 40.0], "q_range": [0.25, 1.0]},
+    "spin_1z": {"fixed": 0.0},
+    "spin_2z": {"fixed": 0.0},
+    "target_network_snr": {"distribution": "loguniform", "range": [8.0, 30.0]}
+  }
+}
