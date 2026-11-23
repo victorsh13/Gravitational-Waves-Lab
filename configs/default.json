@@ -1,5 +1,5 @@
 {
-  "description": "G3T exacto: prior de G1 (masas U[5, 90], espines U[-1, 1], SNR U[10, 25)), ruido gaussiano con PSD empíricas de O3b, señal S15/S10 sin clic, blanqueado 16 s, banda 30-1024 Hz.",
+  "description": "Configuración por defecto, escrita entera: masas U[5, 90], espines U[-1, 1], SNR U[10, 25), ruido gaussiano con PSD empíricas de O3b, señal sin clic, blanqueado de 16 s, banda 30-1024 Hz.",
   "n_samples": 10,
   "seed": 20261123,
   "mode": "snr",
@@ -7,7 +7,7 @@
   "click_free": true,
   "noise": {
     "source": "psd_pack",
-    "psd_pack": null,
+    "psd_pack": "../psd_pack_o3b.npz",
     "splits": ["train", "val", "cal", "test"]
   },
   "prior": {

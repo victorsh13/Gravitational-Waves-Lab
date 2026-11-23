@@ -10,7 +10,7 @@ import json
 import math
 from pathlib import Path
 
-from .recipe import (G3T_SIGNAL_PROCESSOR, G3T_SIMULATION, M_SWITCH, MODES, OUTPUT_NAMES, SIGNAL_OUTPUTS)
+from .recipe import (DEFAULT_SIGNAL_PROCESSOR, DEFAULT_SIMULATION, M_SWITCH, MODES, OUTPUT_NAMES, SIGNAL_OUTPUTS)
 
 SPLITS = ("train", "val", "cal", "test")
 # O3b: 1 nov 2019 15:00 UTC - 27 mar 2020 17:00 UTC (solo para el ruido analítico).
@@ -23,7 +23,8 @@ PRECESSING_APPROXIMANTS = {
 }
 VALIDATED_APPROXIMANT = "SEOBNRv4_opt"
 M_TOT_UNVALIDATED = 250.0
-M_TOT_MAY_NOT_GENERATE = 16.0  # GEN_M_CHECK de scripts/m15/m15_build_g4.py
+# Copiado de scripts/m15/m15_build_g4.py (constante GEN_M_CHECK) @ 4b34677; cambios: nombre.
+M_TOT_MAY_NOT_GENERATE = 16.0
 
 DEFAULT_CONFIG = {
     "description": "",
@@ -38,7 +39,7 @@ DEFAULT_CONFIG = {
         "splits": list(SPLITS),
         "gps_range": list(O3B_GPS_RANGE),
     },
-    # Prior de G1 (configs/generation/generate_m11_final_G1_500k.json + target_network_snr_range).
+    # Prior por defecto: masas U[5, 90], espines U[-1, 1], ángulos isótropos y SNR U[10, 25).
     "prior": {
         "masses": {"distribution": "components_uniform", "range": [5.0, 90.0]},
         "spin_1z": {"distribution": "uniform", "range": [-1.0, 1.0]},
@@ -51,8 +52,8 @@ DEFAULT_CONFIG = {
         "distance": {"distribution": "uniform_volume", "range": [100.0, 3000.0]},
     },
     "parameters_file": None,
-    "simulation": dict(G3T_SIMULATION),
-    "signal_processor": dict(G3T_SIGNAL_PROCESSOR),
+    "simulation": dict(DEFAULT_SIMULATION),
+    "signal_processor": dict(DEFAULT_SIGNAL_PROCESSOR),
 }
 SECTIONS = ("noise", "prior", "simulation", "signal_processor")
 ANGLE_LIMITS = {"inclination": (0.0, math.pi, "isotropic"), "dec": (-math.pi / 2, math.pi / 2, "isotropic"),
@@ -244,26 +245,26 @@ def validate(cfg):
         Physics(cfg["simulation"], cfg["signal_processor"])
     except (ValueError, TypeError) as exc:
         _fail(f"simulation / signal_processor: {exc}")
-    for section, reference in (("simulation", G3T_SIMULATION), ("signal_processor", G3T_SIGNAL_PROCESSOR)):
+    for section, reference in (("simulation", DEFAULT_SIMULATION), ("signal_processor", DEFAULT_SIGNAL_PROCESSOR)):
         changed = sorted(k for k in reference if cfg[section].get(k) != reference[k])
         if changed:
-            warnings.append(f"{section}: {changed} distintos de G3T; esa física no está validada frente a G3T")
+            warnings.append(f"{section}: {changed} distintos de la configuración por defecto; esa física no está validada")
 
     approximant = cfg["simulation"]["waveform_approximant"]
     _check(approximant not in PRECESSING_APPROXIMANTS,
            f"{approximant} tiene precesión; gwsim solo admite espines alineados")
     if mode != "noise_only":
         if approximant != VALIDATED_APPROXIMANT and cfg["click_free"]:
-            warnings.append(f"La señal sin clic S15/S10 solo se ha validado con {VALIDATED_APPROXIMANT}; con "
+            warnings.append(f"La señal sin clic (bandas de arranque baja y alta) solo se ha validado con {VALIDATED_APPROXIMANT}; con "
                             f"{approximant} revisa el resultado o usa click_free: false")
         if not cfg["click_free"]:
-            warnings.append("click_free: false inyecta A (la señal de G3, con el clic de 30 Hz), no la de G3T")
+            warnings.append("click_free: false inyecta A, con el clic de 30 Hz, en vez de la señal sin clic")
         m_lo, m_hi = _mtot_bounds(cfg)
         if m_hi > M_TOT_UNVALIDATED:
             warnings.append(f"M_tot puede llegar a {m_hi:.1f} > {M_TOT_UNVALIDATED:g}: región sin validar")
         if m_hi > M_SWITCH:
-            warnings.append(f"M_tot puede superar {M_SWITCH:g}: se usará S10 (10 Hz), con validación pendiente "
-                            "(G-TAPER-G4b)")
+            warnings.append(f"M_tot puede superar {M_SWITCH:g}: se usará la banda de arranque alta (10 Hz), "
+                            "cuya validación de la forma de onda está pendiente")
         if m_lo < M_TOT_MAY_NOT_GENERATE:
             warnings.append(f"M_tot puede bajar a {m_lo:.1f} < {M_TOT_MAY_NOT_GENERATE:g}: algunas formas de onda "
                             "pueden no generarse (esas filas quedarán con status = 2)")

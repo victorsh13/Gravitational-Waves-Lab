@@ -12,7 +12,7 @@ import h5py
 import numpy as np
 
 from . import __version__
-from .physics.g1 import DETECTORS, LABELS
+from .physics.steps import DETECTORS, LABELS
 
 STATUS_PENDING, STATUS_DONE, STATUS_FAILED = 0, 1, 2
 PLAN_FLOAT = ("mass_1", "mass_2", "spin_1z", "spin_2z", "inclination", "ra", "dec", "polarization_angle",
@@ -95,3 +95,50 @@ def write_results(h, results):
     h.flush()
     h["status"][idx] = np.array([r[1] for r in results], dtype=np.uint8)
     h.flush()
+
+
+# Bytes aproximados de los metadatos de una fila (todos los datasets 1-D, y, y unos 64 bytes de texto).
+METADATA_BYTES_PER_ROW = (8 * (len(PLAN_FLOAT) + len(PLAN_INT) + len(RESULT_FLOAT) + len(RESULT_INT))
+                          + 4 * len(RESULT_SEED) + 4 * len(LABELS) + 2 + 64)
+
+
+def load(path, outputs=("X",), only_ok=True):
+    """Lee un HDF5 de gwsim: dict nombre -> array con las salidas pedidas y todos los metadatos por fila.
+
+    Con only_ok=True solo devuelve las filas con status == 1 (y "row_index" con su índice en el fichero).
+    Las salidas se cargan enteras en memoria: para ficheros grandes, lee por bloques con h5py.
+    """
+    with h5py.File(path, "r") as h:
+        available = h.attrs["outputs"].split(",")
+        missing = [o for o in outputs if o not in available]
+        if missing:
+            raise KeyError(f"{path} no contiene {missing}; contiene {available}")
+        status = h["status"][:]
+        rows = np.flatnonzero(status == STATUS_DONE) if only_ok else np.arange(len(status))
+        data = {"row_index": rows}
+        for name in outputs:
+            data[name] = h[name][rows] if len(rows) else np.zeros((0,) + h[name].shape[1:], np.float32)
+        for name, dataset in h.items():
+            if name in available or dataset.ndim == 0:
+                continue
+            values = dataset.asstr()[:] if h5py.check_string_dtype(dataset.dtype) else dataset[:]
+            data[name] = values[rows]
+    return data
+
+
+def estimate_size(config, n):
+    """Bytes previstos del HDF5 con n filas, sin comprimir y en float32 (orden de magnitud).
+
+    config: ruta a un JSON de gwsim o un dict con la misma estructura (las claves ausentes toman el
+    valor por defecto). No valida la configuración.
+    """
+    import json
+    from pathlib import Path
+    from .config import DEFAULT_CONFIG
+    if not isinstance(config, dict):
+        config = json.loads(Path(config).read_text())
+    outputs = config.get("outputs", DEFAULT_CONFIG["outputs"])
+    sim = {**DEFAULT_CONFIG["simulation"], **config.get("simulation", {})}
+    length = int(round(float(sim["duration"]) * float(sim["sampling_frequency"])))
+    per_row = len(outputs) * len(DETECTORS) * length * np.dtype(np.float32).itemsize + METADATA_BYTES_PER_ROW
+    return int(n) * int(per_row)

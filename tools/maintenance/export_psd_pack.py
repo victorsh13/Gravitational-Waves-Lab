@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Exporta el paquete de PSDs de gwsim desde los datos de producción (solo en CIEMAT; solo lectura).
+"""Exporta el paquete de PSDs de gwsim (psd_pack_o3b.npz) desde los datos de origen.
 
-Para cada bloque del banco de G1 (load_bank con la configuración de G1) lee los 128 s de strain de
-gwosc_cache/m11 (resolve_cached_psd_files, read_psd_intervals) y calcula la PSD de Welch exactamente
-como estimate_raw_offsource_psd antes de interpolar: strain.time_slice(psd_start, psd_end).psd(8.0).
-gwsim interpola y recorta después (gwsim/physics/g1.py:interpolate_raw_psd).
+Solo para el mantenedor, en la máquina con los datos de origen. Solo lee esos datos.
 
-  python tools/export_psd_pack.py --data-root <raíz CBC-PE> --output <fichero.npz> [--splits train val ...]
+Para cada bloque del banco de ruido del proyecto de origen (load_bank, con las sumas sha256 del banco
+congelado) lee los 128 s de strain de la caché de GWOSC (resolve_cached_psd_files, read_psd_intervals) y
+calcula la PSD de Welch exactamente como estimate_raw_offsource_psd antes de interpolar:
+strain.time_slice(psd_start, psd_end).psd(8.0). gwsim interpola y recorta después
+(gwsim/physics/steps.py:interpolate_raw_psd). Los nombres de origen están en docs/PROCEDENCIA.md.
+
+  python tools/maintenance/export_psd_pack.py --data-root <raíz de datos> --output <fichero.npz> [--splits train val ...]
 
 No escribe en el repositorio: --output es obligatorio y nunca se sobrescribe. Imprime tamaño y sha256.
 """
@@ -22,9 +25,9 @@ import h5py
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from gwsim.noise import PACK_FORMAT_VERSION  # noqa: E402
-from gwsim.physics.g1 import DETECTORS, PSD_SEGMENT_DURATION_S, require  # noqa: E402
+from gwsim.physics.steps import DETECTORS, PSD_SEGMENT_DURATION_S, require  # noqa: E402
 
 SPLITS = ("train", "val", "cal", "test")
 # Sección "bank" de configs/generation/generate_m11_final_G1_500k.json @ 4b34677 (copiada).
@@ -132,7 +135,7 @@ def read_psd_intervals(row, selected):
 
 
 # Copiado de scripts/generate_m11_final_G1.py:estimate_raw_offsource_psd @ 4b34677; cambios: solo la parte
-# anterior a la interpolación (la posterior está en gwsim/physics/g1.py:interpolate_raw_psd).
+# anterior a la interpolación (la posterior está en gwsim/physics/steps.py:interpolate_raw_psd).
 def welch_offsource_psd(
     strain,
     *,
@@ -162,7 +165,7 @@ def sha256_file(path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--data-root", type=Path, help=f"Raíz de datos CBC-PE (si no, ${DATA_ROOT_ENV_VAR})")
+    parser.add_argument("--data-root", type=Path, help=f"Raíz de datos de origen (si no, ${DATA_ROOT_ENV_VAR})")
     parser.add_argument("--output", type=Path, required=True, help="Fichero .npz nuevo (no se sobrescribe)")
     parser.add_argument("--splits", nargs="+", choices=SPLITS, default=list(SPLITS))
     args = parser.parse_args()
@@ -172,7 +175,7 @@ def main():
     output = args.output.expanduser().resolve()
     require(output.suffix == ".npz", "--output debe terminar en .npz")
     require(not output.exists(), f"Ya existe, no se sobrescribe: {output}")
-    repo = Path(__file__).resolve().parents[1]
+    repo = Path(__file__).resolve().parents[2]
     require(repo not in output.parents, f"--output no puede estar dentro del repositorio gwsim ({repo})")
 
     crops = load_bank(BANK, root)

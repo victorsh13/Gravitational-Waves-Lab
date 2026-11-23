@@ -1,14 +1,14 @@
-"""Señal sin clic S (S15/S10) y taper de borde, copiados de M13.11, M13.13 y M15.
+"""Señal sin clic S (banda de arranque baja o alta), su alineación con A y el taper de borde.
 
-En producción la banda de S se fija con constantes de módulo de m13_11 (CLICK_F_LOWER,
-CLICK_TAPER_END_HZ) que m13_13 y m15 reasignan en tiempo de llamada (taper_band). Aquí la banda se
-pasa como argumento (f_lower, taper_end_hz); los valores y el orden de operaciones son los mismos.
+Copiados del proyecto de origen (ver docs/PROCEDENCIA.md). Allí la banda de S se fija con constantes
+de módulo reasignadas en tiempo de llamada; aquí se pasa como argumento (f_lower, taper_end_hz). Los
+valores y el orden de operaciones son los mismos.
 """
 from __future__ import annotations
 
 import numpy as np
 
-from .g1 import DETECTORS, require
+from .steps import DETECTORS, require
 
 # Copiado de scripts/m13/m13_11_prepare_rows.py (constantes) @ 4b34677; CLICK_F_LOWER y
 # CLICK_TAPER_END_HZ pasan a ser argumentos (los fija band_for en gwsim/recipe.py).
@@ -28,7 +28,7 @@ ALIGN_ABORT = 0.5  # a code failure, not a small phase error
 
 
 class AlignmentError(ValueError):
-    """Fila descartada por G-ALIGN; su mensaje se guarda tal cual en la columna `error`."""
+    """Fila descartada porque S no se alineó con A; su mensaje se guarda tal cual en la columna `error`."""
 
 
 # Copiado de scripts/m13/m13_13_build_g3t.py:align_abort @ 4b34677; cambios: ninguno
@@ -147,7 +147,7 @@ def opt_click_free_aligned(kwargs, f_lower, taper_end_hz):
 
 # Copiado de scripts/m13/m13_13_build_g3t.py:edge_taper @ 4b34677; cambios: ninguno
 def edge_taper(strains, processing_start):
-    """G-EDGE: taper the signal from processing_start if it starts earlier; (strains, samples cut per ifo)."""
+    """Edge taper: taper the signal from processing_start if it starts earlier; (strains, samples cut per ifo)."""
     from pycbc.types import TimeSeries
     out, n_before = {}, {}
     for ifo in DETECTORS:
@@ -167,12 +167,9 @@ def edge_taper(strains, processing_start):
     return out, n_before
 
 
-# Copiado de scripts/m13/m13_13_build_g3t.py:s15_strains @ 4b34677, con la banda de
-# scripts/m15/m15_build_g4.py:s15_strains_g4; cambios: g1.DETECTOR_PROJECTOR -> phys.projector;
-# cap.params / cap.geocentric_time -> argumentos params / geocentric_time; la banda llega como argumento
-# (en M15 la fija taper_band(*band_for(mass1 + mass2))).
-def s15_strains(phys, opt_args, params, geocentric_time, processing_start, band):
-    """Projection of S aligned with A, same projector, params and t_c as A, after G-EDGE."""
+# Copiado de scripts/m13/m13_13_build_g3t.py:s15_strains @ 4b34677, con la banda de scripts/m15/m15_build_g4.py:s15_strains_g4; cambios: nombre -> clickfree_strains; g1.DETECTOR_PROJECTOR -> phys.projector; cap.params / cap.geocentric_time -> argumentos params / geocentric_time; la banda llega como argumento (en el origen la fija taper_band(*band_for(mass1 + mass2))).
+def clickfree_strains(phys, opt_args, params, geocentric_time, processing_start, band):
+    """Projection of S aligned with A, same projector, params and t_c as A, after the edge taper."""
     hp, hc, align = opt_click_free_aligned(opt_args, *band)
     proj = phys.projector.project(h_plus=hp, h_cross=hc, parameters=params,
                                   geocentric_coalescence_time=geocentric_time)

@@ -2,6 +2,7 @@
 
   python -m gwsim generate --config C --output F.h5 [--workers N] [--resume] [--n-samples N] [--psd-pack P]
   python -m gwsim info F.h5
+  python -m gwsim selftest      (2 señales con ruido analítico en un directorio temporal)
 
 Con --workers N > 1 las filas se reparten en bloques (agrupados por bloque de ruido, para reutilizar las
 PSD) entre N procesos creados con fork; solo el proceso padre escribe en el HDF5.
@@ -160,6 +161,55 @@ def cmd_info(args):
             print(f"  fila {i}: {err}")
 
 
+SELFTEST_CONFIG = {
+    "description": "selftest: 2 señales con ruido analítico",
+    "n_samples": 2,
+    "seed": 12345,
+    "mode": "snr",
+    "outputs": ["X"],
+    "noise": {"source": "analytic"},
+    "prior": {"masses": {"distribution": "components_uniform", "range": [20.0, 40.0]}},
+}
+
+
+def cmd_selftest(args):
+    import tempfile
+    import h5py
+    import numpy as np
+    from .io import STATUS_DONE
+    problems = []
+    with tempfile.TemporaryDirectory(prefix="gwsim_selftest_") as tmp:
+        config_path = Path(tmp) / "selftest.json"
+        config_path.write_text(json.dumps(SELFTEST_CONFIG))
+        output = Path(tmp) / "selftest.h5"
+        cmd_generate(argparse.Namespace(config=config_path, output=output, workers=1, resume=False,
+                                        n_samples=None, psd_pack=None))
+        with h5py.File(output, "r") as h:
+            status = h["status"][:]
+            X = h["X"][:]
+            final = h["final_network_snr"][:]
+            target = h["target_network_snr"][:]
+            errors = h["error"].asstr()[:]
+        for i in range(len(status)):
+            if status[i] != STATUS_DONE:
+                problems.append(f"fila {i}: status = {int(status[i])} ({errors[i]})")
+                continue
+            if X[i].shape != (3, 16384):
+                problems.append(f"fila {i}: forma {X[i].shape}, esperada (3, 16384)")
+            if not np.isfinite(X[i]).all():
+                problems.append(f"fila {i}: X tiene valores no finitos")
+            rel = abs(final[i] - target[i]) / target[i]
+            if not rel < 0.05:
+                problems.append(f"fila {i}: SNR final {final[i]:.3f} frente a objetivo {target[i]:.3f} "
+                                f"(error relativo {rel:.3%} >= 5 %)")
+    if problems:
+        print("FALLO:")
+        for p in problems:
+            print(f"  {p}")
+        sys.exit(1)
+    print("OK")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="python -m gwsim", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -173,9 +223,12 @@ def main(argv=None):
     gen.add_argument("--psd-pack", type=Path, help="Sustituye a noise.psd_pack de la configuración")
     info = sub.add_parser("info", help="Resumen de un fichero generado")
     info.add_argument("file", type=Path)
+    sub.add_parser("selftest", help="Genera 2 señales con ruido analítico y comprueba el resultado")
     args = parser.parse_args(argv)
     if args.command == "generate":
         cmd_generate(args)
+    elif args.command == "selftest":
+        cmd_selftest(args)
     else:
         cmd_info(args)
 

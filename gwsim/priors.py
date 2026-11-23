@@ -13,7 +13,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from .physics.g1 import require
+from .physics.steps import require
 from .recipe import PARAMETER_NAMES
 
 STREAM_PARAMETERS = 1

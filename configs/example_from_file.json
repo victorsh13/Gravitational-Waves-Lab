@@ -4,5 +4,5 @@
   "mode": "snr",
   "outputs": ["X", "X_noise", "signal_projected"],
   "parameters_file": "../examples/params_example.csv",
-  "noise": {"source": "psd_pack", "psd_pack": null, "splits": ["train", "val", "cal", "test"]}
+  "noise": {"source": "psd_pack", "psd_pack": "../psd_pack_o3b.npz", "splits": ["train", "val", "cal", "test"]}
 }

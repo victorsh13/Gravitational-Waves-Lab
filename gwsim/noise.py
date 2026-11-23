@@ -10,10 +10,10 @@ from pathlib import Path
 
 import numpy as np
 
-from .physics.g1 import DETECTORS, estimate_block_psds_for_detector, require
+from .physics.steps import DETECTORS, estimate_block_psds_for_detector, require
 
 PACK_FORMAT_VERSION = 1
-# Claves del .npz que escribe tools/export_psd_pack.py.
+# Claves del .npz que escribe tools/maintenance/export_psd_pack.py.
 PACK_KEYS = ("format_version", "detectors", "psd", "delta_f", "block_id", "split", "file_group_id",
              "psd_start", "psd_end", "crop_noise_crop_id", "crop_block_id", "crop_center_gps", "crop_split")
 PACK_SAMPLE_RATE_HZ = 4096.0
@@ -22,7 +22,7 @@ ANALYTIC_BLOCK_ID = "analytic"
 
 
 class PsdPackNoise:
-    """PSD de Welch por bloque y detector (antes de interpolar) y tabla de recortes de G1."""
+    """PSD de Welch por bloque y detector (antes de interpolar) y tabla de recortes de ruido."""
 
     source = "psd_pack"
 
@@ -68,7 +68,7 @@ class PsdPackNoise:
     # sorteo sobre la unión de los splits elegidos (n filas) en vez de un bucle por split con counts;
     # trabaja con arrays del paquete en vez del DataFrame de recortes; devuelve índices de recorte.
     def sample_assignments(self, n, rng):
-        """Jerarquía de M11.6: entorno (file_group_id) -> bloque -> recorte, uniforme en cada nivel."""
+        """Jerarquía: entorno (file_group_id) -> bloque -> recorte, uniforme en cada nivel."""
         groups = np.array(sorted(np.unique(self.crop_group)), dtype=int)
         blocks = {}
         crop_indices = {}

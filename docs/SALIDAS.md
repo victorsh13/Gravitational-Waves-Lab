@@ -9,7 +9,7 @@ comprimidos con lzf, en bloques de una fila. Salen de la misma realización de r
 
 | Nombre | Contenido |
 |---|---|
-| `X` | z-score de process(s + n): la entrada de G3T. |
+| `X` | z-score de process(s + n): la entrada habitual de un clasificador. |
 | `X_noise` | z-score de process(n), con su propia media y desviación. Es la pareja «solo ruido» de `X`. |
 | `X_unnormalized` | process(s + n) sin z-score. |
 | `signal_whitened` | process(s), sin ruido ni z-score (`process_clean`). Como el procesado es lineal, `X_unnormalized` = process(n) + `signal_whitened`. |
@@ -39,8 +39,8 @@ En las filas con `status != 1`, los arrays valen 0.
 | `placement_offset_s` | f64 | t_c − `gps`. |
 | `full_network_duration`, `required_final_duration` | f64 | Duración de la señal proyectada y tramo final exigido. |
 | `is_truncated` | bool | La señal A duraba más de 4 s y se recortó su parte inicial para colocarla. |
-| `band_f_lower`, `band_taper_end_hz` | f64 | Banda de S: (15, 25) para S15 y (10, 14) para S10; NaN si no se usó S. |
-| `align_residual_rad` | f64 | Fase residual de la alineación de S con A. Si \|residuo\| > 0,5 rad (o NaN), la fila tiene `status = 2` y `error = "G-ALIGN: residuo <valor> rad"`. |
+| `band_f_lower`, `band_taper_end_hz` | f64 | Banda de S: (15, 25) para la banda de arranque baja y (10, 14) para la alta; NaN si no se usó S. |
+| `align_residual_rad` | f64 | Fase residual de la alineación de S con A. Si \|residuo\| > 0,5 rad (o NaN), la fila tiene `status = 2` y `error = "alineación: residuo <valor> rad"`. |
 | `edge_samples_H1/L1/V1` | i64 | Muestras de S anteriores a la ventana de procesado (> 0: se aplicó el taper de borde); −1 sin S. |
 | `block_id`, `noise_crop_id`, `noise_split` | texto | Bloque, recorte y split del paquete de PSDs (`analytic` / vacío con ruido analítico). |
 | `placement_seed`, `gaussian_seed` | i64 | Semillas de la fila (`placement_seed = −1` en `noise_only`). |
@@ -75,3 +75,16 @@ with h5py.File("senales.h5", "r") as h:
 
 Para conjuntos grandes, lee por bloques (`h["X"][i:i + 1024]`) en lugar de cargarlo todo en memoria:
 cada fila de `X` ocupa 192 KiB.
+
+## Leerlo con `gwsim.load`
+
+Para conjuntos que caben en memoria, `gwsim.load` hace lo mismo en una línea:
+
+```python
+import gwsim
+d = gwsim.load("senales.h5", outputs=("X", "X_noise"))   # solo filas con status == 1
+d["X"].shape, d["y"].shape, d["final_network_snr"][:5], d["row_index"][:5]
+```
+
+Devuelve un dict con las salidas pedidas y todos los metadatos por fila (los textos, ya decodificados);
+`row_index` es el índice de cada fila en el fichero. Con `only_ok=False` devuelve todas las filas.

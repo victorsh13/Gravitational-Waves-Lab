@@ -2,7 +2,7 @@
 
 Este documento explica qué le pasa a cada muestra desde los parámetros de la fuente hasta el array
 `X` de forma `(3, 16384)`. Los valores entre paréntesis son los de la configuración por defecto
-(G3T). El código está en [gwsim/recipe.py](../gwsim/recipe.py) (`simulate_row`) y en
+(la que reproduce la producción del proyecto de origen). El código está en [gwsim/recipe.py](../gwsim/recipe.py) (`simulate_row`) y en
 [gwsim/physics/](../gwsim/physics/).
 
 ## 0. Ventanas de tiempo
@@ -67,7 +67,7 @@ la fila falla (`status = 2`).
 
 En el modo `distance` se usa la distancia dada, sin reescalar, y se guarda la SNR que resulta. La
 SNR y la distancia guardadas son siempre las de **A**, también cuando se inyecta S (paso 6), igual
-que en G3T. En la banda de 30–1024 Hz, A y S difieren muy poco: la validación G-TAPER de G3T exigía
+que en la referencia. En la banda de 30–1024 Hz, A y S difieren muy poco: la validación de la forma de onda exigía
 un desajuste ≤ 8·10⁻⁴ por fila.
 
 ## 5. Ruido gaussiano coloreado y las dos PSD
@@ -99,17 +99,17 @@ hasta la frecuencia de Nyquist (`interpolate_raw_psd`).
 estacionario con la PSD "proc". Las semillas por detector se derivan de `gaussian_seed`:
 `default_rng(gaussian_seed).integers(0, 2³² − 1)` para H1, L1 y V1, en ese orden.
 
-## 6. La señal sin clic S (S15 / S10)
+## 6. La señal sin clic S (bandas de arranque baja y alta)
 
 A empieza bruscamente a 30 Hz: su primera muestra no es cero. Ese escalón, el **clic**, tiene
 potencia en todas las frecuencias y, tras el blanqueado, deja un artefacto que no es física de la
-fuente. En G3T se sustituye A por **S**, que es el mismo modelo empezado a una frecuencia más baja y
+fuente. Por eso se sustituye A por **S**, que es el mismo modelo empezado a una frecuencia más baja y
 con una subida suave (media ventana de Kaiser, β = 8) desde su inicio hasta que la frecuencia
 instantánea alcanza el final del taper:
 
-- **S15**: desde 15 Hz, con taper hasta 25 Hz, si M ≤ 180 M☉;
-- **S10**: desde 10 Hz, con taper hasta 14 Hz, si M > 180 M☉. Es la regla de banda de M15, porque
-  las masas grandes salen de la banda antes.
+- **banda de arranque baja**: desde 15 Hz, con taper hasta 25 Hz, si M ≤ 180 M☉;
+- **banda de arranque alta**: desde 10 Hz, con taper hasta 14 Hz, si M > 180 M☉. Las masas grandes
+  fusionan a frecuencias más bajas, así que su señal útil empieza antes.
 
 S se alinea con A en fase y en tiempo submuestra (`_align_to_A`). Para ello se generan las dos de
 cara (ι = 0), se busca el máximo de la correlación compleja sobre su tramo común, se adelanta S esa

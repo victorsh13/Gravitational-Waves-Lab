@@ -1,10 +1,9 @@
-"""Funciones de los generadores de producción (G1, M13.6) copiadas para gwsim.
+"""Pasos de la cadena por fila: PSD, señal en la ventana final, ruido gaussiano, apilado y z-score.
 
-En producción estas funciones leen objetos globales de módulo (CONFIG, WAVEFORM_GENERATOR,
-DETECTOR_PROJECTOR, WINDOW_SELECTOR, PROCESSOR) creados por initialize_physics. Aquí reciben un
-objeto `phys` (gwsim.recipe.Physics) con los mismos atributos: phys.config, phys.waveform_generator,
-phys.projector, phys.window_selector, phys.processor. El orden de operaciones, los tipos y las
-llamadas a pycbc no cambian.
+Copiados de los generadores del proyecto de origen (ver docs/PROCEDENCIA.md). Allí leen objetos
+globales de módulo; aquí reciben un objeto `phys` (gwsim.recipe.Physics) con los mismos atributos:
+phys.config, phys.waveform_generator, phys.projector, phys.window_selector, phys.processor. El orden
+de operaciones, los tipos y las llamadas a pycbc no cambian.
 """
 from __future__ import annotations
 
@@ -12,6 +11,7 @@ import numpy as np
 from pycbc.noise import gaussian
 from pycbc.psd import interpolate
 
+# Copiado de scripts/generate_m11_final_G1.py (constantes DETECTORS, LABELS, PSD_SEGMENT_DURATION_S, M10_INPUT_ZSCORE_EPS) @ 4b34677; cambios: ninguno
 DETECTORS = ("H1", "L1", "V1")
 LABELS = ("chirp_mass", "total_mass", "chi_eff")
 PSD_SEGMENT_DURATION_S = 8.0
@@ -51,7 +51,7 @@ def normalize_input_per_sample_per_detector_zscore(
 
 # Copiado de scripts/generate_m11_final_G1.py:estimate_raw_offsource_psd @ 4b34677; cambios: solo la
 # parte posterior a `psd = psd_data.psd(8.0)` (la PSD de Welch llega ya calculada desde el paquete de
-# PSDs, que la calcula con la parte anterior en tools/export_psd_pack.py); se recibe `psd` en vez de
+# PSDs, que la calcula con la parte anterior en tools/maintenance/export_psd_pack.py); se recibe `psd` en vez de
 # `strain, psd_start, psd_end`.
 def interpolate_raw_psd(
     psd,

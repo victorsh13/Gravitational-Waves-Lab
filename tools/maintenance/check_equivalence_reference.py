@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
-"""Prueba de equivalencia gwsim vs G3T (solo en CIEMAT; un proceso; solo lectura de producción).
+"""Prueba de equivalencia de gwsim frente a la producción de referencia del proyecto de origen.
 
-Toma --n filas equiespaciadas de val de G3T (fp16_memmap/row_ids_val.npy y X_val.npy de m13_13_g3t); sus
-parámetros, semillas, SNR objetivo y ventanas salen del manifest de G1 con adjust_processing_windows de
-G3; la PSD, de --psd-pack. Llama a gwsim.recipe.simulate_row con la física por defecto (G3T), convierte
-X a float16 como to_fp16 y compara con X_val.
+Solo para el mantenedor, en la máquina con los datos de origen. Un proceso; solo lee esos datos.
+
+Toma --n filas equiespaciadas del split de validación de la referencia (row_ids_val.npy y X_val.npy de su
+memmap float16); sus parámetros, semillas, SNR objetivo y ventanas salen del manifest de origen con
+adjust_processing_windows; la PSD, de --psd-pack. Llama a gwsim.recipe.simulate_row con la física por
+defecto, convierte X a float16 como to_fp16 y compara con X_val. Los nombres de los conjuntos de origen
+(constantes de abajo) están explicados en docs/PROCEDENCIA.md.
 
 Criterio (fijado antes de ejecutar): PASS si en TODAS las filas la diferencia máxima es <= 1 ulp de
 float16 y las etiquetas [chirp_mass, total_mass, chi_eff] (float32) coinciden exactamente con y_val.
 
-  python tools/check_equivalence_g3t.py --data-root <raíz> --psd-pack <pack.npz> --output <informe.json> [--n 64]
+  python tools/maintenance/check_equivalence_reference.py --data-root <raíz> --psd-pack <pack.npz> \
+         --output <informe.json> [--n 64]
 """
 from __future__ import annotations
 
@@ -24,10 +28,10 @@ import time
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import gwsim  # noqa: E402
 from gwsim.noise import PsdPackNoise  # noqa: E402
-from gwsim.physics.g1 import LABELS, require, to_fp16  # noqa: E402
+from gwsim.physics.steps import LABELS, require, to_fp16  # noqa: E402
 from gwsim.physics.parameters import CBCParameters  # noqa: E402
 from gwsim.recipe import PARAMETER_NAMES, Physics, RowOptions, simulate_row  # noqa: E402
 
@@ -89,7 +93,7 @@ def fp16_ulp_distance(a, b):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--data-root", type=Path, help=f"Raíz de datos CBC-PE (si no, ${DATA_ROOT_ENV_VAR})")
+    parser.add_argument("--data-root", type=Path, help=f"Raíz de datos de origen (si no, ${DATA_ROOT_ENV_VAR})")
     parser.add_argument("--psd-pack", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True, help="Informe JSON nuevo (no se sobrescribe)")
     parser.add_argument("--n", type=int, default=64)
@@ -106,7 +110,7 @@ def main():
     X_val = np.load(memmap / "X_val.npy", mmap_mode="r")
     y_val = np.load(memmap / "y_val.npy", mmap_mode="r")
     require(X_val.dtype == np.float16 and X_val.shape[0] == row_ids.size == y_val.shape[0],
-            "Unexpected G3T val memmap")
+            "Unexpected reference val memmap")
     positions = np.unique(np.round(np.linspace(0, row_ids.size - 1, args.n)).astype(np.int64))
 
     manifest_path = root / "processed" / G1_DATASET / G1_MANIFEST
@@ -116,7 +120,7 @@ def main():
     rows = df.loc[ids]
     require(bool(rows["split"].eq("val").all()), "row_ids_val has rows of other splits")
 
-    physics = Physics()  # G3T por defecto
+    physics = Physics()  # física por defecto
     rows = adjust_processing_windows(rows, physics.config, G1_CONTEXT)
     noise = PsdPackNoise(args.psd_pack, ["val"])
 

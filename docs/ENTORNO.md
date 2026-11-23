@@ -1,57 +1,45 @@
 # Entorno
 
-## Crear el entorno
+La instalación paso a paso, con la salida esperada de cada comando, está en
+[GUIA_PASO_A_PASO.md](GUIA_PASO_A_PASO.md). Este documento recoge los detalles.
 
-```bash
-conda env create -f environment.yml
-conda activate gwsim
-```
+## Versiones
 
-`environment.yml` fija las versiones de gw-env, el entorno con el que se generó G3T: Python 3.10,
-numpy 2.2.6, scipy 1.15.3, h5py 3.16.0, pandas 2.3.3, astropy 6.1.7, lalsuite 7.26.11 y
-PyCBC 2.9.0. Para la equivalencia bit a bit con G3T hacen falta estas versiones; con otras, los
-números pueden cambiar en los últimos bits.
+`environment.yml` fija las versiones con las que se verificó la equivalencia bit a bit (ver
+VALIDEZ.md): Python 3.10, numpy 2.2.6, scipy 1.15.3, h5py 3.16.0, pandas 2.3.3, astropy 6.1.7,
+lalsuite 7.26.11, PyCBC 2.9.0 y, solo para los tutoriales, matplotlib 3.10.9. Con otras versiones,
+gwsim funciona igual, pero los números pueden cambiar en los últimos bits.
 
-gwsim no se instala como paquete: se ejecuta desde la raíz del repositorio (`python -m gwsim …`). Si
-quieres importarlo desde otro sitio, añade esa raíz a `PYTHONPATH`.
+gwsim no se instala como paquete: se ejecuta desde la raíz del repositorio (`python -m gwsim …`). Para
+importarlo desde otro directorio, añade esa raíz a `PYTHONPATH`; los tutoriales lo hacen solos.
 
 ## ¿Hace falta `LAL_DATA_PATH`?
 
-**No, con la receta por defecto.** SEOBNRv4_opt es un modelo EOB en el dominio del tiempo que
-integra sus ecuaciones sin ficheros de datos externos. Solo los modelos ROM/surrogate (por ejemplo,
+**No, con la receta por defecto.** SEOBNRv4_opt es un modelo EOB en el dominio del tiempo que integra
+sus ecuaciones sin ficheros de datos externos. Solo los modelos ROM/surrogate (por ejemplo,
 SEOBNRv4_ROM o NRSur7dq4) leen datos de `lalsuite-extra` y necesitan `LAL_DATA_PATH`. Si cambias
-`waveform_approximant` a uno de ellos y falta la variable, las filas fallarán con un error de LAL
-que menciona el fichero de datos.
+`waveform_approximant` a uno de ellos y falta la variable, las filas fallarán con un error de LAL que
+menciona el fichero de datos.
 
-## El paquete de PSDs
+## Jupyter para los tutoriales
 
-`noise.source = "psd_pack"` (el valor por defecto) necesita un `.npz` con las PSD de Welch de los
-bloques de ruido de G1. Lo genera `tools/export_psd_pack.py` en CIEMAT, a partir del banco de G1 y
-de la caché de GWOSC:
+Los notebooks de `tutorials/` necesitan un Jupyter que use el entorno `gwsim`. Si tu Jupyter está en
+otro entorno, registra `gwsim` como kernel. Esto no forma parte de `environment.yml`; la versión es la
+del entorno de verificación:
 
 ```bash
-python tools/export_psd_pack.py --data-root /ruta/cbc_pe_data --output /ruta/psd_pack_g1.npz
+conda activate gwsim
+pip install ipykernel==7.2.0
+python -m ipykernel install --user --name gwsim --display-name "Python (gwsim)"
 ```
-
-La herramienta imprime el tamaño y el sha256 del fichero: anótalos para saber qué paquete usaste.
-Sin paquete, puedes usar `noise.source = "analytic"`.
 
 ## Comprobar la instalación
 
 ```bash
-python -c "import numpy, scipy, h5py, pandas, pycbc, lal; print(pycbc.__version__, lal.__version__)"
-python -m py_compile gwsim/*.py gwsim/physics/*.py tools/*.py
-python -m gwsim generate --config configs/example_custom_prior.json --output /tmp/prueba_gwsim.h5 --n-samples 2
-python -m gwsim info /tmp/prueba_gwsim.h5
+python -c "import pycbc, lal, numpy, h5py; print('pycbc', pycbc.__version__, '| lalsuite', lal.__version__, '| numpy', numpy.__version__, '| h5py', h5py.__version__)"
+python -m gwsim selftest
 ```
 
-Lo esperado: 2 filas hechas y la SNR final dentro del 5 % de la SNR objetivo. Una fila tarda del
-orden de segundos (la generación de SEOBNRv4_opt y la alineación de S dominan); usa `--workers N`
-para repartir.
-
-En CIEMAT, la comprobación completa es la prueba de equivalencia con G3T (ver VALIDEZ.md):
-
-```bash
-python tools/check_equivalence_g3t.py --data-root /ruta/cbc_pe_data --psd-pack /ruta/psd_pack_g1.npz \
-       --output /ruta/equivalencia_g3t.json --n 64
-```
+`selftest` genera 2 señales con ruido analítico en un directorio temporal. Comprueba que el status es 1,
+que la forma es `(3, 16384)`, que los valores son finitos y que la SNR final está a menos del 5 % de la
+objetivo. Escribe `OK` o el fallo concreto.

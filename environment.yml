@@ -1,4 +1,4 @@
-# Entorno de gwsim: versiones de gw-env (pip list, /tmp/gwenv_versions.txt), solo los paquetes que usa gwsim.
+# Entorno de gwsim: las versiones del entorno con el que se validó la equivalencia, solo los paquetes necesarios.
 # conda env create -f environment.yml && conda activate gwsim
 name: gwsim
 channels:
@@ -14,3 +14,4 @@ dependencies:
       - astropy==6.1.7
       - lalsuite==7.26.11
       - PyCBC==2.9.0
+      - matplotlib==3.10.9   # solo para los tutoriales

@@ -1,14 +1,15 @@
-"""Receta por fila de gwsim: el camino de X_T de G3T (m13_13.noisy_row / m15.noisy_row_g4), sin G-REC.
+"""Receta por fila de gwsim (la física por defecto reproduce la del proyecto de origen; docs/PROCEDENCIA.md).
 
     simulate_row(params, gps, psds, placement_seed, gaussian_seed, target_snr=... | distance=..., opts=...)
 
-Pasos (configuración por defecto = G3T):
+Pasos (configuración por defecto):
   1. A = SEOBNRv4_opt desde 30 Hz a 1000 Mpc; colocación random_contained (placement_seed); reproyección
      en el GPS real; SNR de red con la PSD "snr" (30-1024 Hz); distancia reescalada a la SNR objetivo;
      A regenerada a esa distancia y comprobación de la SNR (tolerancia relativa 0,05).
   2. Ruido gaussiano de longitud de procesado con la PSD "proc"; semillas por detector derivadas de
-     gaussian_seed como en build_g1_row.
-  3. Señal S sin clic (S15 si M_tot <= 180, S10 si no; band_for de M15), alineada con A, con taper de borde.
+     gaussian_seed: default_rng(gaussian_seed).integers(0, 2**32 - 1) para H1, L1 y V1.
+  3. Señal S sin clic: banda de arranque baja (15 Hz, taper hasta 25 Hz) si M_tot <= 180, alta (10 Hz,
+     taper hasta 14 Hz) si no; alineada con A, con taper de borde.
   4. s + n -> process_network (PSD "proc") -> z-score por muestra y detector -> float32.
 """
 from __future__ import annotations
@@ -26,13 +27,12 @@ from .physics.snr import (compute_network_optimal_snr, rescale_distance_for_targ
                           validate_snr_rescaling)
 from .physics.waveform import WaveformGenerator
 from .physics.windowing import ProjectedNetworkWindowSelector
-from .physics.g1 import (DETECTORS, build_gaussian_processing_noise, build_signal_network_for_params,
+from .physics.steps import (DETECTORS, build_gaussian_processing_noise, build_signal_network_for_params,
                          require, stack_and_normalize_network, stack_raw)
-from .physics.clickfree import AlignmentError, align_abort, s15_strains
+from .physics.clickfree import AlignmentError, align_abort, clickfree_strains
 
-# Física de G3T: configs/generation/generate_m11_final_G1_500k.json ("simulation", "signal_processor")
-# con los overrides de configs/generation/generate_m13_G3_band1024_w16.json @ 4b34677.
-G3T_SIMULATION = {
+# Copiado de configs/generation/generate_m11_final_G1_500k.json ("simulation", "signal_processor") con los overrides de configs/generation/generate_m13_G3_band1024_w16.json @ 4b34677; cambios: nombres de las constantes.
+DEFAULT_SIMULATION = {
     "simulation_regime": "BBH",
     "waveform_family": "IMR",
     "waveform_approximant": "SEOBNRv4_opt",
@@ -49,7 +49,7 @@ G3T_SIMULATION = {
     "safe_margin_start": 0.0,
     "safe_margin_end": 0.0,
 }
-G3T_SIGNAL_PROCESSOR = {
+DEFAULT_SIGNAL_PROCESSOR = {
     "whitening_method": "psd",
     "apply_highpass": True,
     "apply_lowpass": True,
@@ -67,10 +67,10 @@ G3T_SIGNAL_PROCESSOR = {
 
 # Copiado de scripts/m15/m15_build_g4.py (constantes M_SWITCH, BAND_LOW, BAND_HIGH; enmienda 2) @ 4b34677.
 M_SWITCH = 180.0
-BAND_LOW = (15.0, 25.0)    # S15 = S15_F_LOWER, S15_TAPER_END_HZ de m13_13
-BAND_HIGH = (10.0, 14.0)   # S10
+BAND_LOW = (15.0, 25.0)    # banda de arranque baja: 15 Hz, taper hasta 25 Hz
+BAND_HIGH = (10.0, 14.0)   # banda de arranque alta (masas grandes): 10 Hz, taper hasta 14 Hz
 
-# Distancia de referencia de G1 (parameter_sampler.fixed.distance = reference_distance_mpc).
+# Distancia de referencia a la que se mide la SNR antes de reescalar.
 REFERENCE_DISTANCE_MPC = 1000.0
 
 MODES = ("snr", "distance", "noise_only")
@@ -85,15 +85,14 @@ def band_for(total_mass):
 
 
 class Physics:
-    """Equivalente a initialize_physics (G1) + initialize_g3_physics / check_physics (G3).
-
-    Atributos con el papel de los globales de generate_m11_final_G1: config (CONFIG),
-    waveform_generator, projector, window_selector, processor.
+    """Objetos de la física, construidos una vez: config (SimulationConfig), waveform_generator,
+    projector, window_selector y processor. Sin argumentos, la física por defecto.
     """
 
+    # Copiado de scripts/generate_m11_final_G1.py:initialize_physics y scripts/m13/generate_m13_G3_whitening.py:initialize_g3_physics @ 4b34677; cambios: objeto en vez de globales de módulo.
     def __init__(self, simulation: dict | None = None, signal_processor: dict | None = None):
-        self.simulation = {**G3T_SIMULATION, **(simulation or {})}
-        self.signal_processor = {**G3T_SIGNAL_PROCESSOR, **(signal_processor or {})}
+        self.simulation = {**DEFAULT_SIMULATION, **(simulation or {})}
+        self.signal_processor = {**DEFAULT_SIGNAL_PROCESSOR, **(signal_processor or {})}
         self.config = SimulationConfig(**self.simulation)
         self.waveform_generator = WaveformGenerator(self.config)
         self.projector = DetectorProjector(list(DETECTORS))
@@ -110,10 +109,9 @@ class Physics:
 
 
 def td_waveform_kwargs(config, parameters):
-    """Argumentos con los que WaveformGenerator.generate llama a get_td_waveform (src/waveform.py).
+    """Argumentos con los que WaveformGenerator.generate llama a get_td_waveform (physics/waveform.py).
 
-    En producción m13_11.capture_row los intercepta (_TdArgsTap) en la última llamada, la de la distancia
-    final; aquí se construyen con las mismas claves y los mismos valores.
+    Mismas claves y mismos valores que esa llamada; son los argumentos de A con los que se genera S.
     """
     return dict(
         mass1=parameters.mass_1,
@@ -135,8 +133,7 @@ def crop_to_final(phys, series, final_start, injector):
     return injector.inject(zero, series).strain
 
 
-# Copiado de scripts/m13/m13_11_prepare_rows.py:process_clean @ 4b34677; cambios: g1.CONFIG / g1.PROCESSOR
-# -> phys.config / phys.processor.
+# Copiado de scripts/m13/m13_11_prepare_rows.py:process_clean @ 4b34677; cambios: g1.CONFIG / g1.PROCESSOR -> phys.config / phys.processor.
 def process_clean(phys, strains, *, processing_start, psds, injector):
     """L(s): noiseless projection in zero processing-length strain, processor, no z-score."""
     zeros = {ifo: injector.build_zero_strain(start_time=processing_start, length=phys.config.processing_length)
@@ -150,10 +147,10 @@ class RowOptions:
     physics: Physics
     mode: str = "snr"                   # "snr" | "distance" | "noise_only"
     outputs: tuple = ("X",)             # subconjunto de OUTPUT_NAMES
-    click_free: bool = True             # True: S15/S10 (G3T); False: A, la señal de G3 (con clic)
+    click_free: bool = True             # True: señal S sin clic (por defecto); False: A, con el clic de 30 Hz
     # Inicio de la ventana de procesado. None: gps - duration/2 - contexto (la ventana final queda centrada
-    # en gps). La prueba de equivalencia pasa el de adjust_processing_windows de G3 para no depender del
-    # redondeo de esa resta.
+    # en gps). La prueba de equivalencia pasa el valor de la referencia para no depender del redondeo de
+    # esa resta.
     processing_start: float | None = None
 
 
@@ -169,19 +166,15 @@ def _nan_metadata():
     return meta
 
 
+# Copiado de scripts/generate_m11_final_G1.py:build_g1_row y scripts/m13/m13_13_build_g3t.py:noisy_row @ 4b34677; cambios: globales -> `phys`; ventana derivada de gps u opts.processing_start; modos distance y noise_only; sin las comprobaciones de reconstrucción ni el procesado de A; salidas opcionales (detalle en docs/PROCEDENCIA.md).
 def simulate_row(params, gps, psds, placement_seed, gaussian_seed, *, target_snr=None, distance=None,
                  opts: RowOptions):
     """Una fila. Devuelve (salidas, metadatos).
 
     params: mapeo con PARAMETER_NAMES (la distancia se ignora: la de referencia es 1000 Mpc).
-    gps: centro de la ventana final (reference_geocentric_time / center_gps en G1).
+    gps: centro de la ventana final.
     psds: {"snr": {ifo: FrequencySeries}, "proc": {ifo: FrequencySeries}}.
     salidas: dict nombre -> array (3, length) float32, solo las pedidas en opts.outputs.
-
-    El cuerpo sigue scripts/generate_m11_final_G1.py:build_g1_row @ 4b34677 (copiado; cambios: globales ->
-    `phys`; la ventana se deriva de gps o de opts.processing_start en vez de leerse del manifest; modo
-    distance sin reescalado; modo noise_only sin señal; sin el procesado de A, que G3T no usa) y, para la
-    señal, scripts/m13/m13_13_build_g3t.py:noisy_row (camino de X_T, sin G-REC ni G-NOISE).
     """
     phys = opts.physics
     CONFIG = phys.config
@@ -379,22 +372,21 @@ def simulate_row(params, gps, psds, placement_seed, gaussian_seed, *, target_snr
             meta[f"snr_{ifo}"] = detector_snrs[ifo]
 
         if opts.click_free:
-            # X_T de m13_13.noisy_row con la banda de m15.s15_strains_g4: misma fuente, t_c, ruido y PSD;
-            # solo cambia la señal (S en vez de A). La distancia y la SNR guardadas son las de A.
+            # Misma fuente, t_c, ruido y PSD; solo cambia la señal (S en vez de A).
+            # La distancia y la SNR guardadas son las de A.
             opt_args = td_waveform_kwargs(CONFIG, params_final)
             band = band_for(float(opt_args["mass1"]) + float(opt_args["mass2"]))
-            signal_strains, n_before, align = s15_strains(
+            signal_strains, n_before, align = clickfree_strains(
                 phys, opt_args, params_final, float(geocentric_time), processing_start, band)
-            # G-ALIGN (enmienda 3): en producción un residuo así paraba la generación; aquí la fila falla
-            # (status = 2) y se sigue con las demás.
+            # Alineación fallida (|residuo| > ALIGN_ABORT o NaN): la fila falla (status = 2) y se sigue.
             if align_abort(align["residual_rad"]):
-                raise AlignmentError(f"G-ALIGN: residuo {float(align['residual_rad']):.6g} rad")
+                raise AlignmentError(f"alineación: residuo {float(align['residual_rad']):.6g} rad")
             meta["band_f_lower"], meta["band_taper_end_hz"] = float(band[0]), float(band[1])
             meta["align_residual_rad"] = float(align["residual_rad"])
             for ifo in DETECTORS:
                 meta[f"edge_samples_{ifo}"] = int(n_before[ifo])
         else:
-            # Señal A de G3 (build_g1_row: signal["projection"].strains), con el clic de 30 Hz.
+            # Señal A (signal["projection"].strains), con el clic de 30 Hz.
             signal_strains = signal["projection"].strains
 
         injected = injector.inject_network(noises=noise, signals=signal_strains)
