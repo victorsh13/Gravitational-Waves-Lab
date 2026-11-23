@@ -129,7 +129,7 @@ def main():
         plt.close(fig)
 
         fig, axes = plt.subplots(1, 3, figsize=(12, 3.5))
-        for ax, (k, xlabel) in zip(axes, enumerate(("masa de chirp 𝓜 [M☉]", "masa total M_tot [M☉]", "espín efectivo χ_eff"))):
+        for ax, (k, xlabel) in zip(axes, enumerate((r"masa de chirp $\mathcal{M}$ [M☉]", "masa total M_tot [M☉]", "espín efectivo χ_eff"))):
             ax.hist(d["y"][:, k], bins=10, color="#0072b2", alpha=0.8, label=f"{n_ok} señales")
             ax.set_xlabel(xlabel)
             ax.set_ylabel("número de señales")

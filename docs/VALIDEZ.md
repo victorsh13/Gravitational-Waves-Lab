@@ -43,13 +43,14 @@ respecto a la física real. Esa deformación es inofensiva solo si ocurre a frec
 no mira. El procesado elimina todo lo que hay por debajo de 30 Hz, así que el taper tiene que haber
 terminado antes de que la frecuencia de la señal llegue a 30 Hz.
 
-Con la banda baja (15 → 25 Hz) esto se cumple para la mayoría de las masas. En un sistema pesado,
-en cambio, la frecuencia sube muy deprisa y la señal pasa de 15 a 25 Hz en muy pocos ciclos, así que el
-taper dura muy poco. Una modulación de amplitud tan rápida no se queda en las frecuencias en las que
-ocurre: cuanto más breve es, más se ensancha su espectro (la anchura es del orden de 1/duración). Por
-eso parte de la deformación del taper llegaba al rango de ≥ 30 Hz que ve el análisis. Para
-M_tot > 180 M☉ se aleja el taper: la señal arranca a 10 Hz y el taper termina a 14 Hz, con 16 Hz de
-margen hasta la banda analizada.
+Para M_tot > 180 M☉ se usa una señal que arranca a 10 Hz con taper hasta 14 Hz, porque con
+15 → 25 Hz una fracción del efecto del taper llegaba a la banda ≥ 30 Hz. Esta variante está validada a
+nivel de forma de onda hasta M_tot = 250 M☉.
+
+*Interpretación, no comprobada aparte:* en un sistema pesado la señal recorre 15 → 25 Hz en muy pocos
+ciclos, así que el taper es corto en tiempo y, por tanto, ancho en frecuencia (anchura del orden de
+1/duración); además, la fusión ocurre cerca de esa banda (f_ISCO ≈ 4400 Hz/(M_tot/M☉), unos 22 Hz
+para 200 M☉).
 
 ## Lo que la prueba NO cubre
 
