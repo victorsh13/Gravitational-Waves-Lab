@@ -351,3 +351,25 @@ Implementado en `notebooks/m15/M15_G4_evaluation.ipynb` (commit bdb8fad), revisa
 - Curvas b(θ) (§5.5, descriptivas): 20 bins con bordes en los cuantiles de la verdad de G3T train; las filas de test
   fuera de ese rango caen en los bins extremos.
 - Secundaria G4-F frente a G4-R en B_𝓜+ y B_Mt+: X = G4-F, Y = G4-R (D > 0: G4-F con menos sesgo), sin veredicto.
+
+## Enmienda 4 (24-11-2026, antes de tener ningún resultado de G4): lectura por trozos contiguos
+
+**Hechos.** El entrenamiento de G4-R con lotes aleatorios (`M15_G4R_s123`, configuración pre-registrada) está limitado por la
+lectura: `X_clean_train` de G4 ocupa 73 GiB y la VM tiene ~55 GB de caché (con 5a eran 37 GiB y cabían). Épocas 0–2:
+t_train 10 427 / 6 292 / 6 232 s, de ellos wait 9 819 / 5 738 / 5 682 s; cálculo ~550 s por época. Proyección: ~70 h para
+G4-R y lo mismo para G4-F. Se para tras la época 2 y se conserva como registro; no entra en la evaluación.
+
+**Cambio.** Muestreador por trozos (`chunk_rows` = 32). En cada época, con `default_rng(seed + epoch)`: un desplazamiento
+aleatorio r ∈ [0, 32), las posiciones (r + i) mod N divididas en trozos de 32 filas contiguas, una permutación aleatoria de los
+trozos y lotes de 8 trozos (256 filas). Cada fila se usa exactamente una vez por época. El ruido de cada lote se sigue generando
+con la semilla `seed + 10000·época + índice_de_lote`. 4 procesos de carga en train (solo rendimiento).
+
+**Por qué no altera la estadística.** Las filas de G4 están en el orden de la propuesta, que es i.i.d.: cada trozo y cada lote
+son muestras i.i.d. del objetivo. Sí cambia qué filas coinciden en un lote, que es un cambio de procedimiento respecto a 5a.
+
+**Control.** Se entrena 5a-c32: la configuración de 5a sobre G3T con el mismo muestreador (400 000 = 12 500 trozos;
+1562 lotes por época, como 5a).
+- **Comparaciones primarias (§5.4):** G4-R-c32 frente a 5a-c32 (H-RANGO) y G4-F-c32 frente a G4-R-c32 (H-FORMA), con los
+  mismos δ, márgenes, bootstrap y reglas.
+- **5a-c32 frente a 5a:** descriptivo (efecto del muestreador), con D_g y su IC en los tres grupos de borde.
+- **Configuraciones:** `train_m15_G4R_c32_s123`, `train_m15_G4F_c32_s123` y `train_m14_5a_4aG3T_fullcov_c32_s123`.

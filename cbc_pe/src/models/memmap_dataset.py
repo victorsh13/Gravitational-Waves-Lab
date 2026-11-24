@@ -107,6 +107,33 @@ class RandomBatchSampler(Sampler):
             yield order[b * self.batch_size:(b + 1) * self.batch_size]
 
 
+class ChunkedRandomBatchSampler(RandomBatchSampler):
+    """M15 amendment 4: random batches made of contiguous chunks of chunk_rows positions.
+
+    Per epoch, default_rng(seed + epoch): offset r ~ U{0..chunk_rows-1}, positions (r + i) mod n cut
+    into chunks of chunk_rows contiguous rows, chunks randomly permuted; batches are consecutive runs of
+    batch_size // chunk_rows chunks. Every position appears exactly once per epoch. Valid as random
+    batches only if the row order of the split is itself i.i.d. (true for the G4 proposal order).
+    """
+
+    def __init__(self, n: int, batch_size: int, seed: int, chunk_rows: int, drop_last: bool = True):
+        super().__init__(n, batch_size, seed, drop_last)
+        self.chunk_rows = int(chunk_rows)
+        if self.chunk_rows <= 0:
+            raise ValueError(f"chunk_rows must be positive, got {self.chunk_rows}")
+        if self.n % self.chunk_rows != 0:
+            raise ValueError(f"n={self.n} is not a multiple of chunk_rows={self.chunk_rows}")
+        if self.batch_size % self.chunk_rows != 0:
+            raise ValueError(f"batch_size={self.batch_size} is not a multiple of chunk_rows={self.chunk_rows}")
+
+    def _order(self) -> np.ndarray:
+        rng = np.random.default_rng(self.seed + self.epoch)
+        r = rng.integers(self.chunk_rows)
+        pos = (r + np.arange(self.n, dtype=np.int64)) % self.n
+        chunks = pos.reshape(-1, self.chunk_rows)
+        return chunks[rng.permutation(len(chunks))].ravel()
+
+
 class SequentialBatchSampler(RandomBatchSampler):
     """Validation variant: no shuffling, keeps the last partial batch by default."""
 

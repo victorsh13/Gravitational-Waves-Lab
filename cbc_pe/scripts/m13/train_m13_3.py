@@ -12,6 +12,8 @@ stopping; the registered model is the last epoch (_final.pt). _bestval.pt is inf
 Optional training keys (M13.9/M13.10; absent = the behaviour above): schedule.warmup_steps replaces
 schedule.warmup_epochs; train_subset = {n, seed} trains on nested rows default_rng(seed).permutation(...)[:n];
 total_steps stops the run at that step, possibly in the middle of the last epoch.
+Optional M15 amendment 4 keys: training.chunk_rows uses ChunkedRandomBatchSampler (batches of contiguous
+chunks; not combinable with train_subset); training.loader_workers sets the train loader's num_workers.
 Optional heteroscedastic head (M14.1; model.heteroscedastic = true, requires training.loss = "beta_nll" and
 training.beta_nll = beta): the model outputs [mu, log_sigma] per label (standardized units, log_sigma clamped
 in the model) and is trained with beta-NLL (Seitzer et al. 2022): per label
@@ -69,7 +71,7 @@ sys.path.insert(0, str(ROOT))
 from src.paths import dataset_processed_dir, resolve_data_root, resolve_processed_artifact  # noqa: E402
 from src.models import network  # noqa: E402
 from src.models.memmap_dataset import (  # noqa: E402
-    FP16MemmapBatchDataset, RandomBatchSampler, SequentialBatchSampler)
+    ChunkedRandomBatchSampler, FP16MemmapBatchDataset, RandomBatchSampler, SequentialBatchSampler)
 
 BATCH = 256
 NUM_WORKERS = 2
@@ -149,6 +151,15 @@ class SubsetBatchSampler(RandomBatchSampler):
 def make_train_sampler(n_train, tcfg, seed):
     """Return (sampler, positions); positions is None when the whole train split is used."""
     sub = tcfg.get("train_subset")
+    if "chunk_rows" in tcfg:
+        # M15 amendment 4: contiguous-chunk batches (I/O); requires an i.i.d. row order in the split.
+        if sub:
+            raise SystemExit("training.chunk_rows cannot be combined with training.train_subset")
+        try:
+            return ChunkedRandomBatchSampler(n_train, BATCH, seed=seed, chunk_rows=int(tcfg["chunk_rows"]),
+                                             drop_last=True), None
+        except ValueError as e:
+            raise SystemExit(f"training.chunk_rows: {e}")
     if not sub:
         return RandomBatchSampler(n_train, BATCH, seed=seed, drop_last=True), None
     n = int(sub["n"])
@@ -438,8 +449,8 @@ def split_output(out, n_targets, heteroscedastic, full_cov=False):
     return out[:, :n_targets], torch.exp(out[:, n_targets:]), None
 
 
-def make_loader(ds, sampler):
-    return DataLoader(ds, sampler=sampler, batch_size=None, num_workers=NUM_WORKERS, pin_memory=True,
+def make_loader(ds, sampler, num_workers=NUM_WORKERS):
+    return DataLoader(ds, sampler=sampler, batch_size=None, num_workers=num_workers, pin_memory=True,
                       persistent_workers=False, prefetch_factor=PREFETCH_FACTOR)
 
 
@@ -634,17 +645,19 @@ def main():
         hdf5_check = None
 
     train_sampler, subset_pos = make_train_sampler(len(ds["train"]), tcfg, seed)
+    # Train loader only (performance); val and train40k keep NUM_WORKERS.
+    train_workers = int(tcfg.get("loader_workers", NUM_WORKERS))
     if use_aug:
         aug_dir, bank_start, bank_k, aug_info = load_noise_aug(acfg, dataset_processed_dir(data_root, dataset_id),
                                                                mm_dir, row_ids["train"])
         ds_aug = NoiseAugTrainDataset(mm_dir, aug_dir, y_mean, y_std, bank_start, bank_k,
                                       sign_flip=bool(acfg.get("sign_flip", False)),
                                       time_reverse=bool(acfg.get("time_reverse", False)))
-        train_loader = make_loader(ds_aug, SeededBatchSampler(train_sampler, seed))
+        train_loader = make_loader(ds_aug, SeededBatchSampler(train_sampler, seed), train_workers)
         print(f"noise augmentation: K={bank_k}, {aug_info['n_psd_keys_train']} train keys, {aug_dir}", flush=True)
     else:
         aug_info = None
-        train_loader = make_loader(ds["train"], train_sampler)
+        train_loader = make_loader(ds["train"], train_sampler, train_workers)
     val_loader = make_loader(ds["val"], SequentialBatchSampler(len(ds["val"]), BATCH))
     tr_pos = np.sort(np.random.default_rng(TRAIN_MONITOR_SEED).choice(len(ds["train"]), TRAIN_MONITOR_N,
                                                                         replace=False))
@@ -766,6 +779,11 @@ def main():
         run_info["procedure"]["covariance"] = "full"
     if tb_info is not None:
         run_info["procedure"]["template_bank"] = tb_info
+    # Recorded only when set, so run_info of configs without these keys is unchanged.
+    if "chunk_rows" in tcfg:
+        run_info["procedure"]["sampler"]["chunk_rows"] = int(tcfg["chunk_rows"])
+    if "loader_workers" in tcfg:
+        run_info["procedure"]["loader"]["train_num_workers"] = train_workers
     if subset_pos is not None:
         # Hash of the HDF5 row ids (sorted int64 bytes), so the chosen rows can be checked without the rng.
         rows = np.sort(row_ids["train"][subset_pos]).astype(np.int64)
