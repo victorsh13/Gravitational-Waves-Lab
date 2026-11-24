@@ -341,3 +341,13 @@ pierde energía de la señal de forma dependiente de la masa (en especial a M_to
   filas; un error cuenta como fallo. Predicción: PASA. Si falla, se para.
 
 **Archivo.** La propuesta y la puerta v1 se renombran y se conservan. `sample` se repite con las mismas semillas.
+
+## Enmienda 3 (24-11-2026, antes de tener predicciones de G4): detalles del análisis
+
+Implementado en `notebooks/m15/M15_G4_evaluation.ipynb` (commit bdb8fad), revisado en el chat antes de cualquier predicción.
+- Bootstrap (§4): para cada grupo se crea un `default_rng(151001)` nuevo y se extraen las 2000 réplicas en secuencia
+  (`rng.integers(0, n_g, n_g)`); los mismos índices se aplican a los tres modelos (emparejado), y todas las
+  comparaciones de un grupo comparten réplicas.
+- Curvas b(θ) (§5.5, descriptivas): 20 bins con bordes en los cuantiles de la verdad de G3T train; las filas de test
+  fuera de ese rango caen en los bins extremos.
+- Secundaria G4-F frente a G4-R en B_𝓜+ y B_Mt+: X = G4-F, Y = G4-R (D > 0: G4-F con menos sesgo), sin veredicto.
